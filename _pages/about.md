@@ -2,6 +2,7 @@
 title: ""
 layout: single
 excerpt: "about me"
+author_profile: true
 sitemap: false
 permalink: /about
 ---
@@ -20,4 +21,4 @@ I author a bunch of open source projects:
 
 I curate a list of MySQL quality open source software: [awesome-mysql](https://github.com/shlomi-noach/awesome-mysql)
 
-I'm recipient of Oracle ACE, Oracle Technologist of the Year, and MySQL Community Member of the Year awards. 
+I'm recipient of Oracle ACE, Oracle Technologist of the Year, and MySQL Community Member of the Year awards.
