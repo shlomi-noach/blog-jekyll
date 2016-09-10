@@ -1,0 +1,86 @@
+---
+title: MySQL vs. PostgreSQL, gh-ost perspective
+date: 2016-08-11 22:34:10.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags: []
+meta:
+  _oembed_7d6cb0f7f33dc42b4fdd138c32768a4f: '{{unknown}}'
+  _wpas_done_all: '1'
+  _sg_subscribe-to-comments: emanuele.mottola@gmail.com
+  _edit_last: '2'
+  _oembed_4314db4fd131e2bbbf46e46a192aad0c: '{{unknown}}'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Last week we released <a href="https://github.com/github/gh-ost">gh-ost</a>, <a href="http://githubengineering.com/gh-ost-github-s-online-migration-tool-for-mysql/">GitHub's online schema migration tool for MySQL</a>. As with other open source releases in the MySQL ecosystem, this release was echoed by several "Why not PostgreSQL?" comments. Having been active in open source since many years now, I'm familiar with these responses, and I find this is a good time to share my thoughts. Why? <a href="https://xkcd.com/386/">XKCD</a> knows the answer:</p>
+<blockquote><p><a href="https://xkcd.com/386/"><img class="alignnone" src="{{ site.baseurl }}/assets/duty_calls.png" alt="XKCD: Duty Calls" width="300" height="330" /></a></p></blockquote>
+<p>I picked <a href="https://brandur.org/fragments/gh-ost">one post I wish to address</a> (latest commit: <a href="https://github.com/brandur/sorg/blob/3dfbd2cd3f5468f035ec86442d2c670a510118d8/content/fragments/gh-ost.md">3dfbd2cd3f5468f035ec86442d2c670a510118d8</a>). The author invested some time writing it. It nicely summarizes claims I've heard over the years, as well as some prejudice. Through responding to this post I will be generalizing thoughts and impressions to address the common reactions. Dear @brandur, let's grab a beer some day; I fundamentally disagree with your post and with its claims.</p>
+<p><strong>EDIT</strong>: linked post has been updated following this writing; I'd like to thank the author for his consideration. Also see his <a href="https://gist.github.com/brandur/1374c9266c1d9dc32464695df84d9699">followup post</a>. The version I've responded to in this post is <a href="https://github.com/brandur/sorg/blob/3dfbd2cd3f5468f035ec86442d2c670a510118d8/content/fragments/gh-ost.md">this commit</a>.<!--more--></p>
+<h3>This is not an anti-PostgreSQL post</h3>
+<p>Disclosure: I appreciate PostgreSQL. I always wanted to be a proficient PostgreSQL user/DBA. I think this project is one of the finest examples of quality open source. It sets some high standards for open source in general, and for RDBMS in particular. I am not emotionally attached to MySQL to the extent that I would hate everything that is not called "MySQL". I never understood this approach. I am not interested in religious wars. I'm an engineer and this post follows engineering guidelines.</p>
+<h3>Background</h3>
+<p><strong>gh-ost</strong> delivers powerful online schema migrations to MySQL, differentiating itself from existing tools by being triggerless, auditable, controllable, testable, imposing low workload on the migrated master. It addresses the same problem addressed by existing tools as of 2009.</p>
+<h3>Feature X</h3>
+<p>The most basic premise of this post is: <i>MySQL does not have feature X, PostgreSQL does, therefore PostgreSQL. </i></p>
+<p>We'll discuss the truth of the above shortly, but let's first discuss the essence of this guideline.</p>
+<p>It should be generally agreed that a statement of the form <em>"<strong>A</strong> doesn't have feature <strong>X</strong> therefore <strong>B</strong>"</em> is incomplete. We understand complex systems have varying feature sets.</p>
+<p>MySQL has some features PostgreSQL doesn't. Take, as example, the feature <strong>R</strong>: MySQL has got it since ages ago, and yet PostgreSQL is slow to adapt it, and relied on 3rd party solutions for many years. MySQL's implementation of <strong>R</strong> is far more elaborate than PostgreSQL's.</p>
+<p>But if we follow the rule suggested above, we must now migrate from PostgreSQL to MySQL, because PostgreSQL does not have feature <strong>R</strong> (or one of its variants). Infinite loop!</p>
+<p>In practice, we evaluate the pros and cons, the features the products <strong>A</strong> and <strong>B</strong> have or do not have. Which feature is more important to us? <strong>X</strong> or <strong>R</strong>? Is one of them fundamentally required for our operation? Can we work around it if we don't get it directly from the product? That, and experimentation, is the way an engineer should approach a choice of technology.</p>
+<p>In the world of RDBMS we are interested, among others and in no particular order, in write latency and throughput, read scale out, durability, loss of data in the event of failure, failure promotion schemes, DR, consistency, SQL features, etc. by this list alone it is impossible to claim <em>"PostgreSQL is better than MySQL"</em>  nor <em>"MySQL is better than PostgreSQL"</em>.</p>
+<h3>The particular claim and advice</h3>
+<p>The author suggests we should be using PostgreSQL because it inherently solves the problem for which we embarked on developing <strong>gh-ost</strong>. That is, that PostgreSQL supports true online schema changes. That statement is misleading and I resent the way that statement is delivered.</p>
+<p>The post does not mention that PostgreSQL supports online schema changes for a limited set of operations. I went ahead to double check with the PostgreSQL documentation. I love the documentation! It is detailed and honest. I'm thoroughly satisfied that PostgreSQL only supports a limited set of online operations. I go against the fact the post does not mention that, and leads us to "understand" PostgreSQL has a magic wand.</p>
+<p>Online table operations are supported in PostgreSQL for adding/removing indexes, for removing columns, and for adding columns under certain conditions. As an example, adding a nullable column is an online operation, whereas adding a column with default value is a locking operation.</p>
+<p>A very big part of our schema migration including adding/removing indexes and adding columns. Many of these operations fall under the lockless, online operations PostgreSQL would allow. However a large part of our migrations also consists of adding columns with default values, changing data types (e.g. From <strong>INT</strong> to <strong>BIGINT</strong>), changing character characteristics (e.g. length of text column), space reclamation, and others. These changes are blocking in PostgreSQL.</p>
+<p>The premise of the post now turns to: <i>it's a pity you invested time and money in developing a tool that solves 100% of your problems when you could have switched to PostgreSQL which would solve 40% of your problems!</i></p>
+<p>If I were to insist my fellow engineers at GitHub migrate to PostgreSQL in order to solve the migration problem, and then, once this technical transition is complete let them know 60% of the migrations are not at all addressed and that we are still stuck with the very same problem we started with, I would not be a very popular engineer.</p>
+<h3>Moreover</h3>
+<p>"the same advancements never happened in MySQL" is a false statement.</p>
+<p>As mentioned in the <strong>gh-ost</strong> announcement, MySQL as of 5.6 does indeed support online, non blocking alter table. In fact, it supports many more variants of online alter table than PostgreSQL does (however, noticeable difference is that PostgreSQL makes those changes <em>transactional</em> whereas MySQL does not).</p>
+<p>Also as mentioned, one of the shortcomings of the MySQL implementation is that it is aggressive, and may cause a high impact on the running master. In my understanding the PostgreSQL implementation is no different. There's nothing to cause throttling, to play nice with the running workload. Yes, in PostgreSQL you can Ctrl-C your <strong>ALTER</strong>, but who wants to Ctrl-C a <strong>10</strong> hour operation?</p>
+<p><strong>gh-ost</strong> addresses that as well. Its throttling gives super powers over the migration process, kicking in throttling based on master load, replication lag, various human controlled criteria, effectively making it very lightweight on the master.</p>
+<h3>Misdirection?</h3>
+<p>"there's a level of seemingly willful misdirection here that I just can't wrap my head around"</p>
+<p>XKCD to the rescue again:</p>
+<blockquote><p><a href="https://xkcd.com/438/"><img class="alignnone" src="{{ site.baseurl }}/assets/internet_argument.png" alt="XKCD: Internet Argument" width="460" height="693" /></a></p></blockquote>
+<p>I dare say this is not the kind of thing a person would say in person, and the accusation is rather severe. It is also ironic. Dear author, consider:</p>
+<ul>
+<li>PostgreSQL does not really solve 100% of the problem <strong>gh-ost</strong> does, and yet you claim we'd be better off with PostgreSQL.</li>
+<li>MySQL does indeed provide more variants of online alter table than PostgreSQL does, and yet you claim it has no online alter capabilities.</li>
+<li>I might claim there's a seemingly willful misdirection in your post. I might claim nowhere in your write up do you mention the deficiencies in PostgreSQL.</li>
+</ul>
+<p>Instead, I'd rather like to think that you, and others, are misinformed, basing your opinion on rumors and prejudice instead of facts.</p>
+<p>I also observe that people all around the world like to willfully differentiate themselves from others. Even in tech. this is the topic for another post, but consider explaining to a complete outsider, say your doctor, why people who work in tech, are engineers, work with data, work with databases, work with relational databases, work with open source relational databases, people who have so much shared experience, still insist on "us and them", and seek to see the negative in the other. Sheesh.</p>
+<p>Paraphrasing a memorable sarcastic quote from the movie <a href="http://www.imdb.com/title/tt0195685/">Erin Brockovich</a>: the fact so many of the largest tech companies today choose to use MySQL as their backend database does not mean it's crap.</p>
+<p>No. We really think MySQL does a good job. It is not perfect. We work around some of its limitations.</p>
+<h3>Claims</h3>
+<p>The claim "you'd be better off with PostgreSQL" (not a quote from aforementioned post) cannot be made without understanding the specific workload of a company/product. It would be presumptuous of me to approach a PostgreSQL based company and say "oh hey why use PostgreSQL? You'd be better off with MySQL!"</p>
+<p>It makes perfect sense to say "PostgreSQL handles problem X better than MySQL" or even "if your one most important requirement is X, you should switch to PostgreSQL". Otherwise claiming one database is wholly better than the other cannot be taken seriously.</p>
+<p>Deficiencies? Any project of scale has deficiencies. It is granted. We observe and measure, and take features and deficiencies into calculation, and that makes for good engineering.</p>
+<ul>
+<li>If you're using PostgreSQL and it works well for you, you're doing the right thing.</li>
+<li>It you're using MySQL and it works well for you, you're doing the right thing.</li>
+<li>If you found that PostgreSQL works better for you where MySQL does not, and you decided to switch over, you're doing the right thing.</li>
+<li>If you found that MySQL works better for you where PostgreSQL wasn't, and you decided to switch over, you're doing the right thing.</li>
+<li>If you found that PostgreSQL works better for you where MySQL wasn't, but decided to stick with MySQL because migrating would be too costly, you're doing the right thing.</li>
+<li>If you found that MySQL works better for you where PostgreSQL wasn't, but decided to stick with PostgreSQL because migrating would be too costly, you're doing the right thing.</li>
+<li>If you pick one over the other because of licensing constraints, you're doing the right thing.</li>
+<li>If you choose to switch over because of rumors, prejudice, FUD, politics, religion, you're doing it wrong.</li>
+</ul>
+<h3>Final personal note, on pride</h3>
+<p>"Yesterday, GitHub broadcasted an indomitable sense of self-satisfaction far and wide..."</p>
+<p>Oh hey, <a href="https://xkcd.com/438/">XKCD again</a>. But I would like to ask an honest question: if some <strong>pg-gh-ost</strong> were to be released, a tool that would solve 100% of your PostgreSQL migrations requirements, doing it better than PostgreSQL does, covering all cases, throttling as your daily <em>sqoop</em> imports kick in, as your rush hour traffic kicks in, giving you far and wide greater control over the migration process, what would you do?</p>
+<p>Would you write an offensive post filled with accusations, ranting about the deficiencies of PostgreSQL and how people even consider using such a database that needs a third party tool to do a better job at migrations? Would you tweet something like "Or... Use MySQL!"</p>
+<p>Or would you embrace a project that enriches the PostgreSQL ecosystem, makes it even a greater database to work with, understanding PostgreSQL is not yet perfect and that more work need to be done?</p>
+<p>I take pride in my craft and love making an impact; if we ever do meet for beer I'm happy to share more  thoughts.</p>
+<p>s/gh-ost/anything/g</p>
+<p>Peace on earth</p>

@@ -1,0 +1,47 @@
+---
+layout: post
+title: 'Of ranting, criticism & politically correctness: opinion'
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags:
+- Opinions
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>They say in the course of study one must pass these three stages:</p>
+<ol>
+<li>Beginner: realizes how much she has yet to learn.</li>
+<li>Experienced: realizes she has come a long way; that she's now in good control of the subject. She has firm opinions.</li>
+<li>Very experienced: realizes just how much, much more she has yet to learn.</li>
+</ol>
+<p>When conducting MySQL consulting or training, I'm often asked as for my opinions. At times I provide them without being asked. Some opinions just cannot be delivered while being politically correct. Most often, I believe, they shouldn't be politically correct.</p>
+<h4>A common example</h4>
+<p>Let's discuss the very common question: MyISAM or InnoDB?</p>
+<p>I have an opinion. It is based on my experience. I am also aware that my experience may differ for that of other people. When I discuss MyISAM vs. InnoDB, I usually begin with MyISAM. It kind of draws fire: no crash recovery; no transactions; table level locks; expensive key flush; no integrated hot backup; no foreign keys... I have some horror stories to tell.</p>
+<p><em>OMG</em>, people say, faces whitening. <em>Why would anyone use MyISAM in the first place</em>?</p>
+<p><em>Well, </em><em>for many good reasons</em>, I tell them. Most notable, <em>it works for them</em>. Unconvinced, we move on to discussing InnoDB. Aha! Crash recovery; hot backups; fully ACID compliant; MVCC!</p>
+<p>Oh, no integrated fulltext search (MyISAM or 3rd party solutions required). Locks &amp; deadlocks! More difficult to understand what's going on. So many configuration parameters - what should we choose? More disk space! Plugin has compression but is yet not GA; and it takes so much longer to write compressed data...</p>
+<p>Faces whitening again...</p>
+<h4>Is this a fair comparison?</h4>
+<p>You can't just make up feature lists for the two and see who's got more. Once must decide what his objectives are.</p>
+<p>Do you have to have transactions? Do you have to have good crash recovery? Set the requirements; the rest will follow.</p>
+<h4>Criticism or blaming or bashing?</h4>
+<p>It is part of my job to illustrate the problems/downsides. Reading up on the advantages is relatively easy. Open the documentation; or a simple blog post; read a book! The downsides are less easy to come by. Some are well documented and clear. Others come from experience. My experience, customers' experience, students' experience.</p>
+<p>So at times I may sound negative, because I'm mentioning a lot of downsides. This can also reflect in my blog posts. Should this be considered as bashing? No!</p>
+<p>At times, it may sound like ranting; sometimes it is: one may get frustrated with a problem; one rants. One can criticize. The good kind of criticism, that is: the kind of which you provide with insight, with suggestions.</p>
+<p>I reject bashing, in the form of <em>"MySQL ****s, use PostgreSQL!"</em>. It's just too... Looking for the right word...</p>
+<p>Some confuse this with: <em>"Well, you make a </em>living<em> of MySQL. You're biased!"</em> (I actually got told that once, and so I believe thought at many times). Ouch! How did I get to be in that position? Does the fact I have Ubuntu mean I don't approve of <strong>KDE</strong>? Using <strong>bash</strong>, does that make me an enemy of <strong>csh</strong> people? Fill in the right word again...<em></em></p>
+<h4>Not a MySQL thing</h4>
+<p>With every single technology I ever worked with; with every programming language; every platform; every library - there was a lot to criticize.</p>
+<p>You work with something - you find problems. It's the way of things (also true outside the computer world, I'm told). You also find beauty.</p>
+<p>You <em>keep working with that something</em> - then it probably fits your needs. You may even <strong>like it</strong>!</p>

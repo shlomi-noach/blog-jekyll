@@ -1,0 +1,75 @@
+---
+title: 'common_schema 2.0.0-alpha: rdebug, GPL'
+date: 2013-04-09 08:03:06.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- Development
+- Open Source
+- rdebug
+- Stored routines
+- tools
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>A new release for <a href="https://code.google.com/p/common-schema/">common_schema</a>: an alpha version of <strong><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/rdebug.html">rdebug</a>: MySQL Debugger and Debugging API</strong> is now included with <em>common_schema</em>.</p>
+<p>With a different license in mind for <em>rdebug</em>, <em>common_schema</em> changes license to GPL (2 or above).</p>
+<p><em>common_schema 2.0</em> is ready for <a href="http://code.google.com/p/common-schema/downloads/list">download</a>. All things <strong>rdebug</strong>, it is alpha -- otherwise it's a stable release.</p>
+<h4>rdebug</h4>
+<p>I'm very happy to release this alpha version of <em>rdebug</em>, and urge everyone to try it out.</p>
+<p>The idea is to have an open, free, server side debugger and debugging API for MySQL stored routines. To elaborate:</p>
+<ul>
+<li>It's server side by that it's implemented by stored routines. Not by a connector; not an emulator; not a GUI tool hack. The entire functionality lies within common_schema, a schema in your server.</li>
+<li>It's a debugger: you can debug your own stored routines (with limitations)</li>
+<li>It's a <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/rdebug_api.html"><strong>debugging API</strong></a>: there's a distinct specification and a set of calls which makes for a debugging process</li>
+<li>It's open since the source code is yours to browse.</li>
+<li>It's free as in free beer.</li>
+<li>It's free as it makes you independent of a specific debugger. It provides an API that anyone can use. You can run the API yourself from the command line; or plugins for your favorite GUI editor can be developed to use this API.</li>
+</ul>
+<p>On a separate blog post I will take you to a <em>rdebug</em> test drive.</p>
+<p>As always, nothing is released before extensive <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/rdebug.html">documentation</a> is in place.</p>
+<p>I'd love to get input on this.<!--more--></p>
+<h4>GPL</h4>
+<p><em>common_schema</em> &lt; <strong>2.0</strong> was released under the BSD license, which is less restrictive. I was pondering the BSD license for a couple years now, and with the arrival of <em>rdebug</em> have decided to switch to GPL. I've been through this thinking of change of license in other projects of mine; am generally agreeing that best not to change licensing throughout lifetime. I actually do see GPL as promoting open source software better than BSD, and with all the issues around GPL this actually means something to me. I write open source; I love people using it; I love people extending it; I want to be re-released as open source, or I want better control of the code.</p>
+<p>So this turns out to be something that is important to me, and just before <em>common_schema</em> takes the world in storm (<strong>212</strong> downloads today, <strong>212,000,000</strong> tomorrow), I want to have this settled. If no storm comes, well, I'll have up to <strong>212</strong> people banging on my door (I provide free coffee).</p>
+<h4>Text routines</h4>
+<p>Two text routines are added:</p>
+<ul>
+<li><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/replace_sections.html"><strong>replace_sections()</strong></a>: replace a text given a from-to combination, and a replacement string, which could include a back-reference. For example:</li>
+</ul>
+<blockquote>
+<pre>mysql&gt; select replace_sections(<strong>'The <span style="color: #000080;">&lt;b&gt;</span>quick<span style="color: #000080;">&lt;/b&gt;</span> brown <span style="color: #000080;">&lt;b&gt;</span>fox<span style="color: #000080;">&lt;/b&gt;</span>'</strong>, 
+        <strong>'<span style="color: #000080;">&lt;b&gt;</span>'</strong>, <span style="color: #000080;"><strong>'&lt;/b&gt;'</strong></span>, 
+        <strong><span style="color: #800000;">'&lt;span&gt;\0&lt;/span&gt;'</span></strong>) as result;
++-----------------------------------------------+
+| result                                        |
++-----------------------------------------------+
+| The <span style="color: #800000;">&lt;span&gt;quick&lt;/span&gt;</span> brown <span style="color: #800000;">&lt;span&gt;fox&lt;/span&gt;</span> |
++-----------------------------------------------+</pre>
+</blockquote>
+<ul>
+<li><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/hexcode_text.html"><strong>hexcode_text()</strong></a>: a convenience routine which shows a beautified hex-code of a given text. I get to need it when using UNICODE characters which are hard to detect, are visually identical to other characters, or are copied from MS Word.</li>
+</ul>
+<blockquote>
+<pre>mysql&gt; <strong>call hexcode_text('the quick brown fox jumps over the lazy dog');</strong>
++-----------------------------------------------------------------------------------+
+| &gt;0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f   0 1 2 3 4 5 6 7 8 9 a b c d e f |
++-----------------------------------------------------------------------------------+
+| 74 68 65 20 71 75 69 63 6B 20 62 72 6F 77 6E 20   t h e   q u i c k   b r o w n   |
+| 66 6F 78 20 6A 75 6D 70 73 20 6F 76 65 72 20 74   f o x   j u m p s   o v e r   t |
+| 68 65 20 6C 61 7A 79 20 64 6F 67                  h e   l a z y   d o g           |
++-----------------------------------------------------------------------------------+</pre>
+</blockquote>
+<h4>Get it</h4>
+<p><a href="https://code.google.com/p/common-schema/">Download <em>common_schema</em> here</a>.</p>

@@ -1,0 +1,94 @@
+---
+title: On user variables evaluation order
+date: 2009-09-17 07:42:53.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>There is something very unclear about what is defined and is undefined with regard to the order by which user variables are evaluated, even within the <a href="http://dev.mysql.com/doc/refman/5.0/en/user-variables.html">MySQL documentation</a> itself.</p>
+<p>I wish to present some examples and draw a conclusion. Since I will following state there's missing information, I would greatly appreciate any educated comments.</p>
+<h4>The trivial "reordering problem" case</h4>
+<p>Let's look at the following query:<!--more--></p>
+<blockquote>
+<pre>mysql&gt; SET @a := 0;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&gt; SET @b := 0;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&gt; SELECT @a:=@b+1, @b:=@a FROM mysql.user;
++----------+--------+
+| @a:=@b+1 | @b:=@a |
++----------+--------+
+|        1 |      1 |
+|        2 |      2 |
+|        3 |      3 |
+|        4 |      4 |
+|        5 |      5 |
++----------+--------+
+5 rows in set (0.04 sec)</pre>
+</blockquote>
+<p>According to the docs, I can't rely on the fact that the <strong>@b:=@a</strong> part reads the value of <strong>@a</strong> after is has incremented, So I may eventually end up with:</p>
+<blockquote>
+<pre>+----------+--------+
+| @a:=@b+1 | @b:=@a |
++----------+--------+
+|        1 |      0 |
+|        2 |      1 |
+|        3 |      2 |
+|        4 |      3 |
+|        5 |      4 |
++----------+--------+</pre>
+</blockquote>
+<p>I wish to follow the documentation and see about other cases.</p>
+<h4>The trivial "trivial" case</h4>
+<p>Quoting the MySQL documentation (<a href="http://dev.mysql.com/doc/refman/5.0/en/user-variables.html">8.4. User-Defined Variables</a>):</p>
+<blockquote><p>...The general rule is never to assign a value to a user variable in       one part of a statement <span><em>and</em></span> use the same       variable in some <strong>other part</strong> of the same statement. ...</p></blockquote>
+<p>How does the above quote (focus on <strong>bold</strong> text) from the manual apply to the trivial:</p>
+<blockquote>
+<pre>SET @a := 0;
+SELECT *, @a := @a+1 FROM mysql.user;</pre>
+</blockquote>
+<p>We've just used/read the value of <strong>@a</strong>, and have assigned it a new value <strong>(@a+1)</strong> at the same statement. What's an <strong>other part</strong>? Is this considered to be the <strong>same part</strong> just because it's the same column in the result set?</p>
+<p>Let's complicate this further:</p>
+<h4>A complicated case</h4>
+<p>Quoting the manual again, we see:</p>
+<blockquote>
+<pre>mysql&gt; <strong><code>SET @t1=0, @t2=0, @t3=0;</code></strong>
+mysql&gt; <strong><code>SELECT @t1:=(@t2:=1)+@t3:=4,@t1,@t2,@t3;</code></strong>
++----------------------+------+------+------+
+| @t1:=(@t2:=1)+@t3:=4 | @t1  | @t2  | @t3  |
++----------------------+------+------+------+
+|                    5 |    5 |    1 |    4 |
++----------------------+------+------+------+</pre>
+</blockquote>
+<p>What's going on here? Haven't we been told not to assign and use the same variable in the same statement? <strong>@t1</strong> has been assigned in the first part, then has been used in the second (according to the documentation itself, we could have got <em>'0'</em> for <strong>@t1</strong>, second column). But I'm not keen on ranting, look further:</p>
+<p>Looking at the first part of the statement: <strong>@t1:=(@t2:=1)+@t3:=4</strong>, what promises do I get here?</p>
+<ul>
+<li>Does the use of brackets <em>ensure</em> that <strong>@t2</strong> is evaluated before <strong>@t1</strong>?</li>
+<li>Does the use of brackets <em>ensure</em> that <strong>@t3</strong> is evaluated before <strong>@t1</strong>?</li>
+<li>Does the order of expression tokens <em>ensure</em> that <strong>@t2</strong> is evaluated before <strong>@t3</strong> is assigned?</li>
+</ul>
+<p>I think the answer to the above is 'yes' to all. But I can't verify this using the text. The reasons I think all answer 'yes' are:</p>
+<ul>
+<li>This all happens in only one part of the statement (ignoring the use of <strong>@t1</strong>, <strong>@t2</strong>, <strong>@t3</strong> later on).</li>
+<li>Experience verifies it is so.</li>
+<li>I don't see how <strong>ORDER BY</strong>, <strong>GROUP BY</strong>, <strong>HAVING</strong> (choosing examples from the docs) will change this: my understanding is that it all relates to column computation, and here this is a single column.</li>
+</ul>
+<h4>Drawing a conclusion</h4>
+<p>If the above is correct, and within the same part of the statement the use of brackets can dictate ordering of assignments, then we can workaround many problems arising from the danger of assigning and reading variables in the same statement.</p>
+<p>If, in addition, the ordering of the tokens in the expression guarantees execution order within that part of statement, then the workaround does not need to be too ugly.</p>
+<p>Using such expressions as <strong>COALESCE(@a := 1, @b := @a+1, ...)</strong> or otherwise using <strong>IF</strong>/<strong>CASE</strong>/other tricks, we can perform as many assignments as we wish within the <strong>same part</strong> of the statement.</p>
+<p>Looking back at <a title="Link to SQL: Ranking without self join" rel="bookmark" href="http://code.openark.org/blog/mysql/sql-ranking-without-self-join">SQL: Ranking without self join</a>, the solution can be fixed, if the answers to the above are correct.</p>
+<p>The use of user variables is not a child's play; it can help solving problems with great speed, and small memory footprint. I think this issue is a little too obscurred. I call for clarifications.</p>

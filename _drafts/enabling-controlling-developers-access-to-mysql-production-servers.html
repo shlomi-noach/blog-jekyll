@@ -1,0 +1,65 @@
+---
+layout: post
+title: Enabling & controlling developers access to MySQL production servers
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+  _oembed_1cebc65347de76ee2d4f28b5d3ce21fd: '<blockquote data-secret="4LayyKdjjj"
+    class="wp-embedded-content"><a href="http://code.openark.org/blog/mysql/introducing-audit_login-simple-mysql-login-logfile-based-auditing">Introducing
+    audit_login: simple MySQL login logfile based auditing</a></blockquote><iframe
+    class="wp-embedded-content" sandbox="allow-scripts" security="restricted" style="position:
+    absolute; clip: rect(1px, 1px, 1px, 1px);" src="http://code.openark.org/blog/mysql/introducing-audit_login-simple-mysql-login-logfile-based-auditing/embed#?secret=4LayyKdjjj"
+    data-secret="4LayyKdjjj" width="500" height="282" title="&#8220;Introducing audit_login:
+    simple MySQL login logfile based auditing&#8221; &#8212; code.openark.org" frameborder="0"
+    marginwidth="0" marginheight="0" scrolling="no"></iframe>'
+  _oembed_1f7573437ac7f9a4667b6f3b91de5b0f: '{{unknown}}'
+  _oembed_time_1cebc65347de76ee2d4f28b5d3ce21fd: '1473086445'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This is about building a culture, not hermetically air-tightening your databases.</p>
+<p>&nbsp;</p>
+<p>we're using propagator :stuck_out_tongue:</p>
+<p>shlomi [7:36 AM]<br />
+There is a firewall blocking access to the masters from the offices.</p>
+<p>shlomi [7:36 AM]<br />
+Manul user queries on masters are only possible when coming through "adminer" (simplified phpmyadmin)</p>
+<p>shlomi [7:37 AM]<br />
+which is LDAP protected + MySQL credentials required; and it logs anything that is then visible on elasticsearch, so I know any query ever issued against the masters, by whom etc.</p>
+<p>shlomi [7:38 AM]<br />
+Where we have enough replication servers, we dedicate one for rnd. "rnd" slaves do not serve the app, and are thus good to abuse. You want to do a nasty query? Go ahead and use rnd slave, test your SQL skills on that.</p>
+<p>shlomi [7:40 AM]<br />
+r/w, r/o accounts are available, but of course the slaves are write-protected so I don't really care which they use for querying rnd slaves.</p>
+<p>shlomi [7:40 AM]<br />
+Also, we use audit_login:</p>
+<p>shlomi [7:41 AM]<br />
+http://code.openark.org/blog/mysql/introducing-audit_login-simple-mysql-login-logfile-based-auditing<br />
+code.openark.org<br />
+Introducing audit_login: simple MySQL login logfile based auditing<br />
+audit_login is a simple MySQL login auditing plugin, logging any login or login attempt to log file in JSON format. It seems that audit plugins are all the rage lately... We've developed out simple...<br />
+Tue, Sept 17th, 2013 at 10:24 AM</p>
+<p>shlomi [7:41 AM]<br />
+https://github.com/outbrain/audit_login</p>
+<p>GitHub<br />
+outbrain/audit_login<br />
+audit_login - simple MySQL login audit plugin, logging to text file</p>
+<p>shlomi [7:42 AM]<br />
+so each login is audited anyhow, and if a user logs in to a server he/she is not supposed to, we will eventually have logs for that (also in elasticsearch)</p>
+<p>shlomi [7:42 AM]<br />
+Percona Server 5.5.37 introduced similar plugin, built in: http://www.percona.com/doc/percona-server/5.5/management/audit_log_plugin.html</p>
+<p>shlomi [7:43 AM]<br />
+schema changes always go through propagator. It's a sin not to do so (plus normal users don't typically have credentials for that though this is not hermetic)</p>
+<p>shlomi [7:45 AM]<br />
+The most important thing, I think, is to make sure anything and everything is audited. Based on that, you can figure out the pattern and culture of developers' usage of your servers and start planning a new policy or a new culture.</p>
+<p>shlomi [7:45 AM]<br />
+worth a blog post</p>

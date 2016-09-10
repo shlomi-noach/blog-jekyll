@@ -1,0 +1,157 @@
+---
+title: Thoughts on MaxScale automated failover (and Orchestrator)
+date: 2015-11-18 11:17:48.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Failover
+- High availability
+- MaxScale
+- Opinions
+- orchestrator
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Having attended a talk (as part of the <a href="https://blog.mariadb.org/2015-developers-meeting-amsterdam/">MariaDB Developer Meeting in Amsterdam</a>) about recent developments of <a href="https://mariadb.com/products/mariadb-maxscale">MaxScale</a> in executing automated failovers, here are some (late) observations of mine.</p>
+<p>I will begin by noting that the project is stated to be pre-production, and so of course none of the below are complaints, but rather food for thought, points for action and otherwise recommendations.</p>
+<p>Some functionality of the MaxScale failover is also implemented by <strong><a href="https://github.com/outbrain/orchestrator">orchestrator</a></strong>, which I author. <em>Orchestrator</em> was built in production environments by and for operational people. In this respect it has gained many insights and had to cope with many real-world cases, special cases &amp; Murphy's law cases. This post compares logic, feature set and capabilities of the two where relevant. To some extent the below will read as "hey, I've already implemented this; shame to re-implement the same", and indeed I think that way; but it wouldn't be the first time a code of mine would just be re-implemented by someone else and I've done the same, myself.</p>
+<p>I'm describing the solution the way I understood it from the talk. If I'm wrong on any account I'm happy to be corrected via comments below. <strong>Edit:</strong> <em>please see comment by</em> <a class="url" href="http://www.mariadb.com/" rel="external nofollow">Dipti Joshi</a></p>
+<h3>General overview</h3>
+<p>The idea is that MaxScale operates as a proxy to your topology. You do not connect to your master directly, but rather through MaxScale. Thus, MaxScale acts as a proxy to your master.</p>
+<p>The next phase is that MaxScale would also auto-detect master failure, fix the topology for you, promote a new master, and will have your application unaware of all the complexity and without the app having to change setup/DNS/whatever. Of course some write downtime is implied.</p>
+<p>Now for some breakdown.</p>
+<h3>Detection</h3>
+<p>The detection of a dead master, the check by which a failover is initiated, is based on MaxScale not being able to query the master. This calls for some points for consideration:</p>
+<ul>
+<li>Typically, I would see "I can't connect to the master therefore failover" as too hysterical, and the basis for a lot of false positives.</li>
+<li>However, since in the discussed configuration MaxScale is <em>the only access point</em> to the master, the fact MaxScale cannot connect to the master means the master is inaccessible <em>de-facto</em>.</li>
+<li>In light of the above, the decision makes sense - but I still hold that it would make false positives.</li>
+<li>I'm unsure (I <em>think</em> not; can anyone comment?) if MaxScale would make multiple attempts over time and only reach the conclusion after X successive failures. This would reduce the false positives.</li>
+<li>I'm having a growing dislike to a "check for 4 successive times then alert/failover" Nagios-style behavior. <em>Orchestrator</em> takes a different approach where it recognizes a master's death by not being able to connect to the master <em>as well as</em> being able to connect to 1st tier slaves, check their status and observe that <em>they're unable to connect to the master as well</em>. See <a title="Permanent Link to What makes a MySQL server failure/recovery case?" href="http://code.openark.org/blog/mysql/what-makes-a-mysql-server-failurerecovery-case" rel="bookmark">What makes a MySQL server failure/recovery case?</a>. This approach still calls for further refinement (what if the master is temporarily deadlocked? Is this a failover or not?).</li>
+</ul>
+<p><!--more--></p>
+<h3>Assumed topology</h3>
+<p>MaxScale assumes the topology is all MariaDB, and all slaves are using (MariaDB) GTID replication. Well, MaxScale does not actually assumes that. It is assumed so by the <a href="https://github.com/mariadb-corporation/replication-manager">MariaDB Replication Manager</a> which MaxScale invokes. But I'm getting ahead of myself here.</p>
+<h3>Topology detection</h3>
+<p>MaxScale does not recognize the master by configuration but rather by state. It observes the servers it should observe, and concludes which is the master.</p>
+<p>I'm using similar approach in <em>orchestrator</em>. I maintain that this approach works well and opens the Chakras for complex recovery options.</p>
+<h3>Upon failure detection</h3>
+<p>When MaxScale detects failure, it invokes external scripts to fix the problem. There are some similar and different particulars here as compared to <em>orchestrator</em>, and I will explain what's wrong with the MaxScale approach:</p>
+<ul>
+<li>Although MaxScale observes the topology and understands who is the master and who isn't, the executed scripts do not. They need to re-discover everything by themselves.</li>
+<li>This implies the scripts start without memory of "what was last observed". This is one of the greatest strengths of <em>orchestrator</em>: it knows what the state was just before the failure, and, having the bigger picture, can make informed decisions.
+<ul>
+<li>As a nasty example, what do you do when some the first tier slaves also happen to be inaccessible at that time? What if one of those happens to further have slaves of its own?</li>
+</ul>
+</li>
+<li>The MariaDB Replication Manager script (to be referenced as <em>repmgr</em>) assumes all instances to be MariaDB with GTID.
+<ul>
+<li>It is also implied that all my slaves are configured with binary logs &amp; log-slave-updates</li>
+<li>That's <strong>way too restrictive</strong>.
+<ul>
+<li><em>Orchestrator</em> handles all following topologies: Oracle MySQL with/out GTID, MariaDB with/out GTID, MariaDB hybrid GTID &amp; non-GTID replication, Pseudo-GTID (MySQL and/or MariaDB), hybrid normal &amp; binlog servers topologies, slaves with/out log-slave-updates, hybrid Oracle &amp; MariaDB &amp; Binlog Servers &amp; Pseudo-GTID.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><em>repmgr</em> is unaware of data centers &amp; physical environments. You want failover to be as local to your datacenters as possible. Avoid too many cross-DC replication streams.</li>
+</ul>
+<h3>Failover invocation</h3>
+<p>MaxScale invokes the failover scripts <em>asynchronously</em>. This is a major flaw imho, as the decoupling between the monitoring and acting processes leads to further problems, see further.</p>
+<h3>After failover</h3>
+<p>MaxScale continuously scans the topology and observes that some other server has been promoted. This behavior is similar to <em>orchestrator's</em>. But the following differences are noteworthy:</p>
+<ul>
+<li>Because of both the decoupling as well as the asynchronous invocation by MaxScale, it doesn't really have any idea if and how the promotion resolved.</li>
+<li>I don't know that there's any anti-flapping mechanism, nor that there could be. If MaxScale doesn't care what happened to the failover script, it shouldn't be able to keep up with flapping scenarios.</li>
+<li>Nor is there a minimal suspend period between any two failure recoveries, that I know of. MaxScale can actually have easier life than <em>orchestrator</em> in this regard as it is (I suspect) strictly associated with <em>a topology</em>. Not like there's a single MaxScale handling multiple topologies. So it should be very easy to keep track of failures.</li>
+<li>Or, if there is a minimal period and I'm just uninformed -- what makes sure it is not smaller than the time it takes for the failover?</li>
+</ul>
+<h3>Further on failover</h3>
+<p>I wish to point out that one component of the system analyses a failure scenario, and another one fixes it. I suggest this is an undesired design. The "fixer" must have its own ability to diagnose problems as it makes progress (or else it is naive and would fail in many production cases). And the "analyzer" part must have some wisdom of its own so as to suggest course of action; or understand the consequences of the recovery done by the "fixer".</p>
+<h3>Use of shell scripts</h3>
+<p>Generally speaking, the use of shell scripts as external hooks is evil:</p>
+<ul>
+<li>Shell scripts tend to be poorly audited</li>
+<li>With poor clarity as for what went wrong</li>
+<li>Killing them has operational difficulty (detect the shell script, find possible children, detached children)</li>
+<li>The approach of "if you want something else, just write a shell script for it" is nice for some things, but as the problem turns complex, you turn out to just write big parts of the solution in shell. This decouples your code to unwanted degree.</li>
+</ul>
+<p>At this time, <em>orchestrator</em> also uses external hooks. However:</p>
+<ul>
+<li>Fixing the topology happens within <em>orchestrator</em>, not by external scripts. There is an elaborate, auditable, visible decision making.
+<ul>
+<li>Decision making includes data center considerations, different configuration of servers involved, servers hinted as candidates, servers configured to be ignored, servers known to be downtimed.</li>
+</ul>
+</li>
+<li>Leaving the external scripts with the task of managing DNS changes or what have you.
+<ul>
+<li>Today, at Booking.com, we have a special operational tool (called the dba tool) which does that, manages rosters, issues puppet etc. This tool is itself well audited. Granted, there is still decoupling, but information does not just get lost.</li>
+<li>Sometime in the future I suspect I will extend <strong><a href="https://github.com/outbrain/orchestrator-agent">orchestrator-agent</a></strong> to participate in failovers, which means the entire flow is within <em>orchestrator's</em> scope.</li>
+</ul>
+</li>
+</ul>
+<h3>High availability</h3>
+<p>All the above is only available via a single MaxScale server. What happens if it dies?</p>
+<p>There is a MaxScale/pacemaker setup I'm aware of. If one MaxScale dies, pacemaker takes charge and starts another on another box.</p>
+<ul>
+<li>But this means real downtime</li>
+<li>There are no multiple-MaxScale servers to load-balance on</li>
+<li>The MaxScale started by pacemaker is newly born, and does not have the big picture of the topology. It needs to go through a "peaceful time" to understand what's going on.</li>
+</ul>
+<h3>More High Availability</h3>
+<p>At a time where MaxScale will be able to load-balance and run on multiple nodes, MariaDB will have to further tackle:</p>
+<ul>
+<li>Leader election</li>
+<li>Avoiding concurrent initiation of failovers
+<ul>
+<li>Either via group communication</li>
+<li>Or via shared datastore</li>
+</ul>
+</li>
+<li>Taking off from a failed/crashed MaxScale server's work
+<ul>
+<li>Or rolling it back</li>
+<li>Or just cleaning it up</li>
+</ul>
+</li>
+<li>And generally share all those little pieces of information, such as "Hey, now this server is the master" (are all MaxScales in complete agreement on the topology?) or "I have failed over this topology, we should avoid failing it over again for the next 10 minutes" and more.</li>
+</ul>
+<p>The above are supported by <em>orchestrator</em>. It provides leader election, automated leader promotion, fair recognition of various failure scenarios, picking up a failed recovery from a failed <em>orchestrator</em>. Data is shared by a backend MySQL datastore, and before you shout <em>SPOF</em>, make it Galera/NDB.</p>
+<h3>Further little things that can ruin your day</h3>
+<h4>How about having a delayed replica?</h4>
+<p>Here's an operational use case we had to tackle.</p>
+<ul>
+<li>You have a slave configured to lag by <strong>24</strong> hours. You know the drill: hackers / accidental <strong>DROP TABLE</strong>...</li>
+<li>How much time will an automated tool spend on reconnecting this slave to the topology?
+<ul>
+<li>This could take long minutes</li>
+<li>Will your recovery hang till this is resolved?</li>
+</ul>
+</li>
+<li>Since <em>orchestrator</em> heals the topology in-house, it knows how to push certain operations till after specific other operations took place. For example, <em>orchestrator</em> wants to heal the entire topology, but pushes the delayed replicas aside, under the assumption that it will be able to fix them later (fair assumption, because they are known to be behind our promoted master); it will proceed to fix everything else, execute external hooks (change DNS etc.) and only then come back to the delayed replica. All the while, the process is audited.</li>
+</ul>
+<h4>Flapping ruins your day</h4>
+<ul>
+<li>Not only do you want some stall period between two failovers, you also want your team to respond to a failover and acknowledge it. Or clear up the stall period having verified the source of the problem. Or force the next failover even if it comes sooner than the stall period termination.</li>
+</ul>
+<h4>Binlog formats</h4>
+<p>It is still not uncommon to have Statement Based Replication running. And then it is also not uncommon to have one or two slaves translating to Row Based Replication because of:</p>
+<ul>
+<li>Some app that has to read ROW based format</li>
+<li>Experimenting with RBR for purposes of upgrade</li>
+</ul>
+<p>You just can't promote such a RBR slave on top of SBR slaves; it wouldn't work. <em>Orchestrator</em> is aware of such rules. I still need to integrate this particular consideration into the promotion algorithm.</p>
+<h4>Versions</h4>
+<p>Likewise, not all your slaves are of same version. You should not promote a newer version slave on top of an older version slave. Again, <em>orchestrator</em> will not allow putting such a topology, and again, I still need to integrate this consideration into the promotion algorithm.</p>
+<h3>In summary</h3>
+<p>There is a long way for MaxScale failover to go. When you consider the simplest, all-MariaDB-GTID-equal-slaves small topology case, things are kept simple and probably sustainable. But issues like complex topologies, flapping, special slaves, different configuration, high availability, leadership, acknowledgements, and more, call for a more advanced solution.</p>

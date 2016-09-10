@@ -1,0 +1,86 @@
+---
+title: On MySQL plugin configuration
+date: 2013-10-01 08:50:08.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Configuration
+- Development
+- plugin
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+  _sg_subscribe-to-comments: selvacks@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>MySQL offers <a href="http://dev.mysql.com/doc/refman/5.5/en/plugin-api.html">plugin API</a>, with which you can add <a href="http://dev.mysql.com/doc/refman/5.5/en/plugin-types.html">different types</a> of plugins to the server. The API is roughly the same for all plugin types: you implement an init() function, a deinit(); you declare status variables and global variables associated with your plugin, and of course you implement the particular implementation of plugin call.</p>
+<p>I wish to discuss the creation and use of global variables for plugins.</p>
+<p>Consider the following declaration of a global variable in <a href="https://github.com/outbrain/audit_login">audit_login</a>:</p>
+<blockquote>
+<pre>static MYSQL_SYSVAR_BOOL(enabled, plugin_enabled, PLUGIN_VAR_NOCMDARG,
+"enable/disable the plugin's operation, namely writing to file", NULL, NULL, 1);
+
+static struct st_mysql_sys_var * audit_login_sysvars[] = {
+    MYSQL_SYSVAR(enabled),
+    NULL
+};</pre>
+</blockquote>
+<p>The above creates a new global variables called <strong>"simple_login_audit_enabled"</strong>: it is composed of the plugin name (known to be <strong>"simple_login_audit"</strong> in our example) and declared name (<strong>"enabled"</strong>). It is a boolean, defaults to <strong>1</strong>, and is associated with the internal <strong>plugin_enabled</strong> variable.</p>
+<p>Once this variable is declared, you can expect to be able to:<!--more--></p>
+<blockquote>
+<pre>mysql&gt; show global variables like '%audit%';
++----------------------------+-------+
+| Variable_name              | Value |
++----------------------------+-------+
+| simple_login_audit_enabled | ON    |
++----------------------------+-------+
+
+mysql&gt; set global simple_login_audit_enabled := 0;
+Query OK, 0 rows affected (0.00 sec)</pre>
+</blockquote>
+<p>and you can expect using the following in your <strong>my.cnf</strong> file:</p>
+<blockquote>
+<pre>[mysqld]
+...
+simple_login_audit_enabled=1</pre>
+</blockquote>
+<h4>Assuming your server agrees to start</h4>
+<p>Here's the catch: the <strong>simple_login_audit_enabled</strong> variable is <em>only recognized as long as the plugin is installed</em>. As you may know, plugins can be loaded upon startup time using an explicit <strong>my.cnf</strong> entry such as:</p>
+<blockquote>
+<pre>plugin_load=audit_login.so</pre>
+</blockquote>
+<p>But you may also, at any given time, <a href="http://dev.mysql.com/doc/refman/5.5/en/install-plugin.html">INSTALL</a> or <a href="http://dev.mysql.com/doc/refman/5.5/en/uninstall-plugin.html">UNINSTALL</a> the plugin dynamically.</p>
+<blockquote>
+<pre>install plugin SIMPLE_LOGIN_AUDIT soname 'audit_login.so';
+uninstall plugin SIMPLE_LOGIN_AUDIT;<code>
+</code></pre>
+</blockquote>
+<p>In fact there are good reasons to do so: you may be upgrading your plugin. You can't just throw in the new binary (it's a guaranteed crash on next server shutdown). You need to first <strong>UNINSTALL</strong> it; you then put the new binary, and re-<strong>INSTALL</strong>. This works well, and the price is some downtime for your plugin.</p>
+<p>But what happens if you restart the server while your plugin is uninstalled? Yep: the global variable is unrecognised, and your MySQL server refuses to start:</p>
+<blockquote>
+<pre>130919  8:11:30 [ERROR] /usr/bin/mysqld: <strong>unknown variable 'simple_login_audit_enabled=1'</strong>
+130919  8:11:30 [ERROR] <strong>Aborting</strong>
+130919  8:11:30  InnoDB: Starting shutdown...
+130919  8:11:31  InnoDB: Shutdown completed; log sequence number 40185651
+130919  8:11:31 [Note] /usr/bin/mysqld: Shutdown complete</pre>
+</blockquote>
+<p>I did happen on this case a couple times; it is frustrating.</p>
+<h4>What are the alternatives?</h4>
+<p>So adding variables to my.cnf may prevent MySQL from starting. In my dictionary, this spells <strong>"NO GO"</strong>.</p>
+<p>With <strong>audit_login</strong> I chose to (additionally) support an external config file, <strong>audit_login.cnf</strong>, expected to be found in the <strong>@@datadir</strong>. It is similar in essence to the <strong>master.info</strong> file which is expected by replication. The plugin reads this file (if existing) upon init(), which makes it execute upon server startup or upon <strong>INSTALL PLUGIN</strong>. I can't argue that this is the best solution, but it is a solution that does not interfere with anyone. The file is ignored by all and does not disturb the public peace. The plugin does not require it to exist.</p>
+<p>I was hoping to be able to directly read from <strong>my.cnf</strong>, but am unsure if there is a definitive way to do so from within the plugin. I did not go deep into this.</p>
+<h4>What would be best?</h4>
+<p>Hopefully I'm not missing on anything. But it would be nice to have plugin-dedicated variables in my.cnf which are ignored by the server. These could take the form of:</p>
+<blockquote>
+<pre>[mysql_plugin]
+simple_login_audit_enabled=0</pre>
+</blockquote>
+<p>or similar. It would be the server's responsibility to pass these declarations to the plugins, but ignore them itself (or just pass warning).</p>

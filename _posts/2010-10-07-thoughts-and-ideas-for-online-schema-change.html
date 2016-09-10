@@ -1,0 +1,115 @@
+---
+title: Thoughts and ideas for Online Schema Change
+date: 2010-10-07 10:29:10.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- Development
+- MySQL
+tags:
+- Development
+- Indexing
+- INFORMATION_SCHEMA
+- InnoDB
+- Open Source
+- openark kit
+- Opinions
+- python
+- Schema
+- scripts
+- Triggers
+meta:
+  _edit_last: '2'
+  _wp_old_slug: ''
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Here's a few thoughts on current status and further possibilities for Facebook's <a href="http://www.facebook.com/note.php?note_id=430801045932">Online Schema Change</a> (OSC) tool. I've had these thoughts for months now, pondering over improving <a href="../../forge/openark-kit/oak-online-alter-table">oak-online-alter-table</a> but haven't got around to implement them nor even write them down. Better late than never.</p>
+<p>The tool has some limitations. Some cannot be lifted, some could. Quoting from the <a href="http://www.facebook.com/notes/mysql-at-facebook/online-schema-change-for-mysql/430801045932">announcement</a> and looking at the code, I add a few comments. I conclude with a general opinion on the tool's abilities.</p>
+<h4>"The original table must have PK. Otherwise an error is returned."</h4>
+<p>This restriction could be lifted: it's enough that the table has a UNIQUE KEY. My original <em>oak-online-alter-table</em> handled that particular case. As far as I see from their code, the Facebook code would work just as well with any unique key.</p>
+<p>However, this restriction is of no real interest. As we're mostly interested in InnoDB tables, and since any InnoDB table <em>should have</em> a PRIMARY KEY, we shouldn't care too much.</p>
+<h4>"No foreign keys should exist. Otherwise an error is returned."</h4>
+<p>Tricky stuff. With <em>oak-online-alter-table</em>, changes to the original table were immediately reflected in the <em>ghost</em> table. With InnoDB tables, that meant same transaction. And although I never got to update the text and code, there shouldn't be a reason for not using child-side foreign keys (the child-side is the table on which the FK constraint is defined).</p>
+<p>The Facebook patch works differently: it captures changes and writes them to a <strong>delta</strong> table,  to be later (asynchronously) analyzed and make for a <em>replay</em> of actions on the <em>ghost</em> table.<!--more--></p>
+<p>So in the Facebook code, some cases will lead to undesired behavior. Consider two tables, <strong>country</strong> and <strong>city</strong>, with city holding a RESTRICT/NO ACTION foreign key on <strong>country</strong>'s id. Now consider the scenario:</p>
+<ol>
+<li>Rows from <strong>city</strong> are DELETEd, where the country Id is Spain's.
+<ul>
+<li><strong>city</strong>'s ghost table is still unaffected, Spain's cities are still there.</li>
+<li>A change is written to the delta table to mark these rows for deletion.</li>
+</ul>
+</li>
+<li>A DELETE is issued on <strong>country</strong>'s Spain record.
+<ul>
+<li>The DELETE should work, from the user's perspective</li>
+<li>But it will fail: city's ghost table has not received the changes yet. There's still matching rows. The NO ACTION constraint will fail the DELETE statement.</li>
+</ul>
+</li>
+</ol>
+<p>Now, this does not lead to corruption, just to seemingly unreasonable behavior on the database part. This behavior is probably undesired. NO ACTION constraint won't do.</p>
+<p>However, with CASCADE or SET NULL options, there is less of an issue: operations on the parent table (e.g. <strong>country</strong>) cannot fail. We must make sure operations on the ghost table make it consistent with the original table (e.g. <strong>city</strong>).</p>
+<p>Consider the following scenario:</p>
+<ol>
+<li>A new country is created, called "Sleepyland". An INSERT is made to <strong>country</strong>.
+<ul>
+<li>Both <strong>city</strong> and <strong>city</strong>'s ghost are immediately aware of it.</li>
+</ul>
+</li>
+<li>A new town is created and INSERTed to <strong>city</strong>. The town is called "Naphaven".
+<ul>
+<li>The change takes time to propagate to <strong>city</strong>'s ghost table.</li>
+</ul>
+</li>
+<li>Meanwhile, we realized we made a mistake. We've been had. There's no such city nor country.
+<ol>
+<li>We DELETE "Naphaven" from <strong>city</strong>.</li>
+<li>We DELETE "Sleepyland" from <strong>country</strong>.</li>
+</ol>
+<ul>
+<li>Note that <strong>city</strong>'s ghost table still hasn't caught up with the changes.</li>
+</ul>
+</li>
+<li>Eventually, the INSERT statement for "Naphaven" reaches <strong>city</strong>'s ghost table.
+<ul>
+<li>What should happen now? The INSERT cannot succeed.</li>
+<li>Will this fail the entire process?</li>
+</ul>
+</li>
+</ol>
+<p>Looking at the PHP code, I see that changes written on the <strong>delta</strong> table are blindly replayed on the ghost table.</p>
+<p>Since the process is asynchronous, this should not be the case. We can solve the above if we use INSERT IGNORE instead of INSERT. The statement will fail without failing anything else. The row cannot exist, and that's because the original row does not exist anymore.</p>
+<p>Unlike a replication corruption, this does not lead to accumulation mistakes. The <strong>replay</strong> is static, somewhat like in <em>binary log format</em>. Changes are <em>just written</em>, regardless of existing data.</p>
+<p>I have given this considerable thought, and I can't say I've covered all the possible scenario. However I believe that with proper use of INSERT IGNORE and REPLACE INTO (two statements I heavily relied on with <em>oak-online-alter-table</em>), correctness can be achieved.</p>
+<p>There's the small pain of re-generating the foreign key definition on the "ghost" table (<strong>CREATE TABLE LIKE ...</strong> does not copy FK definitions). And since foreign key names are unique, a new name must be picked up. Not pretty, but perfectly doable.</p>
+<h4>"No AFTER_{INSERT/UPDATE/DELETE} triggers must exist."</h4>
+<p>It would be nicer if MySQL had an ALTER TRIGGER statement. There isn't such statement. If there were such an atomic statement, then we would be able to rewrite the trigger, so as to add our own code to the <em>end of the trigger's code</em>. Yuck. Would be even nicer if we were <a href="http://code.openark.org/blog/mysql/triggers-use-case-compilation-part-ii">allowed to have multiple triggers</a> of same event.</p>
+<p>So, we are left with DROP and CREATE triggers. Alas, this makes for a short period where the trigger does not exist. Bad. The easy solution would be to LOCK WRITE the table, but apparently you can't DROP the trigger (*) when the table is locked. Sigh.</p>
+<p>(*) Happened to me, apparently to Facebook too; With latest 5.1 (5.1.51) version this actually works. With 5.0 it didn't use to; this needs more checking.</p>
+<h4>Use of INFORMATION_SCHEMA</h4>
+<p>As with oak-online-alter-table, the OSC checks for triggers, indexes, column by searching on the INFORMATION_SCHEMA tables. This makes for nice SQL for getting the exact listing and types of PRIMARY KEY columns, whether or not AFTER triggers exist, and so on.</p>
+<p>I've always considered this to be the weak part of <a href="http://code.openark.org/forge/openark-kit">openark-kit</a>, that it relies on INFORMATION_SCHEMA so much. It's easier, it's cleaner, it's even <em>more correct</em> to work that way -- but it just puts too much locks. I think Baron Schwartz (and now Daniel Nichter) did amazing work on analyzing table schemata by parsing the SHOW CREATE TABLE and other SHOW commands regex-wise with <a href="http://www.maatkit.org/">Maatkit</a>. It's a crazy work! Had I written <em>openark-kit</em> in Perl, I would have just import their code. But I'm too <span style="text-decoration: line-through;">lazy</span> busy to do the conversion from Perl to Python, and rewrite that code, what with all the debugging.</p>
+<p>OSC is written in PHP. Again, much conversion work. I think performance-wise this is an important step to make.</p>
+<h4>A word for the critics</h4>
+<p>Finally, a word for the critics. I've read some Facebook/MySQL bashing comments and wish to relate.</p>
+<p>In his <a href="http://www.theregister.co.uk/2010/09/21/facebook_online_schema_change_for_mysql/">interview to The Register</a>, Mark Callaghan gave the example that "Open Schema Change lets the company update indexes without user downtime, according to Callaghan".</p>
+<p>PostgreSQL was mentioned for being able to add index with only read locks taken, or being able to do the work with no locks using CREATE INDEX CONCURRENTLY. I wish MySQL had that feature! Yes, MySQL has a lot to improve upon, and the latest PostgreSQL 9.0 brings valuable new features. (Did I make it clear I have no intention of bashing PostgreSQL? If not, please re-read this paragraph until convinced).</p>
+<p>Bashing related to the notion of MySQL being so poor that Facebook used an even poorer mechanism to work out the ALTER TABLE.</p>
+<p>Well, allow me to add a few words: the CREATE INDEX is by far not the only thing you can achieve with OSC (although it may be Facebook's major concern). You should be able to:</p>
+<ul>
+<li>Add columns</li>
+<li>Drop columns</li>
+<li>Convert character sets</li>
+<li>Modify column types</li>
+<li>Add partitioning</li>
+<li>Reorganize partitioning</li>
+<li>Compress the table</li>
+<li>Otherwise changing table format</li>
+<li>Heck, you could even modify the storage engine! (To other transactional engine)</li>
+</ul>
+<p>These are giant steps. How easy would it be to write these down into the database? It only takes a few weeks time to work out a working solution with reasonable limitations, just using the resources the MySQL server provides you with. The <a href="http://www.facebook.com/MySQLatFacebook">MySQL@Facebook team</a> should be given credit for that.</p>

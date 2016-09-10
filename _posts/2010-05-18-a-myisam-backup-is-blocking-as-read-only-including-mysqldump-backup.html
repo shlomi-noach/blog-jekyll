@@ -1,0 +1,25 @@
+---
+title: A MyISAM backup is blocking as read-only, including mysqldump backup
+date: 2010-05-18 19:29:05.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Backup
+- InnoDB
+- MyISAM
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Actually this is (almost) all I wanted to say. This is intentionally posted with all related keywords in title, in the hope that a related search on Google will result with this post on first page.</p>
+<p>I'm just still encountering companies who use MyISAM as their storage engine and are <em>unaware</em> that their nightly backup actually blocks their application, basically rendering their product unavailable for long minutes to hours on a nightly basis.</p>
+<p>So this is posted as a warning for those who were not aware of this fact.</p>
+<p>There is no hot (non blocking) backup for MyISAM. Closest would be file system snapshot, but even this requires flushing of tables, which may take a while to complete. If you must have a hot backup, then either use replication - and take the risk of the slave not being in complete sync with the master - or use another storage engine, i.e. InnoDB.</p>

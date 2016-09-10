@@ -1,0 +1,34 @@
+---
+title: Dangers of skip-grant-tables
+date: 2008-11-13 09:52:41.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Configuration
+- Security
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: qunchenmy@163.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>When MySQL's root password is lost and must be reset, there are two popular ways to create a new password. One of the options is far too popular, in my opinion.</p>
+<p>The preferred way of setting a root's password is by using an init-file. The process for doing this is well explained in <a title="How to Reset the Root Password" href="http://dev.mysql.com/doc/refman/5.0/en/resetting-permissions.html">MySQL's manual</a>. Using this method requires creating a simple text file, in which the required</p>
+<p><strong><code>GRANT ALL PRIVILEGES ON *.* TO 'root'@'localhost' IDENTIFY BY '****' WIth GRANT OPTION;</code></strong></p>
+<p>(or, alternatively,  <code><strong>SET PASSWORD ...</strong></code>) statement is written.</p>
+<p>An entry must be written to my.cnf, or supplied via command line parameters:</p>
+<p><strong><code>init-file=/tmp/my-init-file.sql</code></strong></p>
+<p>MySQL must then be restarted. Upon restart, and before opening any outside connections, the init-file is executed. Once MySQL is up and running, the init-file entry should be dropped.<!--more--></p>
+<h4>The bad way</h4>
+<p>For some reason, the following method seems to be far more popular: starting MySQL with <strong><code>--skip-grant-tables</code></strong>.</p>
+<p>When MySQL is started with this parameter, it completely avoids checking its grant tables upon connection and upon query. This means anyone can log in from anywhere, and do anything on the database.</p>
+<p>While the manual does mention this is a less preferred way of doing it, it does not elaborate. Starting MySQL with this parameter is a huge security breach. This is why one may wish to add the <strong><code>--skip-networking</code></strong> parameter, to only allow connection from the localhost (using Unix socket, for example).</p>
+<p>Moreover, after MySQL starts, and the necessary <code><strong>GRANT</strong> </code>or <strong><code>CHANGE PASSWORD</code></strong> take place, the server is still unsuitable for connections. This is why it needs to be restarted again, this time without <strong><code>--skip-grant-tables</code></strong>.</p>
+<p>So, <strong><code>init-file</code></strong>: one restart; no security issues. <strong><code>skip-grant-tables</code></strong>: two restarts, security breach possible.  We have a winner.</p>

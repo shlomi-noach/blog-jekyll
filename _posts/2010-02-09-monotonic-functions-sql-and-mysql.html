@@ -1,0 +1,64 @@
+---
+title: Monotonic functions, SQL and MySQL
+date: 2010-02-09 09:47:21.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Indexing
+- Math
+- SQL
+meta:
+  _edit_last: '2'
+  _oembed_d0ca27e06b4258af4ce99155a84fe289: '{{unknown}}'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<blockquote>In mathematics, a <strong>monotonic function</strong> (or <strong>monotone function</strong>) is a function which preserves the given order. [<a href="http://en.wikipedia.org/wiki/Monotonic_function">Wikipedia</a>]</p></blockquote>
+<p>To be more precise, a function <em>f</em> is monotonic increasing, if for every <em>x ≤ y</em> it holds that <em>f(x) ≤ f(y)</em>. <em>f</em> is said to be strictly monotonic increasing is for every <em>x &lt; y</em> it holds that <em>f(x) &lt; f(y)</em>.</p>
+<p>So, if we follow values in some order, we say that <em>f</em> is monotonic increasing if <em>f</em>'s value never decreases (it either increases or stays the same), and we say that <em>f</em> is strictly increasing if <em>f</em>'s value is always changes "upwards".</p>
+<p>Monotonic functions play an important role in SQL. To discuss monotonic functions in SQL we must first determine what the <em>order</em> is, and then, what the <em>function</em> is.</p>
+<p>Well, they both change according to our point of view. Let's look at some examples. Take a look at the following table:<!--more--></p>
+<blockquote>
+<pre>CREATE TABLE `log` (
+ `<strong>id</strong>` int(11) NOT NULL <strong>AUTO_INCREMENT</strong>,
+ `<strong>ts</strong>` <strong>timestamp</strong> NOT NULL <strong>DEFAULT CURRENT_TIMESTAMP</strong>,
+ `error_level` tinyint(4) DEFAULT NULL,
+ `subject` varchar(32) DEFAULT NULL,
+ `description` varchar(255) DEFAULT NULL,
+ PRIMARY KEY (`id`)
+)</pre>
+</blockquote>
+<p>In the above <strong>log</strong> table, log entries are added with <strong>id</strong> and <strong>ts</strong> getting automatically evaluated. Assuming no dirty hacks occur, we can expect that <strong>ts</strong> in <em>monotonic</em> by order of <strong>id</strong>. That is, as <strong>id</strong> increases, so does <strong>ts</strong>. Is is possible that we get the same <strong>ts</strong> for a few rows (it is not unique), but once it increases, it never decreases again.</p>
+<h4>Why is this interesting?</h4>
+<p>Because it simplifies common problems.</p>
+<p>For example, it simplifies a search for a given <strong>ts</strong> value, when no index exists on the <strong>ts</strong> column. If we were to look for a log entry from <strong>'2009-02-07 11:58:00'</strong> by simple <strong>SELECT</strong>, we would have to use a full table scan. But, by knowing that <strong>ts</strong> is monotonic, we can also use <a href="http://en.wikipedia.org/wiki/Binary_search_algorithm">binary search</a> on <strong>id</strong>.</p>
+<p>As another example, it simplifies the task of purging all rows up to last midnight. Instead of issuing <strong>"DELETE FROM log WHERE ts &lt; DATE(NOW())"</strong>, thus using, again, full table scan plus locking all rows (depending on storage engine), we can use other methods:</p>
+<ul>
+<li>We can detect the <strong>id</strong> for the first row which holds the condition using binary search, then <strong>"DELETE FROM log WHERE id &lt; ###"</strong></li>
+<li>Or we can slowly work our way in ascending <strong>id</strong> order, issuing something like <strong>"DELETE FROM log WHERE ts &lt; DATE(NOW()) ORDER BY id ASC LIMIT 1000"</strong>, and stop once the <strong>ROW_COUNT()</strong> is less than <strong>1000</strong>. We know we need not advance any further, without needing to compute anything. We thus block less, while retaining correctness of our operation.</li>
+</ul>
+<h4>Monotonic functions in MySQL</h4>
+<p>When we iterate InnoDB tables (as in full table scan), we know that rows are iterated in ascending <strong>PRIMARY KEY</strong> order <a name="note1m" href="#note1">[¹]</a>. So the <strong>PRIMARY KEY</strong> dictates the order by which monotonic functions are evaluated.</p>
+<p>With MyISAM, rows are iterated according to internal storage order. It has nothing to do with <strong>PRIMARY KEY</strong>s (though depending on <strong>concurrent_insert</strong> this can be somewhat controlled). It also has nothing to do with chronological order. Newer rows may capture space held by older rows.</p>
+<p>But MyISAM allows for <strong>ALTER TABLE ... ORDER BY ...</strong> syntax, which allows us to do a one-time sort of the table. Assuming no writes shortly thereafter, a full table scan will iterate the rows according to specified order.</p>
+<h4>Monotonic functions and indexes</h4>
+<p>A column which is indexed dictates a monotonic function by index order.</p>
+<p>Wait. Isn't that obvious? Of course: if we index a column, then the index sorts by that column, and the column is ascending by the index order which is,... itself.</p>
+<p>I call that trivial, but it does interest us: because, while mathematically there may be nothing significant here, we do care about this order when we have index scans. So, if we can force an index scan on our query, then we can anticipate the order by which rows are processed; we now have some order by which to evaluate monotonic functions.</p>
+<p>OK, maybe I made it sound more complicated than it really is. Monotonic functions work well when the <em>order</em> by which they are monotonic is some indexed column(s). The <strong>AUTO_INCREMENT PRIMARY KEY</strong> we saw in the <strong>log</strong> example above, is perhaps the most trivial case.</p>
+<p>While MySQL does not support function indexes, if the function we consider is monotonic, we still benefit from adding an index on the raw column.</p>
+<h4>Other examples of monotonic functions</h4>
+<p>So, where else can we find them? Timestamp columns are probably the most common (this post holds true until time travel to the past is introduced).</p>
+<p>But also summaries: like a reporting table which lists down some ever-ascending value (the number of books ever sold in our store; trip mileage; hop counter; etc.).</p>
+<p>I've seen many cases (though difficult to illustrate in this scope) when foreign key values are in ascending order. A very brief example is a 1-1 relation between two denormalized tables, where the tables ids do not necessarily have to match, but is always ascending).</p>
+<p>And Baron's <a href="http://www.xaprb.com/blog/2010/01/22/my-wishlist-for-sql-the-until-clause/">wishlist for SQL</a> can also benefit from monotonic functions.</p>
+<h4>Conclusion</h4>
+<p>When a monotonic function is present, it brings an added value to our schema and query design. It allows for less indexing; quicker operations. Look for these. I've only discussed increasing functions. Indeed, MySQL's indexes are always increasing (they cannot be defined in decreasing order), but query simplifications work just as well for monotonic decreasing functions.</p>
+<p><a name="note1" href="#note1m">[¹]</a> I've actually seen a different behavior on temporary InnoDB tables and on compressed InnoDB Plugin tables; I'll write on this on another occasion.</p>

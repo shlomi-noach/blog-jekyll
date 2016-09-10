@@ -1,0 +1,26 @@
+---
+layout: post
+title: Splitting queries to boost replication performance
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Some queries make for hard work for MySQL. Using statement based replication often means whatever hard work was done by the master, needs to be re-done by the slave.</p>
+<p>Assume the following situation: we have a very large table, and need to UPDATE some rows, on a certain condition. The condition does not utilize an index. For example:</p>
+<pre>UPDATE logs SET</pre>
+<p>Instead of DELETE FROM... WHERE (complicated)</p>
+<p>do</p>
+<p>SELECT FROM... WHERE (complicated)</p>
+<p>DELETE FROM WHERE IN (primary keyy from previous result)</p>

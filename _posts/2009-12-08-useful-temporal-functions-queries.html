@@ -1,0 +1,160 @@
+---
+title: Useful temporal functions & queries
+date: 2009-12-08 11:46:24.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Data Types
+- Indexing
+- SQL
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Here's a complication of some common and useful time &amp; date calculations and equations. Some, though very simple, are often misunderstood, leading to inefficient or incorrect implementations.</p>
+<p>There are many ways to solve such problems. I'll present my favorites.</p>
+<h4>Querying for time difference</h4>
+<p>Given two timestamps: <em>ts1</em> (older) and <em>ts2</em> (newer), how much time has passed between them?</p>
+<p>One can use <strong>TIMEDIFF()</strong> &amp; <strong>DATEDIFF()</strong>, or compare two <strong>UNIX_TIMESTAMP()</strong> values. My personal favorite is to use <strong>TIMESTAMPDIFF()</strong>. Reason being that I'm usually interested in a specific metric, like the number of hours which have passed, or the number of days, disregarding the smaller minute/second resolution. Which allows one to:</p>
+<blockquote>
+<pre>SELECT TIMESTAMPDIFF(HOUR, ts1, ts2)</pre>
+</blockquote>
+<p>Take, for example:</p>
+<blockquote>
+<pre>SELECT TIMESTAMPDIFF(MONTH, '2008-10-07 00:00:00', '2009-12-06 00:00:00')</pre>
+</blockquote>
+<p>The function correctly identifies the number of days per month, and provides with <strong>13</strong>, being the truncated number of full months.</p>
+<h4>Doing arithmetics</h4>
+<p>One can use <strong>TIMESTAMPADD()</strong>, or <strong>DATE_SUB()</strong>, but, again, when dealing with specific resolutions, I find "<strong>+ INTERVAL</strong>" to be the most convenient:</p>
+<blockquote>
+<pre>SELECT ts1 + INTERVAL 10 HOUR</pre>
+</blockquote>
+<p><!--more-->This allows me to only add by a specific unit: <strong>SECOND</strong>, <strong>MINUTE</strong>, <strong>HOUR</strong>, <strong>DAY</strong>, <strong>WEEK</strong>, etc. Many times I find this is exactly what I want.</p>
+<blockquote>
+<pre>SELECT TIMESTAMP('2009-12-06 20:14:52') + INTERVAL 4 WEEK AS ts2;
++---------------------+
+| ts2                 |
++---------------------+
+| 2010-01-03 20:14:52 |
++---------------------+</pre>
+</blockquote>
+<h4>Checking if a timestamp is in a given date</h4>
+<p>This one is very popular, and most poorly treated.</p>
+<p>Say we have a <strong>sales</strong> table, with some <strong>ts</strong> column. We want to SELECT all sales on Dec 25th, 2008. I've seen so many solutions, many in writing. Let's look at them:</p>
+<p><em>Wrong:</em></p>
+<blockquote>
+<pre>SELECT * FROM sales WHERE ts BETWEEN '2008-12-25' AND '2008-12-26'</pre>
+</blockquote>
+<p>Why is this wrong? Because <strong>BETWEEN</strong> is inclusive. A sale taking place on '<strong>2008-12-26 00:00:00</strong>' will match our condition.</p>
+<p><em>Correct but inefficient:</em></p>
+<blockquote>
+<pre>SELECT * FROM sales WHERE DATE(ts) = DATE('2008-12-25')</pre>
+</blockquote>
+<p>Why is this inefficient? Because a function is used over the <strong>ts</strong> column. This disables use of any index we might have on <strong>ts</strong>, leading to full table scan.</p>
+<p><em>Correct but inefficient:</em></p>
+<blockquote>
+<pre>SELECT * FROM sales WHERE ts LIKE '2008-12-25 %'</pre>
+</blockquote>
+<p>Why is this inefficient? Because a function is used over the <strong>ts</strong> column. Can you see it? It's an implicit CAST function, which casts the TIMESTAMP value to a character value, so as to perform a string comparison.</p>
+<p><em>Correct but ugh:</em></p>
+<blockquote>
+<pre>SELECT * FROM sales WHERE ts BETWEEN '2008-12-25 00:00:00' AND '2008-12-25 23:59:59'</pre>
+</blockquote>
+<p>Why is it ugh? Because, well, ...Ugh!</p>
+<p><em>Correct:</em></p>
+<blockquote>
+<pre>SELECT * FROM sales WHERE ts &gt;= DATE('2008-12-25') AND ts &lt; DATE('2008-12-26')</pre>
+</blockquote>
+<p>This allows for indexing to be used properly. The <strong>DATE()</strong> casting is not strictly required here, but is generally safer.</p>
+<h4>Truncating to last midnight</h4>
+<p>Surprisingly, this simple question sees a lot of incorrect solution attempts. The quickest, safest way to get "last midnight" is:</p>
+<blockquote>
+<pre>SELECT DATE(ts)</pre>
+</blockquote>
+<p>or, if you like to be stricter:</p>
+<blockquote>
+<pre>SELECT TIMESTAMP(DATE(ts))</pre>
+</blockquote>
+<p>For example:</p>
+<blockquote>
+<pre>SELECT TIMESTAMP(DATE('2009-12-06 20:14:52')) AS midnight;
++---------------------+
+| midnight            |
++---------------------+
+| 2009-12-06 00:00:00 |
++---------------------+</pre>
+</blockquote>
+<h4>Truncating to last round hour</h4>
+<p>Similar to the above, but utilizes arithmetic:</p>
+<blockquote>
+<pre>SELECT DATE(ts) + INTERVAL HOUR(ts) HOUR</pre>
+</blockquote>
+<p>For example:</p>
+<blockquote>
+<pre>SELECT ts, DATE(ts) + INTERVAL HOUR(ts) HOUR FROM sales LIMIT 5;
++---------------------+-----------------------------------+
+| ts                  | DATE(ts) + INTERVAL HOUR(ts) HOUR |
++---------------------+-----------------------------------+
+| 2009-01-05 05:17:00 | 2009-01-05 05:00:00               |
+| 2009-03-09 00:49:00 | 2009-03-09 00:00:00               |
+| 2009-02-20 00:14:00 | 2009-02-20 00:00:00               |
+| 2009-02-14 22:42:00 | 2009-02-14 22:00:00               |
+| 2009-03-14 04:50:00 | 2009-03-14 04:00:00               |
++---------------------+-----------------------------------+</pre>
+</blockquote>
+<h4>Round to closest round hour</h4>
+<p>Taking the classic round() implementation, which states:</p>
+<blockquote>
+<pre>round(x) := int(x + 0.5)</pre>
+</blockquote>
+<p>We write:</p>
+<blockquote>
+<pre>SELECT DATE(ts + INTERVAL 30 MINUTE) + INTERVAL HOUR(ts + INTERVAL 30 MINUTE) HOUR</pre>
+</blockquote>
+<p>Example:</p>
+<blockquote>
+<pre>SELECT ts, DATE(ts + INTERVAL 30 MINUTE) + INTERVAL HOUR(ts + INTERVAL 30 MINUTE) HOUR AS rounded FROM sales ORDER BY HOUR(ts) DESC LIMIT 5;
++---------------------+---------------------+
+| ts                  | rounded             |
++---------------------+---------------------+
+| 2009-03-25 23:54:00 | 2009-03-26 00:00:00 |
+| 2009-03-13 23:45:00 | 2009-03-14 00:00:00 |
+| 2009-01-29 22:53:00 | 2009-01-29 23:00:00 |
+| 2009-01-18 22:22:00 | 2009-01-18 22:00:00 |
+| 2009-01-14 22:16:00 | 2009-01-14 22:00:00 |
++---------------------+---------------------+</pre>
+</blockquote>
+<h4>Count number of midnights between two timestamps, inclusive</h4>
+<p>Given two timestamps, <em>ts1</em> and <em>ts2</em>, what is the number of midnights between them?</p>
+<blockquote>
+<pre>SELECT TIMESTAMPDIFF(DAY, DATE(ts1), ts2) + IF(DATE(ts1) = ts1, 1, 0);</pre>
+</blockquote>
+<p>Example:</p>
+<blockquote>
+<pre>SELECT ts, ts2, TIMESTAMPDIFF(DAY, DATE(ts), ts2) + IF(DATE(ts) = ts, 1, 0) AS number_of_midnights FROM sales LIMIT 10;
++---------------------+---------------------+---------------------+
+| ts                  | ts2                 | number_of_midnights |
++---------------------+---------------------+---------------------+
+| 2009-01-05 05:17:00 | 2009-01-05 19:17:00 |                   0 |
+| 2009-03-09 00:49:00 | 2009-03-11 15:49:00 |                   2 |
+| 2009-02-20 00:14:00 | 2009-02-23 02:14:00 |                   3 |
+| 2009-02-14 22:42:00 | 2009-02-18 07:42:00 |                   4 |
+| 2009-03-14 04:50:00 | 2009-03-17 16:50:00 |                   3 |
+| 2009-02-16 04:01:00 | 2009-02-19 08:01:00 |                   3 |
+| 2009-01-20 05:36:00 | 2009-01-21 08:36:00 |                   1 |
+| 2009-02-07 15:57:00 | 2009-02-07 22:57:00 |                   0 |
+| 2009-02-13 14:59:00 | 2009-02-15 22:59:00 |                   2 |
+| 2009-01-11 03:02:00 | 2009-01-13 11:02:00 |                   2 |
++---------------------+---------------------+---------------------+</pre>
+</blockquote>
+<h4>Further notes</h4>
+<p>A full listing of temporal functions can be found on the <a href="http://dev.mysql.com/doc/refman/5.1/en/date-and-time-functions.html">MySQL documentation</a>. There's almost always more than one way to solve a problem. I've seen (and done, in the past) many calculations done on the application side due to lack of familiarity with the available functions.</p>
+<p>Please share your own common solutions below!</p>

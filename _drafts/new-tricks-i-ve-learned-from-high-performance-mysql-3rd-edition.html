@@ -1,0 +1,42 @@
+---
+layout: post
+title: New tricks I've learned from High Performance MySQL, 3rd Edition
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags:
+- Books
+- Hack
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>The 3rd edition of <a href="http://www.amazon.com/High-Performance-MySQL-Optimization-Replication/dp/1449314287/ref=dp_ob_title_bk">High Performance MySQL</a> is not a copy+paste of the 2nd edition. It offers a whole lot of new insight with fresh content.</p>
+<p>This post is not a book review: I just wish to note down a few new tricks I got from the book. Nevertheless, one can't just mention a book and get away with it. Unsurprisingly, I found the book to be excellent, and of the same high quality as previous edition. What I mostly like about the book is that the authors are not afraid to tell you their opinion. It is very common to read books where authors present with a few technologies, review them, and leave you with the thought: <em>"Okay, so what should I be using?"</em>. That is not to say that there's always one best solution; but the authors of HPMySQL will let you know they think some use cases are out of the question, or that some technology is far better than another in this and that respects.</p>
+<p>The book drills down very quickly to the bits and bytes of benchmarking, profiling, indexing, internals, configuration, hardware and more.</p>
+<p>If you follow my blog, you'll know I'm very much interested in all things SQL and Usability. Here's new stuff I picked from the book:</p>
+<h4>Triggers: a per-statement hack</h4>
+<p>Apparently, Roland Bouman found a trick to <a href="http://rpbouman.blogspot.co.il/2006/04/mysql-hack-emulates-before-statement_30.html">simulate a per-statement invocation of trigger</a>. How could I have missed this? This was back in 2006, and only now I got to see it: in a <strong>BEFORE</strong> trigger, the <strong>ROW_COUNT()</strong> function always returns 1, except for the first row. So we can use this to do a one time operation for the invoking statement:</p>
+<blockquote>
+<pre>CREATE TRIGGER bir_test_row_count
+BEFORE INSERT ON test_row_count
+FOR EACH ROW
+BEGIN
+    <strong>DECLARE v_row_count int DEFAULT row_count();</strong>
+    <strong>IF v_row_count!=1 THEN</strong>
+      -- Per statement code goes here
+    <strong>END IF; </strong>    -- Per row code goes here<strong> </strong>END;
+//
+
+delimiter ;</pre>
+</blockquote>
+<h4>Using mkfifo to read compressed data via LOAD DATA INFILE</h4>
+<p><strong>LOAD DATA INFILE</strong> only accepts input in text format. But using <strong>mkfifo</strong> one can make it read from compressed files without first uncompressing them.</p>

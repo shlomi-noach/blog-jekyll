@@ -1,0 +1,95 @@
+---
+title: 'mycheckpoint (rev. 170): improved custom queries; local charting; page/swap
+  I/O monitoring; improved HTML reports'
+date: 2010-07-16 10:58:40.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Graphs
+- Linux
+- Monitoring
+- mycheckpoint
+- Open Source
+meta:
+  _edit_last: '2'
+  _wp_old_slug: ''
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Revision <strong>170</strong> of <a href="../../forge/mycheckpoint">mycheckpoint</a>, a MySQL monitoring solution, has  been released. New and updated in this revision:</p>
+<ul>
+<li><strong>Improved custom queries</strong>: lifting of limitations from previous, introductory revision; better HTML presentation</li>
+<li><strong>Local, inline charting</strong>: no rendering of Google Charts, unless explicitly requested. All charts are now rendered locally using JavaScript. No data is now sent over the network.</li>
+<li><strong>Page/Swap I/O monitoring</strong>: now monitoring for page ins and outs, swap ins and outs (Linux only).</li>
+<li><strong>Improved HTML reports</strong>: several improvements on presentation (see <a href="http://code.openark.org/forge/wp-content/uploads/2010/07/mycheckpoint-report-brief-169.html">sample</a>, more follow).</li>
+</ul>
+<h4>Improved custom queries</h4>
+<p>Some limitations, introduced in revision <strong>132</strong>, are now lifted. New features are introduced.</p>
+<ul>
+<li>There is now no limit to the number of custom queries (well, an INT limit).</li>
+<li>In fact, the data tables adjust themselves to the existing custom queries in the form of auto-deploy: once a new <a href="http://code.openark.org/forge/mycheckpoint/documentation/custom-monitoring">custom query is added</a> or an old one removed, mycheckpoint will add or remove the relevant columns from the data tables.</li>
+<li>The <strong>chart_order</strong> column is now utilized: HTML reports which include custom query charts now order those charts according to <strong>chart_order</strong> values. This makes for nicer reports.</li>
+<li>The standard <a href="http://code.openark.org/forge/wp-content/uploads/2010/07/mycheckpoint-report-brief-169.html">HTML brief report</a> (<strong>SELECT html FROM sv_report_html_brief</strong>) now automatically includes all custom charts. The HTML brief report is the report one usually wants to look at: it provides with the latest 24 hours metrics for selected values. It now becomes a centralized place for all that is interesting in the past 24 hours.</li>
+<li>Custom queries are now allowed to return <strong>NULL</strong>, treated as a missing value. This is a bugfix from previous revisions.</li>
+</ul>
+<h4>Local charting</h4>
+<p>Motivation for local charting is clear: no one likes having their data being sent over the network. And no one likes Google to know about their DML values.</p>
+<p>I've been playing around with quite a few charting solutions, and have gone into depths with two of them, adding and rewriting quite a lot of code. Eventually, I settled on my very own rendering. Here's what I've seen &amp; tested:<!--more--></p>
+<ul>
+<li><a href="http://danvk.org/dygraphs/">dygraphs</a>: a very nice time series charting library. I've presented a use case on <a href="http://code.openark.org/blog/mysql/static-charts-vs-interactive-charts">a previous post</a>.
+<ul>
+<li>Pros: slick, easy to work with.</li>
+<li>Cons: uses HTML Canvas for rendering. This is fine on Firefox, Chrome, Safari, you name it. This isn't fine on IE, which does not support Canvas. There's <a href="http://excanvas.sourceforge.net/">ExplorerCanvas</a>, a hack tool which converts canvas to IE's VML, but it is far from being satisfactory: it is <em>sloooow</em>. Very, very slow. It is slow with one chart; but loading of 21 charts, as I do in some of <em>mycheckpoint</em>'s reports can take <em>long minutes</em> on Internet explorer.</li>
+<li>Cons: Only provides with a time series chart. No scatter plots.</li>
+</ul>
+</li>
+<li>Because they're using ExplorerCanvas for IE, <a href="http://code.google.com/p/flot/">flot</a>, <a href="http://www.jqplot.com/">jqPlot</a> etc., are all unacceptable.</li>
+<li><a href="http://g.raphaeljs.com/">gRaphael</a>: very slick charts based on Raphael. The original line charts are very basic, and I have invested a lot of time rewriting a great deal (you can find it all <a href="http://code.google.com/p/mycheckpoint/source/browse/#svn/trunk/graphael">here</a>). Raphael uses VML on IE, and SVG for all other browsers.
+<ul>
+<li>Pros: very slick. Supports various chart types, including line (though not time-series) and scatter.</li>
+<li>Cons: <em>slooooooooow</em> when instantiating multiple charts. Unbearably slow, both on Firefox and IE. Slow as in minutes of waiting.</li>
+</ul>
+</li>
+</ul>
+<p>In addition, all of the above solutions were quite heavyweight: at about 45KB to start with, then add ExplorerCanvas or jQuery, or Raphael as supporting libraries, these became a real burden.</p>
+<p>So, I had some time to spare (business is fine, thank you. I was a bit Ill. I'm feeling well now, thank you), and was upset what with all the time I invested in the above coding. And I decided to invest even more time, and build <em>my own</em> charts.</p>
+<p>Enter <em>openark-charts</em>.</p>
+<blockquote>
+<pre><a href="http://code.openark.org/blog/wp-content/uploads/2010/07/mycheckpoint-report-html-screenshot.png" /></pre>
+<p><img class="alignnone size-full wp-image-2662" title="mycheckpoint-report-html-screenshot" src="{{ site.baseurl }}/assets/mycheckpoint-report-html-screenshot.png" alt="" width="808" height="307" /></p>
+<p><a href="http://code.openark.org/blog/wp-content/uploads/2010/07/mycheckpoint-24-7-report-html-screenshot.png"><img class="alignnone size-full wp-image-2663" title="mycheckpoint-24-7-report-html-screenshot" src="{{ site.baseurl }}/assets/mycheckpoint-24-7-report-html-screenshot.png" alt="" width="808" height="267" /></a>
+</p></blockquote>
+<p>Currently, these line charts and scatter charts know how to parse a Google Image chart URL (only some features supported -- only those I'm actually using with <em>mycheckpoint</em>). These are not full blown solutions: they come to serve mycheckpoint. And they do so nicely, if I may say so. Using Canvas for most browsers, or VML for IE, these very small pieces of code (10K for line chart, 6K for scatter chart, minified) load fast, use very little memory, and do their work well.</p>
+<p>Granted, neither provides with interactive features: this is planned for the future.</p>
+<h4>Page/swap I/O monitoring</h4>
+<p>(Linux only) <em>mycheckpoint</em> now reads <strong>/proc/vmstat</strong> to get the <em>pageins</em>, <em>pageouts</em>, <em>swapins</em> and <em>swapouts</em> (since last reboot). I was actually looking at completely different places on the <strong>/proc</strong> file system to get swap info, and was frustrated with the complexity involved, till I bumped on <strong>/proc/vmstat</strong>... New tricks every day!</p>
+<h4>Improved HTML reports</h4>
+<p>This is mostly HTML make-up. Some minimal design, some more details thrown into the HTML pages (name of DB, MySQL version, <em>mycheckpoint</em> version). A little more verbosity; all sorts of stuff which was neglected so far.</p>
+<p>Here are some <span style="text-decoration: line-through;"><strong>show off</strong></span> examples of the new HTML views: <a href="http://code.openark.org/forge/wp-content/uploads/2010/07/mycheckpoint-report-full-169.html">[full report]</a>, <a href="http://code.openark.org/forge/wp-content/uploads/2010/07/mycheckpoint-report-brief-169.html">[brief report]</a>, <a href="http://code.openark.org/forge/wp-content/uploads/2010/07/mycheckpoint-report-24-7-169.html">[24/7 report]</a>, <a href="http://code.openark.org/forge/wp-content/uploads/2010/07/mycheckpoint-report-custom-full-169.html">[custom full report]</a>, <a href="http://code.openark.org/forge/wp-content/uploads/2010/07/mycheckpoint-report-custom-brief-169.html">[custom brief report]</a>, <a href="http://code.openark.org/forge/wp-content/uploads/2010/07/mycheckpoint-alert-pending-169.html">[alert pending report]</a>.</p>
+<p>All HTML views now utilize the new <em>openark-charts</em>, and none renders charts with Google charts. This means when you <a href="http://code.openark.org/forge/mycheckpoint/documentation/generating-html-reports">use your HTML view</a>, your data is safe. No data is sent over the net. All charts are rendered using Javascript, which is loaded and executed locally.</p>
+<p>But if you like, there's a [url] link next to each chart, which leads to a (online) Google chart image. Why? Because neither HTML Canvas nor VML allow for a complete rendering of the charts to an image. So this is a way for one to retrieve &amp; store a chart's image. Don't use it if you see no reason for it; it's just there.</p>
+<p>And I even threw in rounded corners (IE users: only as of Windows 7).</p>
+<h4>Future plans</h4>
+<p>Work is going on. These are the non-scheduled future tasks I see:</p>
+<ul>
+<li>Monitoring InnoDB Plugin &amp; XtraDB status.</li>
+<li>Interactive charts. See my <a href="../mysql/static-charts-vs-interactive-charts">earlier  post</a>.</li>
+<li>A proper <em>man</em> page.</li>
+<li>Anything else that interests me.</li>
+</ul>
+<h4>Try it out</h4>
+<p>Try out <em>mycheckpoint</em>. It’s a different kind of monitoring  solution. You will need basic SQL skills, and in return you’ll get a lot  of power under your hands.</p>
+<ul>
+<li>Download mycheckpoint <a href="https://code.google.com/p/mycheckpoint/">here</a></li>
+<li>Visit the project’s <a href="../../forge/mycheckpoint">homepage</a></li>
+<li>Browse the <a href="../../forge/mycheckpoint/documentation">documentation</a></li>
+<li>Report <a href="https://code.google.com/p/mycheckpoint/issues/list">bugs</a></li>
+</ul>
+<p><em>mycheckpoint</em> is released under the <a href="http://www.opensource.org/licenses/bsd-license.php">New BSD  License</a>.</p>

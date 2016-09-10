@@ -1,0 +1,80 @@
+---
+title: 'zookeepercli: lightweight, powerful, controlled command line client for ZooKeeper'
+date: 2014-09-17 09:08:20.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- Development
+- Linux
+tags:
+- command line
+- go
+- Open Source
+- ZooKeeper
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+  _sg_subscribe-to-comments: priya.matpadi@ecofactor.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I'm happy to announce the availability of <a href="https://github.com/outbrain/zookeepercli"><strong>zookeepercli</strong></a>: a lightweight, simple, fast and controlled command line client for ZooKeeper.</p>
+<p><strong>zookeepercli</strong> allows for:</p>
+<ul class="task-list">
+<li>Basic CRUD-like operations: <strong><code>create</code></strong>,  <strong><code>set</code></strong>,  <strong><code>delete</code></strong>,  <strong><code>exists</code></strong>,  <strong><code>get</code></strong>,  <strong><code>ls</code></strong> (aka <strong><code>children</code></strong>).</li>
+<li>Extended operations: <strong><code>lsr</code></strong> (ls recursive),  <strong><code>creater</code></strong> (create recursively)</li>
+<li>Well formatted and controlled output: supporting either <strong><code>txt</code></strong> or <strong><code>json</code></strong> format</li>
+<li>Single, no-dependencies binary file, based on a native Go ZooKeeper library by <a href="http://github.com/samuel/go-zookeeper">github.com/samuel/go-zookeeper</a> (<a href="https://github.com/outbrain/zookeepercli/blob/master/go-zookeeper-LICENSE">LICENSE</a>)</li>
+</ul>
+<p>I was dissatisfied with existing command line access to ZooKeeper. Uncontrolled and noisy output as well as large footprint were among the reasons. <strong>zookeepercli</strong> overcomes the above and provides with often required powers.</p>
+<p>Usage samples:</p>
+<blockquote>
+<pre><code>
+$ zookeepercli --servers srv-1,srv-2,srv-3 -c create /demo_only "path placeholder"
+$ zookeepercli --servers srv-1,srv-2,srv-3 -c create /demo_only/key1 "value1"
+$ zookeepercli --servers srv-1,srv-2,srv-3 -c create /demo_only/key2 "value2"
+$ zookeepercli --servers srv-1,srv-2,srv-3 -c create /demo_only/key3 "value3"
+
+$ zookeepercli --servers srv-1,srv-2,srv-3 -c ls /demo_only
+<span style="color: #808000;">key3
+key2
+key1
+</span>
+<span style="color: #ff6600;"># Same as above, JSON format output:</span>
+$ zookeepercli --servers srv-1,srv-2,srv-3 --format=json -c ls /demo_only
+<span style="color: #808000;">["key3","key2","key1"]</span>
+
+$ zookeepercli --servers srv-1,srv-2,srv-3 -c delete /demo_only/key1
+$ zookeepercli --servers srv-1,srv-2,srv-3 -c delete /demo_only/key2
+$ zookeepercli --servers srv-1,srv-2,srv-3 -c delete /demo_only/key3
+$ zookeepercli --servers srv-1,srv-2,srv-3 -c delete /demo_only
+
+<span style="color: #ff6600;"># Create a path recursively (auto-generate parent directories if not exist):</span>
+$ zookeepercli --servers=srv-1,srv-2,srv-3 -c creater "/demo_only/child/key1" "val1"
+$ zookeepercli --servers=srv-1,srv-2,srv-3 -c creater "/demo_only/child/key2" "val2"
+
+$ zookeepercli --servers=srv-1,srv-2,srv-3 -c get "/demo_only/child/key1"
+<span style="color: #808000;">val1</span>
+
+<span style="color: #ff6600;"># This path was auto generated due to recursive create:</span>
+$ zookeepercli --servers=srv-1,srv-2,srv-3 -c get "/demo_only" 
+<span style="color: #808000;">zookeepercli auto-generated</span>
+
+<span style="color: #ff6600;"># ls recursively a path and all sub children:</span>
+$ zookeepercli --servers=srv-1,srv-2,srv-3 -c lsr "/demo_only" 
+<span style="color: #808000;">child
+child/key1
+child/key2 </span></code></pre>
+</blockquote>
+<p><strong>zookeepercli</strong> is released as open source by <a href="https://github.com/outbrain">Outbrain</a> under the <a href="https://github.com/outbrain/zookeepercli/blob/master/LICENSE">Apache 2.0 license</a>.</p>
+<p>Quick links:</p>
+<ul>
+<li><a href="https://github.com/outbrain/zookeepercli">Project page</a></li>
+<li><a href="https://github.com/outbrain/zookeepercli/releases">Pre-built binaries</a> for download</li>
+<li><a href="https://github.com/outbrain/zookeepercli/blob/master/LICENSE">License</a></li>
+</ul>

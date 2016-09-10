@@ -1,0 +1,25 @@
+---
+layout: post
+title: Over-splitting MySQL directories
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>12</p>
+<ol>
+<li>Start with everything on the same datadir.</li>
+<li>If your datadir has dedicated disks, move out the slow log, error log and general log out of datadir (e.g., onto /var/log).</li>
+<li>Optionally, move out the binary logs as well.</li>
+</ol>

@@ -1,0 +1,148 @@
+---
+title: Your magical RANGE partitioning maintenance query
+date: 2012-10-09 06:44:12.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- partitioning
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>If you use <strong>RANGE</strong> (or <strong>RANGE COLUMNS</strong>) partitioning, and in particular when partitioning by date/time, then your are subject to the following questions: how and when do you create the "next" partition? How and when do you drop your older partitions?</p>
+<p>Many people use in-house scripting to do that, and Giuseppe Maxia wrote <a href="http://datacharmer.blogspot.co.il/2008/12/partition-helper-improving-usability.html">Partition Helper</a>. But I would like to take you one step forward, and provide with a <em>query</em> (based on views) which automagically understands which new partition you want to create, and provides you with the statement to do so. It looks somewhat like this (a demo follows later on):</p>
+<blockquote>
+<pre>mysql&gt; SELECT * FROM <strong>sql_range_partitions</strong> \G
+*************************** 1. row ***************************
+            table_schema: test
+              table_name: city
+<strong>sql_drop_first_partition</strong>: alter table `test`.`city` drop partition `p3`
+  <strong>sql_add_next_partition</strong>: alter table `test`.`city` add partition (partition `p_20160101000000` values less than (736329) /* 2016-01-01 00:00:00 */ )
+*************************** 2. row ***************************
+            table_schema: test
+              table_name: quarterly_report_status
+<strong>sql_drop_first_partition</strong>: alter table `test`.`quarterly_report_status` drop partition `p3`
+  <strong>sql_add_next_partition</strong>: alter table `test`.`quarterly_report_status` reorganize partition `p_maxvalue` into (partition `p_20110401000000` values less than (1301608800) /* 2011-04-01 00:00:00 */ , partition p_maxvalue values less than MAXVALUE)</pre>
+</blockquote>
+<h4>A closer look at why this is magic</h4>
+<p>This query just gave you the <strong>DROP PARTITION</strong> and <strong>ADD PARTITION</strong> for all tables in your databases that use a <strong>RANGE</strong> partitioning scheme. But, consider:<!--more--></p>
+<ul>
+<li>The query <em>automatically</em> deduces the <strong>LESS THAN</strong> value of the new partition. It looks for a constant interval, time-based or integer-based, and keeps this interval onward.</li>
+<li>It understands that <strong>5.1</strong> does not allow you to partition by <strong>DATETIME</strong>, only via integers. It understands your integer may sometimes stand for <strong>TO_DAYS()</strong>, and sometimes for <strong>UNIX_TIMESTAMP()</strong> of your datetime. It auto-detects that.</li>
+<li>The query recognizes a <strong>MAXVALUE</strong> partition, and if such partition exists, it provides with a <strong>REORGANIZE PARTITION</strong> statement rather than <strong>ADD PARTITION</strong> statement.</li>
+<li>It suggests names for your partitions which give you a clue on what the partition contains. <strong>p_20160101000000</strong> (can you splot the date/time?) tells me a lot more than some arbitrary <strong>p17</strong>.</li>
+<li>It recognizes the common case of using a <strong>LESS THAN (0)</strong> as first partition, to take care of <strong>NULL</strong>s. It skips this partition: the query does not offer to drop it, not does it consider it while examining the interval.</li>
+</ul>
+<p>So I never have to tell the query <em>"I want a 3 month interval between partitions, and these are implemented using TO_DAYS()"</em>. I let it understand it <em>on its own</em>.</p>
+<h4>It is just a view</h4>
+<p>Which means you can <strong>SELECT sql_drop_first_partition</strong>, or you can <strong>SELECT sql_add_next_partition</strong>, or you can only <strong>SELECT ... WHERE table_schema='your_schema'</strong>. Or you can select them all.</p>
+<h4>You can eval() it</h4>
+<p>This view will be released with <a href="http://code.google.com/p/common-schema/">common_schema</a>'s next version. <em>common_schema</em> has a lot of these views which generate SQL statements. And it provides with the means to evaluate them: the <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">eval()</a> routine. So you don't need to export the text <strong>INTO OUTFILE</strong> and execute it via <strong>SOURCE</strong>. You can simply:</p>
+<blockquote>
+<pre>call common_schema.<strong>eval</strong>(<span style="color: #000080;">"SELECT <strong>sql_add_next_partition</strong> FROM sql_range_partitions WHERE table_name='quarterly_report_status'"</span>);</pre>
+</blockquote>
+<p>And it is done.</p>
+<h4>Get it</h4>
+<p>The<strong> sql_range_partitions</strong> view will be included in <em>common_schema</em> <strong>1.2</strong>, schedules to be released soon. Meanwhile, you can import this file: [download id="1" format="1"] onto your existing <a href="http://code.google.com/p/common-schema">common_schema</a> <strong>1.1</strong> install (what? You don't already have <em>common_schema</em> installed? You should know it's packed with lots of stuff like this one!)</p>
+<p>If, by the time you read this, <em>common_schema</em> <strong>1.2</strong> is already out, you don't need to add anything.</p>
+<h4>In action</h4>
+<p>Consider the following table on a MySQL <strong>5.1</strong> server:</p>
+<blockquote>
+<pre><strong>CREATE TABLE</strong> test.quarterly_report_status (
+    report_id INT NOT NULL,
+    report_status VARCHAR(20) NOT NULL,
+    report_updated TIMESTAMP NOT NULL 
+)
+<strong>PARTITION BY RANGE</strong> (<strong>UNIX_TIMESTAMP(report_updated)</strong>) (
+    PARTITION p0 VALUES LESS THAN (<strong>UNIX_TIMESTAMP('2008-01-01 00:00:00')</strong>),
+    PARTITION p1 VALUES LESS THAN (<strong>UNIX_TIMESTAMP('2008-04-01 00:00:00')</strong>),
+    PARTITION p2 VALUES LESS THAN (<strong>UNIX_TIMESTAMP('2008-07-01 00:00:00')</strong>),
+    PARTITION p3 VALUES LESS THAN (<strong>UNIX_TIMESTAMP('2008-10-01 00:00:00')</strong>),
+    PARTITION p4 VALUES LESS THAN (<strong>UNIX_TIMESTAMP('2009-01-01 00:00:00')</strong>),
+    PARTITION p5 VALUES LESS THAN (<strong>UNIX_TIMESTAMP('2009-04-01 00:00:00')</strong>),
+    PARTITION p6 VALUES LESS THAN (<strong>MAXVALUE</strong>)
+);</pre>
+</blockquote>
+<p>Unfortunately MySQL does not remember the definition expressions, so:</p>
+<blockquote>
+<pre>mysql&gt; <strong>SHOW CREATE TABLE</strong> test.quarterly_report_status \G
+
+Create Table: <strong>CREATE TABLE</strong> `quarterly_report_status` (
+  `report_id` int(11) NOT NULL,
+  `report_status` varchar(20) NOT NULL,
+  `report_updated` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=MyISAM DEFAULT CHARSET=latin1
+/*!50100 <strong>PARTITION BY RANGE</strong> (<strong>UNIX_TIMESTAMP(report_updated)</strong>)
+(PARTITION p0 VALUES LESS THAN (<strong>1199138400</strong>) ENGINE = MyISAM,
+ PARTITION p1 VALUES LESS THAN (<strong>1206997200</strong>) ENGINE = MyISAM,
+ PARTITION p2 VALUES LESS THAN (<strong>1214859600</strong>) ENGINE = MyISAM,
+ PARTITION p3 VALUES LESS THAN (<strong>1222808400</strong>) ENGINE = MyISAM,
+ PARTITION p4 VALUES LESS THAN (<strong>1230760800</strong>) ENGINE = MyISAM,
+ PARTITION p5 VALUES LESS THAN (<strong>1238533200</strong>) ENGINE = MyISAM,
+ PARTITION p6 VALUES LESS THAN MAXVALUE ENGINE = MyISAM) */</pre>
+</blockquote>
+<p>Yikes! What does<strong> </strong><strong>1238533200</strong> stand for?</p>
+<p>No worries, let's <strong>eval()</strong>:</p>
+<blockquote>
+<pre>mysql&gt; call common_schema.<strong>eval</strong>(<span style="color: #000080;">"SELECT <strong>sql_add_next_partition</strong> FROM sql_range_partitions <strong>WHERE table_name='quarterly_report_status'</strong>"</span>);
+
+mysql&gt; <strong>SHOW CREATE TABLE</strong> test.quarterly_report_status \G
+
+CREATE TABLE `quarterly_report_status` (
+  `report_id` int(11) NOT NULL,
+  `report_status` varchar(20) NOT NULL,
+  `report_updated` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=MyISAM DEFAULT CHARSET=latin1
+/*!50100 PARTITION BY RANGE (UNIX_TIMESTAMP(report_updated))
+(PARTITION p0 VALUES LESS THAN (1199138400) ENGINE = MyISAM,
+ PARTITION p1 VALUES LESS THAN (1206997200) ENGINE = MyISAM,
+ PARTITION p2 VALUES LESS THAN (1214859600) ENGINE = MyISAM,
+ PARTITION p3 VALUES LESS THAN (1222808400) ENGINE = MyISAM,
+ PARTITION p4 VALUES LESS THAN (1230760800) ENGINE = MyISAM,
+ PARTITION p5 VALUES LESS THAN (1238533200) ENGINE = MyISAM,
+ PARTITION <strong>p_20090701000000</strong> VALUES LESS THAN (<strong>1246395600</strong>) ENGINE = MyISAM,
+ PARTITION <strong>p_maxvalue</strong> VALUES LESS THAN MAXVALUE ENGINE = MyISAM) */</pre>
+</blockquote>
+<p>Our query auto-detected the meaning of those numbers like <strong></strong><strong>1238533200</strong>, and has found the next partition to be created:<strong> p_20090701000000</strong>. That's <strong>'2009-07-01 00:00:00'</strong>, and now we know what the partition stands for. A new <strong>MAXVALUE</strong> partition called <strong>p_maxvalue</strong> is created.</p>
+<p>Just for the fun of it, let's issue the same a few more times and see what comes out:</p>
+<blockquote>
+<pre>mysql&gt; call common_schema.<strong>eval</strong>("SELECT sql_add_next_partition FROM sql_range_partitions WHERE table_name='quarterly_report_status'");
+
+mysql&gt; call common_schema.<strong>eval</strong>("SELECT sql_add_next_partition FROM sql_range_partitions WHERE table_name='quarterly_report_status'");
+
+mysql&gt; call common_schema.<strong>eval</strong>("SELECT sql_add_next_partition FROM sql_range_partitions WHERE table_name='quarterly_report_status'");
+
+mysql&gt; call common_schema.<strong>eval</strong>("SELECT sql_add_next_partition FROM sql_range_partitions WHERE table_name='quarterly_report_status'");
+
+mysql&gt; <strong>SHOW CREATE TABLE</strong> test.quarterly_report_status \G
+
+Create Table: CREATE TABLE `quarterly_report_status` (
+  `report_id` int(11) NOT NULL,
+  `report_status` varchar(20) NOT NULL,
+  `report_updated` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=MyISAM DEFAULT CHARSET=latin1
+/*!50100 PARTITION BY RANGE (UNIX_TIMESTAMP(report_updated))
+(PARTITION p0 VALUES LESS THAN (1199138400) ENGINE = MyISAM,
+ PARTITION p1 VALUES LESS THAN (1206997200) ENGINE = MyISAM,
+ PARTITION p2 VALUES LESS THAN (1214859600) ENGINE = MyISAM,
+ PARTITION p3 VALUES LESS THAN (1222808400) ENGINE = MyISAM,
+ PARTITION p4 VALUES LESS THAN (1230760800) ENGINE = MyISAM,
+ PARTITION p5 VALUES LESS THAN (1238533200) ENGINE = MyISAM,
+ PARTITION p_20090701000000 VALUES LESS THAN (1246395600) ENGINE = MyISAM,
+ PARTITION <strong>p_20091001000000</strong> VALUES LESS THAN (<strong>1254348000</strong>) ENGINE = MyISAM,
+ PARTITION <strong>p_20100101000000</strong> VALUES LESS THAN (<strong>1262296800</strong>) ENGINE = MyISAM,
+ PARTITION <strong>p_20100401000000</strong> VALUES LESS THAN (<strong>1270069200</strong>) ENGINE = MyISAM,
+ PARTITION <strong>p_20100701000000</strong> VALUES LESS THAN (<strong>1277931600</strong>) ENGINE = MyISAM,
+ PARTITION <strong>p_maxvalue</strong> VALUES LESS THAN MAXVALUE ENGINE = MyISAM) */</pre>
+</blockquote>
+<p>Notice the number interval is not constant: we have different number of days in different quarters. We have Feb <strong>29th</strong> every <strong>4</strong> years. Yet we get the right <strong>LESS THAN</strong> value.</p>
+<p>Now isn't this cool?</p>

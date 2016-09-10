@@ -1,0 +1,35 @@
+---
+title: Some MySQL security tips
+date: 2014-07-28 11:13:36.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Security
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This is a brief list of security tips for MySQL. It is by no means complete.</p>
+<ul>
+<li>Follow the <strong>sudo</strong> example. Don't let all you DBAs and Ops have the password for the <strong>root</strong> account. Have each and every one of them have their own personal super-duper account, with their own personal and private password. This makes it so easy when someone leaves the company. No need to change passwords, just to remove the employee's account.</li>
+<li>Block <strong>root</strong>. Either remove it completely or forbid it from logging in. Yes, there's a <del>way</del> hack in MySQL to have a valid account blocked from logging in. One way of making this happen is via <em>common_schema</em>'s <a href="https://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/sql_accounts.html">sql_accounts</a>. Here's how to block root account using common_schema:</li>
+</ul>
+<blockquote>
+<pre>mysql&gt; CALL common_schema.eval("SELECT sql_block_account FROM sql_accounts WHERE USER = 'root'");</pre>
+</blockquote>
+<ul>
+<li>Make lots of small users. Give <em>nagios</em> its own user. Give <em>collectd</em> its own user. Give <em>orchestrator</em> its own user. Give <em>innotop</em> its own user. Give <em>whatever</em> its own user. Yes, it's more users to create, but you get to have each user as limited in privileges as possible, and you don't get to wonder why your heartbeat script has <strong>SUPER</strong>, <strong>LOCK</strong> and <strong>SHUTDOWN</strong> privileges.</li>
+<li>Verify: <strong>set @@old_passwords=0;</strong> before setting a new password. Make sure your configuration does not specify <strong>old_passwords = 1</strong>. There is no reason to use "<a href="http://code.openark.org/blog/mysql/upgrading-passwords-from-old_passwords-to-new-passwords">old passwords</a>". In fact, a <strong>5.6</strong> client will refuse connecting with an "old password".</li>
+<li>Give no access to <strong>mysql.*</strong>. No one should be tampering directly with the <strong>mysql</strong> system tables.</li>
+<li>Run <a href="https://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-security-audit.html">oak-security-audit</a> or, if you have <em>common_schema</em> installed (you mean you don't?), just <strong><a href="https://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/security_audit.html">CALL security_audit()</a>;</strong> I can (almost) guarantee you'd be surprised and thankful for the security breakdown. Users without passwords, users sharing same passwords, users with unreasonable privileges, and more... You'll see them all.</li>
+<li>If you have web interfaces to your database or some of its aspects (e.g. Anemometer, Propagator, Orchestrator, monitoring, ...), protect it via LDAP group or similar. Not everyone who has access to your network needs to see you database. Neither does every employee.</li>
+</ul>

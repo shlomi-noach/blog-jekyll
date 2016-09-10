@@ -1,0 +1,108 @@
+---
+title: Solving the non-atomic table swap, Take II
+date: 2016-06-20 11:26:47.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Open Source
+- operations
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+  _sg_subscribe-to-comments: greenlion@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Following up and improving on <a title="Link to Solving the Facebook-OSC non-atomic table swap problem" href="http://code.openark.org/blog/mysql/solving-the-facebook-osc-non-atomic-table-swap-problem" rel="bookmark">Solving the Facebook-OSC non-atomic table swap problem</a>, we present a better, safe solution.</p>
+<h3>Quick, quickest recap:</h3>
+<p>We are working on a triggerless online schema migration solution. It is based on an asynchronous approach, similarly to the <a href="https://www.facebook.com/notes/mysql-at-facebook/online-schema-change-for-mysql/430801045932/">FB osc</a> and as opposed to the synchronous solution as used by <a href="https://www.percona.com/doc/percona-toolkit/2.2/pt-online-schema-change.html">pt-online-schema-change</a>.</p>
+<p>We asynchronously synchronize (is that even a valid statement?) between some table <strong>tbl</strong> and a ghost table <strong>ghost</strong>, and at some time we want to cut-over: swap the two; kick out <strong>tbl</strong> and put <strong>ghost</strong> in its place and under its name.</p>
+<p>However, we cannot use the single statement <strong>rename tbl to tbl_old, ghost to tbl</strong>, because we use the asynchronous approach, where at the time we lock <strong>tbl</strong> for writes, we still have some events we need to process and apply onto <strong>ghost</strong> before swapping the two.</p>
+<p>And MySQL does not allow a <strong>lock tables tbl write; ... ; </strong><strong>rename tbl to tbl_old, ghost to tbl</strong>.</p>
+<p>In <a title="Link to Solving the Facebook-OSC non-atomic table swap problem" href="http://code.openark.org/blog/mysql/solving-the-facebook-osc-non-atomic-table-swap-problem" rel="bookmark">Solving the Facebook-OSC non-atomic table swap problem</a> we suggested a way that works, unless when it doesn't work. Read the caveat at the end of the post. Premature death of a connection that participates in the algorithm causes a chain reaction that leads to the premature execution of the <strong>rename</strong> statement, potentially before we've applied those remaining events. This leads to data inconsistency between the old table and the new table, and is unacceptable.</p>
+<p>To that effect, we were more inclined to go with the Facebook solution, which makes a two-step: <strong>lock tables tbl write; alter table tbl rename to tbl_old; ... ; alter table ghost rename to tbl;</strong></p>
+<p>This two-step solution is guaranteed not to have data inconsistency. Alas, it also implies an outage. There's a brief moment, in between the two <strong>rename</strong>s, and during that time where we apply those last changes, where the table <strong>tbl</strong> is simply not there.</p>
+<p>Not all applications will fail gracefully on such a scenario.<!--more--></p>
+<h3>UDF</h3>
+<p>We looked at a solution based on UDFs, where we would create global wait conditions, that are not connection based.</p>
+<p>We don't like UDFs. You need to compile them for every new version. Puppetizing their setup is not fun. We wouldn't like maintaining this. We wouldn't like doing the operations for this. Neither would the community.</p>
+<p>We want to make this a community solution. Can we do without UDF?</p>
+<h3>Rewriting MySQL</h3>
+<p>We wish to avoid forking our own version of MySQL. It's not what we do and it's a pain.</p>
+<h3>A pure MySQL solution?</h3>
+<p>We found a solution to embrace; it is <em>optimistic</em>, and <em>safe</em>. hat <em>optimistic</em> means is explained further on, but let's discuss <em>safe</em>:</p>
+<p>The previous solution we came up with as <em>unsafe</em> because breakage of a single component in the algorithm would lead to inconsistent data. The algorithm itself was fine, as long as no one would break it from the outside. This is the concern: what if some crazy cronjob that cleans up connections (kills idle connections, kills long running transactions) or some unfortunate user command kills one of the connections involved in the cut-over phase? This is not something that would happen every day, but can we protect against it? Our priority is to keep our data intact.</p>
+<p>The solution allows breakage. Even in the face of death of connections, data is not lost/corrupted, and at worst -- causes a FB-like, recoverable outage scenario.</p>
+<h3>A step towards the solution, a flawed one</h3>
+<p>I wish to illustrate something that looks like it would work, but in fact has a hidden flaw. We will later improve on that solution.</p>
+<p>Let's assume we have <strong>tbl</strong>, <strong>ghost</strong> tables. We execute the following by multiple connections; we call them C1, C2, C3, ...:</p>
+<ul>
+<li>C1: <strong>lock tables tbl write;</strong></li>
+<li>C2, C3, ..., C17: normal app connections, issuing <strong>insert, delete, update</strong> on <strong>tbl</strong>. Because of the lock, they are naturally blocked.</li>
+<li>We apply those last event we need to apply onto <strong>ghost</strong>. No new events are coming our way because <strong>tbl</strong> is blocked.</li>
+<li>C18: <strong>rename table tbl to tbl_old, ghost to tbl; </strong>(blocked as well)</li>
+<li>C1: <strong>unlock tables</strong><strong>; </strong>(everything gets released)</li>
+</ul>
+<p>Let's consider the above, and see why it is flawed. But first, why it would typically work in the first place.</p>
+<ul>
+<li>Connections C2, ..., C17 came first, and C18 came later. Nevertheless MySQL prioritizes C18 and moves it up the queue of waiting queries on <strong>tbl</strong>. When we <strong>unlock</strong>, C18 is the first to execute.</li>
+<li>We only issue the <strong>rename</strong> once we're satisfied we've applied those changes. We only <strong>unlock</strong> once we're satisfied that the <strong>rename</strong> has been executed.</li>
+<li>If for some reason C1 disconnects before we issue the <strong>rename</strong> - no problem, we just retry from scratch.</li>
+</ul>
+<h4>What's the flaw?</h4>
+<p>We <strong>rename</strong> when C1 holds the <strong>lock</strong>. We check with C1 that it is alive and kicking. Yep, it's connected and holding the lock. Are you sure? Yep, I'm good! Really really sure? Yep! OK then, let's <strong>rename!</strong></p>
+<p>"Oh darn", says C1, "now that you went ahead to <strong>rename</strong>, but just before you actually sent the request, I decided to take time off and terminate". Or, more realistically, some job would kill C1.</p>
+<p>What happens now? The <strong>rename</strong> is not there yet. All those queries get released, and are immediately applied onto <strong>tbl</strong>, and <em>then</em> the <strong>rename</strong> applies, kicks all those changes into oblivion, and puts <strong>ghost</strong> in place, where it immediately receives further writes.</p>
+<p>Those blocking queries were committed but never to be seen again.</p>
+<p>So here's another way to look at the problem: the <strong>rename</strong> made it through even though the connection C1 died just prior to that, whereas we would have loved the <strong>rename</strong> to abort upon such case.</p>
+<p>Is there a way in MySQL to cause an operation to <strong>fail or block</strong> when another connection dies? It's the other way around! Connections hold locks, and those get released when they die!</p>
+<p>But there's a way...</p>
+<h3>Three step, safe, optimistic solution</h3>
+<p>Here are the steps to a safe solution:</p>
+<ul>
+<li>C1: <strong>lock tables tbl write;</strong></li>
+<li>C2, C3, ..., C17: normal app connections, issuing <strong>insert, delete, update</strong> on <strong>tbl</strong>. Because of the lock, they are naturally blocked.</li>
+<li>We apply those last event we need to apply onto <strong>ghost</strong>. No new events are coming our way because <strong>tbl</strong> is blocked.</li>
+<li>C18: checking that C1 is still alive, then <strong>rename table tbl to tbl_old</strong></li>
+<li>C19: checking to see that C18's <strong>rename</strong> is in place (via <strong>show processlist</strong>), <strong>and</strong> that C1 is still alive; then issues: <strong>rename table ghost to tbl</strong></li>
+<li>(meanwhile more queries approach <strong>tbl</strong>, it doesn't matter, they all get deprioritized, same as C2...C17)</li>
+<li>C1: <strong>unlock tables</strong></li>
+</ul>
+<p>What just happened? Let's first explain some stuff:</p>
+<ul>
+<li>C18's <strong>rename</strong> gets prioritized over the DMLs, even though it came later. That is how MySQL prioritizes queries on metadata-locked tables.</li>
+<li>C18 checks C1 is still alive, but as before, there's always the chance C1 will die just at the wrong time -- we're going to address that.</li>
+<li>C19 is interested to see that C18 began execution, but potentially C18 will crash by the time C19 actually issues its own <strong>rename</strong> -- we're going to address that</li>
+<li>C19's query sounds weird. At that time <strong>tbl</strong> still exists. You'd expect it to fail immediately -- but it does not. It's valid. This is because <strong>tbl</strong>'s metadata lock is in use.</li>
+<li>C19 gets prioritized over all the DMLs, but is known to be behind C18. The two stay in same order of arrival. So, C18 is known to execute before C19.</li>
+<li>When C1 unlocks, C18 executes first.</li>
+<li>Metadata lock is still in place on <strong>tbl</strong> even though it doesn't actually exist, because of C19.</li>
+<li>C19 operates next.</li>
+<li>Finally all the DMLs execute.</li>
+</ul>
+<p>What happens on failures?</p>
+<ul>
+<li>If C1 dies just as C18 is about to issue the <strong>rename</strong>, we get an outage: <strong>tbl</strong> is renamed to <strong>tbl_old</strong>, and the queries get released and complain the table is just not there.
+<ul>
+<li>C19 will not initiate because it is executed <strong>after</strong> C18 and checks that C1 is alive -- which turns to be untrue.</li>
+<li>So we <strong>know</strong> we have outage, and we quickly <strong>rename tbl_old to tbl;</strong> and go drink coffee, then begin it all again.</li>
+<li>The outage is unfortunate, but does not put our data in danger.</li>
+</ul>
+</li>
+<li>If C1 happens to die just as C19 is about to issue its <strong>rename</strong>, there's no data integrity: at this point we've already asserted the tables are in sync. As C1 dies, C18 will immediately rename <strong>tbl</strong> to <strong>tbl_old</strong>. An outage will occur, but not for long, because C19 will next issue <strong>rename ghost to tbl</strong>, and close the gap. We suffered a minor outage, but no rollback. We roll forward.</li>
+<li>If C18 happens to die just as C19 is about to issue its <strong>rename</strong>, nothing bad happens: C19 is still blocking for as long as C1 is running. We find out C18 died, and release C1. C19 attempts to rename <strong>ghost</strong> onto <strong>tbl</strong>, but <strong>tbl</strong> exists and the query fails. The metadata lock is released and all the queries resume operation on the original <strong>tbl</strong>. The operation failed but without error. We will need to try the entire cycle again.</li>
+<li>If both C1 and C18 fail at the time C19 is about to begin its <strong>rename</strong>, same as above.</li>
+<li>If C18 fails as C19 is already in place, same as above.</li>
+<li>If C1 fails as C19 is already in place, it's as good as having it issue the <strong>unlock tables</strong>. We're happy.</li>
+<li>If C19 fails at any given point, we suffer outage. We revert by <code>rename tbl_old to tbl</code></li>
+</ul>
+<p>This solution relies on the notion that if a previous connection failed, we would not be able to <strong>rename ghost to tbl</strong> because the table would still be there. That's what we were looking for; but instead of looking at locks, which get released when a connection terminates, we used a persistent entity: a table.</p>
+<h3>Conclusion</h3>
+<p>The algorithm above is <strong>optimistic</strong>: if no connections get weirdly killed, it's a valid locking solution, and queries &amp; app are unaware that anything happened (granted, app will notice write latency). If connections do get weirdly killed, we get table-outage at worst case -- an outage that is already considered to be a valid solution anyhow. The algorithm will not allow data corruption.</p>

@@ -1,0 +1,81 @@
+---
+title: Blocking user accounts
+date: 2009-03-05 11:44:40.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- openark kit
+- Security
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>A long time missing feature in MySQL is temporarily blocking accounts: denying a user to log in, without affecting any other of her privileges.</p>
+<p>There is no such privilege as 'LOGIN' in the grants table, as the ability to log in is the most basic one MySQL allows. This basic privilege is called USAGE.</p>
+<p>I'll present a hack around this, one which <a title="openark kit: oak-block-account" href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-block-account.html">oak-block-account</a> implements. Before presenting the hack, lets lay down some requirements:</p>
+<ul>
+<li>A user can be blocked from logging in to MySQL.</li>
+<li>Such a blocked user can later be 'released', re-enabling him to log in.</li>
+<li>It should be possible to determine if a certain user is currently blocked or not.</li>
+</ul>
+<p><!--more-->A first attempt to answer the above requirements is to change the account's password. As a naive example, we can set an account's password to 'aaaaaaaaa'. But let's consider the following:</p>
+<ul>
+<li>Will the user be unable to find, by some algorithm or by brute force, the new password?</li>
+<li>How can we revert the new password to the original one?</li>
+</ul>
+<p>Time to look at how MySQL stores passwords, then.</p>
+<p>We begin by distinguishing old_passwords (variable <strong>old_passwords</strong>=1) from new passwords.</p>
+<ul>
+<li>Old passwords are 16 characters long. These are hexadecimal characters.</li>
+<li>New passwords are 41 characters long: a leading '*' followed by 40 hexadecimal characters.</li>
+</ul>
+<h4>Blocking with 'new passwords'</h4>
+<p>To disable an account using a 'new password', the trick is simply to reverse the password in the <strong>mysql.user</strong> table. So if my password was '123456' (strong one, isn't it?), then <strong>mysql.user</strong> will have:</p>
+<blockquote>
+<pre>mysql&gt; select PASSWORD('123456');
++-------------------------------------------+
+| PASSWORD('123456')                        |
++-------------------------------------------+
+| *6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9 |
++-------------------------------------------+</pre>
+</blockquote>
+<p>To encode, we do:</p>
+<blockquote>
+<pre>SET PASSWORD FOR 'some_user'@'some_host' = '9DA2AC2DE76CD7ADD8654EE50192347BE7384BB6*'</pre>
+</blockquote>
+<p>Let's consider the implication of what we just did:</p>
+<ul>
+<li>The new password is valid, as far as MySQL is concerned. No questions asked.</li>
+<li>The user cannot log in with his old password.</li>
+<li>Nor can the user log in with <em>any other</em> password, since the <strong>PASSWORD()</strong> function will never return a password ending with '*'.</li>
+<li>It is easy to see that the user is 'blocked': his password ends with '*'.</li>
+<li>It is easy to restore the original password: we simply reverse the text and call <strong>SET PASSWORD</strong> again.</li>
+</ul>
+<h4>Blocking with 'old passwords'</h4>
+<p>This part really assumes you're using MySQL 4.1 or above. If you're one of those 'few' lucky people, but are unfortunately using old_passwords, here's the deal:</p>
+<p>Reversing an old password won't do, since:</p>
+<ul>
+<li>The reverse may still consist of an encoding for some password</li>
+<li>It's impossible to tell if a user is blocked or not.</li>
+</ul>
+<p>MySQL will only allow 16 or 41 character long passwords (anyway that's my finding). So to encode a 16 characters long password, we pad it with 25 (= 41-16) '~' characters. Thus, the encoded password 'abcdef0123456789' turns to '~~~~~~~~~~~~~~~~~~~~~~~~~abcdef0123456789'. Again, note the following:</p>
+<ul>
+<li>The new password is accepted by MySQL as valid.</li>
+<li>The user cannot log in with his old password.</li>
+<li>Nor can the user log in with <em>any other</em> password, since the <strong>PASSWORD()</strong> function will never return a password starting with '~'.</li>
+<li>It is easy to see that the user is 'blocked': his password starts with 25 '~' characters.</li>
+<li>It is easy to restore the original password: we simply remove the leading '~' characters and call <strong>SET PASSWORD</strong> again.</li>
+</ul>
+<h4>oak-block-account</h4>
+<p>No need to work all this by hand. <a title="openark kit: oak-block-account" href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-block-account.html">oak-block-account</a> is a utility which does exactly that. It can block, release, and even kill accounts. It will automatically detect if the password is 'old' or 'new', or if the account is already blocked or not.</p>
+<h4>Other possibilities</h4>
+<p>RENAME USER is another trick which could be used: we could take a user's login (e.g. 'webuser') and rename it to an unknown value, like 'webuser__1q98d4f'. While it serves the same purpose - of blocking the user, it has a disadvantage: if by luck or hack the new login is discovered, it could still be used to access the database. The change of password solution ensures there is no user/password combination which will work on the blocked account.</p>
+<p>Other options may involve removing the account from <strong>mysql.user</strong>, to put it elsewhere, from where to restore the row when the time comes. I prefer a solution which works on the <strong>mysql</strong> schema itself.</p>

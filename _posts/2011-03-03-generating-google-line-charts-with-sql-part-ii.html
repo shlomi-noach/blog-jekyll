@@ -1,0 +1,237 @@
+---
+title: Generating Google line charts with SQL, part II
+date: 2011-03-03 09:38:10.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Graphs
+- mycheckpoint
+- SQL
+meta:
+  _edit_last: '2'
+  _oembed_62aab359a529faf6cf95a5f707dc7f9b: '{{unknown}}'
+  _oembed_ac20d277c6eb2385efa20fe8bcea3729: '{{unknown}}'
+  _oembed_cad6ce621c52de4000dac53a23ff8b2e: '{{unknown}}'
+  _oembed_b52ec3caa2d375b7c0c34856caba80e0: '{{unknown}}'
+  _oembed_a821c3838ff50b4ec760029d4a4bcecb: '{{unknown}}'
+  _oembed_5dffc9f27dda7ad8afa192eae5bcb760: '{{unknown}}'
+  _oembed_391ce1d701f75a405601cf9ea068b991: '{{unknown}}'
+  _oembed_0fa600594b4f9c75ce7847a0b5669af0: '{{unknown}}'
+  _oembed_1062a5ba98c08dfa44a729ffbef9955d: '{{unknown}}'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This post continues <a href="http://code.openark.org/blog/mysql/generating-google-line-charts-with-sql-part-i">Generating Google line charts with SQL, part I</a>, in pursue of generating time series based image charts.</p>
+<p>We ended last post with the following chart:</p>
+<blockquote>
+<pre /><img class="alignnone" title="Sample SQL Google Chart" src="{{ site.baseurl }}/assets/chart?cht=lc&amp;chs=400x200&amp;chtt=SQL%20chart&amp;chxt=x,y&amp;chxr=1,-4716.6,5340.0&amp;chd=s:dddddddddeeeeeefffffffffeeeedddcccbbaaZZZYYYXXXXXXXXXYYYZZabbcdeefghhijkkllmmmmmmmmllkkjihgfedcbZYXWVUTSRRQQPPPPQQQRSTUVWXZacdfgijlmnpqrssttuuuttssrqonmkigfdbZXVTSQONMLKJIIIIIIJKLMOPRTVXZbegilnprtvwyz01111110zyxvtrpnkifcaXUSPNLJHFECBBAAABBCEFHJLNQTWZcfilortwy1346789999876420yvspmjfcYVSOL" alt="" width="400" height="200" />
+http://chart.apis.google.com/chart?cht=lc&amp;chs=400x200&amp;chtt=SQL%20chart&amp;chxt=x,y&amp;chxr=1,-4716.6,5340.0&amp;chd=s:dddddddddeeeeeefffffffffeeeedddcccbbaaZZZYYYXXXXXXXXXYYYZZabbcdeefghhijkkllmmmmmmmmllkkjihgfedcbZYXWVUTSRRQQPPPPQQQRSTUVWXZacdfgijlmnpqrssttuuuttssrqonmkigfdbZXVTSQONMLKJIIIIIIJKLMOPRTVXZbegilnprtvwyz01111110zyxvtrpnkifcaXUSPNLJHFECBBAAABBCEFHJLNQTWZcfilortwy1346789999876420yvspmjfcYVSOL
+
+</blockquote>
+which has a nice curve, and a proper y-legend, but incorrect x-legend and no ticks nor grids.
+
+To date, Google Image Charts do not support time-series charts. We can't just throw timestamp values and expect the chart to properly position them. We need to work these by hand.
+
+This is not easily done; if our input consists of evenly spread timestamp values, we are in a reasonable position. If not, what do we do?
+
+There are several solutions to this:
+<ul>
+	<li>We can present whatever points we have on the chart, making sure to position them properly. This makes for an uneven distribution of ticks on the x-axis, and is not pleasant to watch.</li>
+	<li>We can extrapolate values for round hours (or otherwise round timestamp resolutions), and so show evenly spread timestamps. I don't like this solution one bit, since we're essentially inventing values here. Extrapolation is nice when you know you have nice curves, but not when you're doing database monitoring, for example. You must have the precise values.</li>
+	<li>We can do <a href="http://en.wikipedia.org/wiki/Oversampling">oversampling</a>, then group together several measurements within round timestamp resolutions. For example, we can make a measurement every <strong>2</strong> minutes, yet present only <strong>6</strong> measurements per hour, each averaging up <strong>10</strong> round minutes. This is the approach I take with <a href="http://code.openark.org/forge/mycheckpoint">mycheckpoint</a>.</li>
+</ul>
+The latest approach goes even beyond that: what if we missed 30 minutes of sampling? Say the server was down. We then need to "invent" the missing timestamps. Note that we invent the timestamps, we do not invent values. We must present the chart with missing values on our invented timestamps.
+
+I may show how to do this in a future post. Meanwhile, let's simplify and assume our values <em>are</em> evenly spread.<!--more-->
+<h4>Sample data</h4>
+We use <a href="http://code.openark.org/blog/wp-content/uploads/2011/03/google_charts.sql_.txt">google_charts.sql</a>. Note that the timestamp values provided in Part I of this post is skewed, so make sure to use this file.
+<h4>x-axis values</h4>
+We use <strong>chxl</strong> to present with x-axis values. We may be tempted to just list all values. Would that work?
+
+Sadly, no, for two reasons:
+<ol>
+	<li>Google is not smart enough; whatever we throw at it, it will try to present. So, if we have <strong>288</strong> rows, that's <strong>288</strong> x-axis values. Not enough room, to be sure! Smarter implementations would automatically hide some values, so as only to present with non-overlapping values.</li>
+	<li>Our URL will turn out to be too long. Remember: <strong>2048</strong> characters is our maximum limit for GET request!</li>
+</ol>
+Also, we must format our timestamp to be of minimal width. In our example, we have a <strong>24</strong> hour range. We therefore present timestamps in hh:MM format. So, a naive approach would be to:
+<blockquote>
+<pre>SELECT
+  CONCAT(
+    'http://chart.apis.google.com/chart?cht=lc&amp;chs=400x200&amp;chtt=SQL%20chart&amp;chxt=x,y&amp;chxr=1,',
+    ROUND(min_value, 1), ',',
+    ROUND(max_value, 1),
+    '&amp;chd=s:',
+    GROUP_CONCAT(
+      IF(
+        data IS NULL,
+        '_',
+        SUBSTRING(
+          'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
+          1+61*(data - min_value)/(max_value - min_value),
+          1
+        )
+      )
+      SEPARATOR ''
+    ),
+   '&amp;chxl=0:|',
+    <strong>GROUP_CONCAT(</strong>
+<strong>      DATE_FORMAT(ts, '%H:%i')</strong>
+<strong>      SEPARATOR '|'</strong>
+<strong>    )</strong>
+  ) FROM chart_data, chart_data_minmax</pre>
+</blockquote>
+<p>The resulting URL is just too long.</p>
+<p>Solution? Let's only consider round hour timestamps! Our next attempt looks like this (we also throw in <strong>chxs</strong>, to show ticks):</p>
+<blockquote>
+<pre>SELECT
+  CONCAT(
+    'http://chart.apis.google.com/chart?cht=lc&amp;chs=400x200&amp;chtt=SQL%20chart&amp;chxt=x,y&amp;chxr=1,',
+    ROUND(min_value, 1), ',',
+    ROUND(max_value, 1),
+    '&amp;chd=s:',
+    GROUP_CONCAT(
+      IF(
+        data IS NULL,
+        '_',
+        SUBSTRING(
+          'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
+          1+61*(data - min_value)/(max_value - min_value),
+          1
+        )
+      )
+      SEPARATOR ''
+    ),
+   <strong>'&amp;chxs=0,505050,10,0,lt',</strong>
+<strong>   '&amp;chxl=0:|',</strong>
+<strong>    GROUP_CONCAT(</strong>
+<strong>      IF(</strong>
+<strong>        MINUTE(ts) = 0,</strong>
+<strong>        DATE_FORMAT(ts, '%H:%i'),</strong>
+<strong>        NULL</strong>
+<strong>      )</strong>
+<strong>      SEPARATOR '|'</strong>
+<strong>    )</strong>
+  ) FROM chart_data, chart_data_minmax
+</pre>
+</blockquote>
+<p>and results with:</p>
+<blockquote>
+<pre /><img class="alignnone" title="SQL line chart" src="{{ site.baseurl }}/assets/chart?cht=lc&amp;chs=400x200&amp;chtt=SQL%20chart&amp;chxt=x,y&amp;chxr=1,-4716.6,5340.0&amp;chd=s:dddddddddeeeeeefffffffffeeeedddcccbbaaZZZYYYXXXXXXXXXYYYZZabbcdeefghhijkkllmmmmmmmmllkkjihgfedcbZYXWVUTSRRQQPPPPQQQRSTUVWXZacdfgijlmnpqrssttuuuttssrqonmkigfdbZXVTSQONMLKJIIIIIIJKLMOPRTVXZbegilnprtvwyz01111110zyxvtrpnkifcaXUSPNLJHFECBBAAABBCEFHJLNQTWZcfilortwy1346789999876420yvspmjfcYVSOL&amp;chxs=0,505050,10,0,lt&amp;chxl=0:|00:00|01:00|02:00|03:00|04:00|05:00|06:00|07:00|08:00|09:00|10:00|11:00|12:00|13:00|14:00|15:00|16:00|17:00|18:00|19:00|20:00|21:00|22:00|23:00" alt="" width="400" height="200" />
+http://chart.apis.google.com/chart?cht=lc&amp;chs=400x200&amp;chtt=SQL%20chart&amp;chxt=x,y&amp;chxr=1,-4716.6,5340.0&amp;chd=s:dddddddddeeeeeefffffffffeeeedddcccbbaaZZZYYYXXXXXXXXXYYYZZabbcdeefghhijkkllmmmmmmmmllkkjihgfedcbZYXWVUTSRRQQPPPPQQQRSTUVWXZacdfgijlmnpqrssttuuuttssrqonmkigfdbZXVTSQONMLKJIIIIIIJKLMOPRTVXZbegilnprtvwyz01111110zyxvtrpnkifcaXUSPNLJHFECBBAAABBCEFHJLNQTWZcfilortwy1346789999876420yvspmjfcYVSOL&amp;chxs=0,505050,10,0,lt&amp;chxl=0:|00:00|01:00|02:00|03:00|04:00|05:00|06:00|07:00|08:00|09:00|10:00|11:00|12:00|13:00|14:00|15:00|16:00|17:00|18:00|19:00|20:00|21:00|22:00|23:00
+</blockquote>
+Too messy, isn't it?
+<h4>A word about ticks</h4>
+You would think: OK, then, let's just present every <strong>4</strong> round hours timestamps. But there's a catch: a tick will show only when there's an x-axis value. It's nice to have a tick for every hour, but we only want to present values every <strong>4</strong> hours.
+
+Fortunately, we can provide with an unseen value: a space (URL encoded as '<strong>+</strong>'). So we complicate things up a bit on the <strong>chxl</strong> to read:
+<blockquote>
+<pre>SELECT
+  CONCAT(
+    'http://chart.apis.google.com/chart?cht=lc&amp;chs=400x200&amp;chtt=SQL%20chart&amp;chxt=x,y&amp;chxr=1,',
+    ROUND(min_value, 1), ',',
+    ROUND(max_value, 1),
+    '&amp;chd=s:',
+    GROUP_CONCAT(
+      IF(
+        data IS NULL,
+        '_',
+        SUBSTRING(
+          'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
+          1+61*(data - min_value)/(max_value - min_value),
+          1
+        )
+      )
+      SEPARATOR ''
+    ),
+   '&amp;chxs=0,505050,10,0,lt',
+   '&amp;chxl=0:|',
+    <strong>GROUP_CONCAT(</strong>
+<strong>      IF(</strong>
+<strong>        MINUTE(ts) = 0,</strong>
+<strong>        IF(</strong>
+<strong>          HOUR(ts) MOD 4 = 0,</strong>
+<strong>          DATE_FORMAT(ts, '%H:%i'),</strong>
+<strong>          '+'</strong>
+<strong>        ),</strong>
+<strong>        NULL</strong>
+<strong>      )</strong>
+<strong>      SEPARATOR '|'</strong>
+<strong>    )</strong>
+  ) FROM chart_data, chart_data_minmax</pre>
+</blockquote>
+<p>and get:</p>
+<blockquote>
+<pre /><img class="alignnone" title="SQL line chart" src="{{ site.baseurl }}/assets/chart?cht=lc&amp;chs=400x200&amp;chtt=SQL%20chart&amp;chxt=x,y&amp;chxr=1,-4716.6,5340.0&amp;chd=s:dddddddddeeeeeefffffffffeeeedddcccbbaaZZZYYYXXXXXXXXXYYYZZabbcdeefghhijkkllmmmmmmmmllkkjihgfedcbZYXWVUTSRRQQPPPPQQQRSTUVWXZacdfgijlmnpqrssttuuuttssrqonmkigfdbZXVTSQONMLKJIIIIIIJKLMOPRTVXZbegilnprtvwyz01111110zyxvtrpnkifcaXUSPNLJHFECBBAAABBCEFHJLNQTWZcfilortwy1346789999876420yvspmjfcYVSOL&amp;chxs=0,505050,10,0,lt&amp;chxl=0:|00:00|+|+|+|04:00|+|+|+|08:00|+|+|+|12:00|+|+|+|16:00|+|+|+|20:00|+|+|+" alt="" width="400" height="200" />
+http://chart.apis.google.com/chart?cht=lc&amp;chs=400x200&amp;chtt=SQL%20chart&amp;chxt=x,y&amp;chxr=1,-4716.6,5340.0&amp;chd=s:dddddddddeeeeeefffffffffeeeedddcccbbaaZZZYYYXXXXXXXXXYYYZZabbcdeefghhijkkllmmmmmmmmllkkjihgfedcbZYXWVUTSRRQQPPPPQQQRSTUVWXZacdfgijlmnpqrssttuuuttssrqonmkigfdbZXVTSQONMLKJIIIIIIJKLMOPRTVXZbegilnprtvwyz01111110zyxvtrpnkifcaXUSPNLJHFECBBAAABBCEFHJLNQTWZcfilortwy1346789999876420yvspmjfcYVSOL&amp;chxs=0,505050,10,0,lt&amp;chxl=0:|00:00|+|+|+|04:00|+|+|+|08:00|+|+|+|12:00|+|+|+|16:00|+|+|+|20:00|+|+|+
+
+</blockquote>
+<h4>OK, I cheated</h4>
+Who says sample data starts with a round hour? We have that hidden assumption here, since the first tick is necessarily a round hour in our code. Yet our data may start at <strong>12:35</strong>, for example. Sorry, you'll have to dig into <a href="http://code.google.com/p/mycheckpoint/source/browse/trunk/src/mycheckpoint.py">mycheckpoint's source code</a> to see a thorough solution. It's just too much for this post.
+<h4>Grids</h4>
+Let's wrap this up with grids. Grids work by specifying the step size (in percent of overall height/width) and initial offset (again, in percent).
+
+Wouldn't it be nicer if grids were automatically attached to ticks? I mean, REALLY! What were those guys thinking? (I know, they're doing great work. Keep it up!)
+
+Problem is, I have no idea how Google chooses to distribute values on the y-axis. I don't know where y-axis ticks will be placed. So on y-axis, I just choose to split charts to <strong>4</strong> even parts, and draw horizontal grids between them. Percent is <strong>25</strong> (<strong>100/4</strong>), offset is <strong>0</strong>.
+
+But I do have control over the x-axis. In our case, I know how many ticks we'll be having. Plus, I made life easier by assuming we start with a round hour, so no offset is required.
+
+Umm... How many ticks do we have? Easy: the number of round hours. This can be calculated by: <strong>SUM(MINUTE(ts) = 0</strong>. Actually, we need to take <strong>1</strong> off.
+
+We now build the <a href="http://code.google.com/apis/chart/docs/chart_params.html#gcharts_grid_lines"><strong>chg</strong></a> parameter:
+<blockquote>
+<pre>SELECT
+  CONCAT(
+    'http://chart.apis.google.com/chart?cht=lc&amp;chs=400x200&amp;chtt=SQL%20chart&amp;chxt=x,y&amp;chxr=1,',
+    ROUND(min_value, 1), ',',
+    ROUND(max_value, 1),
+    '&amp;chd=s:',
+    GROUP_CONCAT(
+      IF(
+        data IS NULL,
+        '_',
+        SUBSTRING(
+          'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
+          1+61*(data - min_value)/(max_value - min_value),
+          1
+        )
+      )
+      SEPARATOR ''
+    ),
+   '&amp;chxs=0,505050,10,0,lt',
+   '&amp;chxl=0:|',
+    GROUP_CONCAT(
+      IF(
+        MINUTE(ts) = 0,
+        IF(
+          HOUR(ts) MOD 4 = 0,
+          DATE_FORMAT(ts, '%H:%i'),
+          '+'
+        ),
+        NULL
+      )
+      SEPARATOR '|'
+    ),
+   <strong>'&amp;chg=', ROUND(100.0/((SUM(MINUTE(ts) = 0) -1)), 2), ',25,1,2,0,0'</strong>
+  ) FROM chart_data, chart_data_minmax
+</pre>
+</blockquote>
+<p>and get:</p>
+<blockquote>
+<pre /><img class="alignnone" title="SQL line chart" src="{{ site.baseurl }}/assets/chart?cht=lc&amp;chs=400x200&amp;chtt=SQL%20chart&amp;chxt=x,y&amp;chxr=1,-4716.6,5340.0&amp;chd=s:dddddddddeeeeeefffffffffeeeedddcccbbaaZZZYYYXXXXXXXXXYYYZZabbcdeefghhijkkllmmmmmmmmllkkjihgfedcbZYXWVUTSRRQQPPPPQQQRSTUVWXZacdfgijlmnpqrssttuuuttssrqonmkigfdbZXVTSQONMLKJIIIIIIJKLMOPRTVXZbegilnprtvwyz01111110zyxvtrpnkifcaXUSPNLJHFECBBAAABBCEFHJLNQTWZcfilortwy1346789999876420yvspmjfcYVSOL&amp;chxs=0,505050,10,0,lt&amp;chxl=0:|00:00|+|+|+|04:00|+|+|+|08:00|+|+|+|12:00|+|+|+|16:00|+|+|+|20:00|+|+|+&amp;chg=4.35,25,1,2,0,0" alt="" width="400" height="200" /><br />
+http://chart.apis.google.com/chart?cht=lc&amp;chs=400x200&amp;chtt=SQL%20chart&amp;chxt=x,y&amp;chxr=1,-4716.6,5340.0&amp;chd=s:dddddddddeeeeeefffffffffeeeedddcccbbaaZZZYYYXXXXXXXXXYYYZZabbcdeefghhijkkllmmmmmmmmllkkjihgfedcbZYXWVUTSRRQQPPPPQQQRSTUVWXZacdfgijlmnpqrssttuuuttssrqonmkigfdbZXVTSQONMLKJIIIIIIJKLMOPRTVXZbegilnprtvwyz01111110zyxvtrpnkifcaXUSPNLJHFECBBAAABBCEFHJLNQTWZcfilortwy1346789999876420yvspmjfcYVSOL&amp;chxs=0,505050,10,0,lt&amp;chxl=0:|00:00|+|+|+|04:00|+|+|+|08:00|+|+|+|12:00|+|+|+|16:00|+|+|+|20:00|+|+|+&amp;chg=4.35,25,1,2,0,0</p>
+</blockquote>
+<p>Phew!</p>
+<h4>Conclusion</h4>
+<p>So we haven't worked on offsets. And, this is a single line chart. What about multiple lines? Legend? The following chart:</p>
+<blockquote>
+<pre /><img class="alignnone" title="SQL multi line chart" src="{{ site.baseurl }}/assets/chart?cht=lc&amp;chs=370x180&amp;chts=303030,12&amp;chtt=Latest+24+hours:+Nov+9,+05:50++-++Nov+10,+05:50&amp;chf=c,s,ffffff&amp;chdl=com_select_psec|com_insert_psec|com_delete_psec|com_update_psec|com_replace_psec&amp;chdlp=b&amp;chco=ff8c00,4682b4,9acd32,dc143c,9932cc&amp;chd=s:RTOSRORPNSSORROQTNQQMQRPQSOMUMPQOQUNRUQPUPSRQPUPSTRPQPPQQQQPPURPSQKUQPUQPUTPUQRUTRSRRWTRURRUPQUQSWTSUSOUURTRUTSPSRPPRMRRPRROQSNPQNPPSSRMQPQPQNRQV,MMMRQMPMNPOLOLLORLPOLQSLPRNNUNNQOPSNOQMNRNNPNMRMOQNNNOMNNLOPLPNNOOJPMMOOKRTMPONQNNQOLOMLOMLOKPXNMPMOOMKNNMPNMY976eMMRNQOOMKLOMKLKMMNKMOIPRJPMJMNK,EEDEEDEEDEFEEEDEFEEEDEFEEFEDEEEFEEEEEFEEEFEFEEFEEFEDEEEFEEEEEFEEEEEEFFEFFFEEEFFFFEEEFFFEEEEFDEEEEFFEEEEEFEEFFPx0xXFEEDEFEEEDEFEEEDEFEEEDEEDEEDEFF,FFEFFEFEEFFEFEEFFEFFEFGDEFDEFDEFEEGEEFEEFEEFEEFEEFEEEEEFEEFFDFEEFFDFEEFFEFEEFEEFEEFFDFEEFEDFEEFEEFDEFEDFEEFFENGDFEEFEEFEEFEEFFEFEEEFEFEEEFDFEEFGE,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&amp;chxt=x,y&amp;chxr=1,0,356.830000&amp;chxl=0:|+||08:00||+||12:00||+||16:00||+||20:00||+||00:00||+||04:00||&amp;chxs=0,505050,10,0,lt&amp;chg=4.17,25,1,2,0.69,0&amp;chxp=0,0.69,4.86,9.03,13.20,17.37,21.54,25.71,29.88,34.05,38.22,42.39,46.56,50.73,54.90,59.07,63.24,67.41,71.58,75.75,79.92,84.09,88.26,92.43,96.60&amp;tsstart=2010-11-09+05:50:00&amp;tsstep=600" alt="" width="370" height="180" /></p>
+</blockquote>
+<p>is harder to achieve. I'm leaving this up to you!</p>

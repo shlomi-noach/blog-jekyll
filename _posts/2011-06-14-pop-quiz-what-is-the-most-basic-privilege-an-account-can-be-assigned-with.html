@@ -1,0 +1,80 @@
+---
+title: 'Pop quiz: what is the most basic privilege an account can be assigned with?'
+date: 2011-06-14 09:30:45.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Security
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: stewart@flamingspork.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I asked this during my presentation on the MySQL Conference this year. And I got a unanimous answer from the crowd. Take a moment to think this over, before coming up with the answer. Meanwhile, an intermezzo.</p>
+<p><em><strong>Tam dam dam...</strong></em></p>
+<p><em><strong>Pom pom Pom pom Pom pom...</strong></em></p>
+<p>If your answer is that the most basic privilege an account can be assigned with is the USAGE privilege, you are right!</p>
+<p>And then again, you're also <em>wrong</em>.</p>
+<p><!--more-->Technically, <strong>USAGE</strong> is the right answer. Conceptually, there's something far more fundamental than <strong>USAGE</strong>. An account with only <strong>USAGE</strong> privilege cannot do much, right? Well, I argue on that as well, but bear with me. How did that user get to login in the first place?</p>
+<p>That's right, the <strong>USAGE</strong> privilege first and foremost allows one to <em>login</em>. I <a href="http://code.openark.org/blog/mysql/blocking-user-accounts">wrote on this</a> before, and I cannot stress this enough: there should be a <strong>LOGIN</strong> privilege for MySQL, one which can be turned off with <strong>REVOKE</strong>.</p>
+<p>Can you <strong>REVOKE</strong> the <strong>USAGE</strong> privilege? You cannot. Once an account exists, it is allowed to login and do stuff. Actually:</p>
+<blockquote>
+<pre>USAGE = LOGIN + USE + ABUSE YOUR SYSTEM
+</pre>
+</blockquote>
+<p>Which is why <strong>ABUSAGE</strong> is a more fitting name for this privilege. There is no justification to the many things a user can do with <strong>USAGE</strong>.</p>
+<p>Am I exaggerating? What does <strong>USAGE</strong> allow one to do? Let's look at some unconventional usage:</p>
+<blockquote>
+<pre>SELECT benchmark(10000000000000000, sin(sqrt(rand())));
++-------------------------------------------------+
+| benchmark(10000000000000000, sin(sqrt(rand()))) |
++-------------------------------------------------+
+|                                               0 |
++-------------------------------------------------+
+1 row in set (<strong>gazillion seconds to complete, one core down</strong>)
+</pre>
+</blockquote>
+<blockquote>
+<pre>SELECT
+ DISTINCT 0 * COUNT(*) AS result
+FROM
+ INFORMATION_SCHEMA.COLLATIONS c0,
+ INFORMATION_SCHEMA.COLLATIONS c1,
+ INFORMATION_SCHEMA.COLLATIONS c2,
+ INFORMATION_SCHEMA.COLLATIONS c3,
+ INFORMATION_SCHEMA.COLLATIONS c4,
+ INFORMATION_SCHEMA.COLLATIONS c5,
+ INFORMATION_SCHEMA.COLLATIONS c6,
+ INFORMATION_SCHEMA.COLLATIONS c7,
+ INFORMATION_SCHEMA.COLLATIONS c8,
+ INFORMATION_SCHEMA.COLLATIONS c9
+GROUP BY
+ c1.COLLATION_NAME, c7.SORTLEN
+;
++--------+
+| result |
++--------+
+|      0 |
++--------+
+1 row in set (<strong>yet again gazillion seconds to complete, with huge disk temporary table</strong>)
+</pre>
+</blockquote>
+<blockquote>
+<pre>SELECT COUNT(DISTINCT SLEEP(1000)) FROM INFORMATION_SCHEMA.TABLES;
++-----------------------------+
+| COUNT(DISTINCT SLEEP(1000)) |
++-----------------------------+
+|                           1 |
++-----------------------------+
+1 row in set (<strong>want to gamble how much time your DB will spend in complete lockdown?</strong>)
+</pre>
+</blockquote>
+<p>And I should also mention open many concurrent connections (thankfully there is syntax to limit this!).</p>

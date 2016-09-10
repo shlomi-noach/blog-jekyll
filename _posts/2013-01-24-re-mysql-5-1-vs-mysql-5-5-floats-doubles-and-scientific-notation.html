@@ -1,0 +1,78 @@
+---
+title: 'Re: MySQL 5.1 vs. MySQL 5.5: Floats, Doubles, and Scientific Notation'
+date: 2013-01-24 10:08:40.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Data Types
+- Open Source
+- Percona Toolkit
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+  _sg_subscribe-to-comments: alfiej@opera.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Reading Sheeri's <a href="http://blog.mozilla.org/it/2013/01/17/mysql-5-1-vs-mysql-5-5-floats-doubles-and-scientific-notation/">MySQL 5.1 vs. MySQL 5.5: Floats, Doubles, and Scientific Notation</a>, I was baffled at this change of floating point number notation.</p>
+<p>However, I was also concerned about the final action taken: using <strong>"--ignore-columns"</strong> to avoid comparing the <strong>FLOAT</strong>/<strong>DOUBLE</strong> types.</p>
+<p>The <a href="http://www.percona.com/doc/percona-toolkit/2.0/pt-table-checksum.html#cmdoption-pt-table-checksum--float-precision">--float-precision</a> option for <em>pt-table-checksum</em> currently only uses <strong>ROUND()</strong> so as to disregard minor rounding issues. But it can very easily extend to handle the difference in floating point notation. Consider again the problem:</p>
+<blockquote>
+<pre>mysql&gt; create table tf(f float);
+Query OK, 0 rows affected (0.11 sec)
+
+mysql&gt; insert into tf values(0.0000958084);
+Query OK, 1 row affected (0.04 sec)
+
+mysql-<strong>5.1</strong>&gt; select * from tf;
++-------------+
+| f           |
++-------------+
+| 9.58084e-05 |
++-------------+
+
+mysql-<strong>5.5</strong>&gt; select * from tf;
++--------------+
+| f            |
++--------------+
+| 0.0000958084 |
++--------------+</pre>
+</blockquote>
+<p>How can we normalize the notation?</p>
+<p>Easily: <strong>CAST</strong> it as <strong>DECIMAL</strong>. Consider:<!--more--></p>
+<blockquote>
+<pre>mysql-<strong>5.1</strong>&gt; SELECT f,ROUND(IF(f BETWEEN -1 AND 1, <strong>CAST(f AS DECIMAL(65,30))</strong>, f), 10) as fn from tf;
++-------------+--------------+
+| f           | fn           |
++-------------+--------------+
+| 9.58084e-05 | 0.0000958084 |
++-------------+--------------+
+
+mysql-<strong>5.5</strong>&gt; SELECT f,ROUND(IF(f BETWEEN -1 AND 1, <strong>CAST(f AS DECIMAL(65,30))</strong>, f), 10) as fn from tf;
++--------------+--------------+
+| f            | fn           |
++--------------+--------------+
+| 0.0000958084 | 0.0000958084 |
++--------------+--------------+</pre>
+</blockquote>
+<p>The normalization works well in both cases; also, taking care to only normalize values in the range <strong>[-1, 1]</strong>.</p>
+<p>The change in <em>pt-table-checksum</em>? One line of code:</p>
+<blockquote>
+<pre>         elsif ( $float_precision &amp;&amp; $type =~ m/float|double/ ) {
+            $result = "ROUND($result, $float_precision)";
+         }</pre>
+</blockquote>
+<p>Turns to</p>
+<blockquote>
+<pre>         elsif ( $float_precision &amp;&amp; $type =~ m/float|double/ ) {
+            $result = "ROUND(IF($result BETWEEN -1 AND 1, CAST($result AS DECIMAL(65,30)), $result), $float_precision)";
+         }</pre>
+</blockquote>
+<p>I've just submitted a blueprint, but I would think changing one line of code shouldn't wait till next release of Percona Toolkit: one can edit in-place their <strong>/usr/bin/pt-table-checksum</strong> and proceed to validate their database integrity.</p>

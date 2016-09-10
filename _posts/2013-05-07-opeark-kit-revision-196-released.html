@@ -1,0 +1,47 @@
+---
+title: opeark-kit revision 196 released
+date: 2013-05-07 07:47:22.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Development
+- Open Source
+- openark kit
+- QueryScript
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This is a long due maintenance release of <a href="http://code.google.com/p/openarkkit/"><strong>openark-kit</strong>.</a> This release includes bugfixes and some enhancements, mainly to <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-online-alter-table.html">oak-online-alter-table</a>.</p>
+<p><em>oak-online-alter-table</em> Changes / bug fixes include:</p>
+<ul>
+<li>Support for keyword-named columns</li>
+<li>Use of FORCE INDEX due to lack of MySQL's ability for figure out the chunking key at all times</li>
+<li><strong>--sleep-ratio</strong> option added; allows for sleep time proportional to execution time (as opposed to constant sleep time with <strong>--sleep</strong>)</li>
+<li>Support for chunk-retry (in case of deadlock) via <strong>--max-lock-retries</strong>)</li>
+<li>Fixed order of cleanup</li>
+<li>Fixed bug with verbose messages with non-integer chunking key</li>
+<li>Fixed bug with single-row tables (people, no need for this tool for single row tables :))</li>
+<li>Friendly verbose messages to remind you what's being executed</li>
+</ul>
+<p><em>oak-chunk-update</em> changes includes:</p>
+<ul>
+<li>Verbosing query comment if exists (friendly printing of what's being executed)</li>
+</ul>
+<p><!--more-->(Do check out <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_split.html">QueryScript's split()</a>; it's a simple, server side solution which works almost same way as <em>oak-chunk-update</em>)</p>
+<p>More issues and changes not listed here.</p>
+<h4>Download</h4>
+<p><em>openark-kit</em> is released under the new BSD license, and is freely available.</p>
+<ul>
+<li><a href="http://code.google.com/p/openarkkit/">Download latest openark-kit revision (#196)</a>.</li>
+<li>Browse <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/introduction.html">openark-kit documentation</a>.</li>
+</ul>

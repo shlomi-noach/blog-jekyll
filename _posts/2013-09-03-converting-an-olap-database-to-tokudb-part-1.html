@@ -1,0 +1,117 @@
+---
+title: Converting an OLAP database to TokuDB, part 1
+date: 2013-09-03 09:04:12.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- compression
+- InnoDB
+- Open Source
+- Performance
+- QueryScript
+- TokuDB
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This is the first in a series of posts describing my impressions of converting a large OLAP server to TokuDB. There's a lot to tell, and the experiment is not yet complete, so this is an ongoing blogging. In this post I will describe the case at hand and out initial reasons for looking at TokuDB.</p>
+<p>Disclosure: I have no personal interests and no company interests; we did get friendly, useful and free advice from Tokutek engineers. TokuDB is open source and free to use, though commercial license is also available.</p>
+<h4>The case at hand</h4>
+<p>We have a large and fast growing DWH MySQL setup. This data warehouse is but one component in a larger data setup, which includes Hadoop, Cassandra and more. For online dashboards and most reports, MySQL is our service. We populate this warehouse mainly via Hive/Hadoop. Thus, we have an hourly load of data from Hive, as well as a larger daily load.</p>
+<p>There are some updates on the data, but the majority of writes are just <strong>mysqlimport</strong>s of Hive queries.</p>
+<p>Usage of this database is OLAP: no concurrency issues here; we have some should-be-fast-running queries issued by our dashboards, as well as ok-to-run-longer queries issued for reports.</p>
+<p>Our initial and most burning trouble is with size. Today we use <strong>COMPRESSED</strong> InnoDB tables (<strong>KEY_BLOCK_SIZE</strong> is default, i.e. <strong>8</strong>). Our data volume sums right now at about <strong>2TB</strong>. I happen to know this translates as <strong>4TB</strong> of uncompressed data.</p>
+<p>However growth of data is accelerating. A year ago we would capture a dozen GB per month. Today it is a <strong>100GB</strong> per month, and by the end of this year it may climb to <strong>150GB</strong> per month or more.</p>
+<p>Our data is not sharded. We have a simple replication topology of some <strong>6</strong> servers. Machines are quite generous as detailed following. And yet, we will be running out of resources shortly: disk space (total <strong>2.7TB</strong>) is now running low and is expected to run out in about six months. One of my first tasks in Outbrain is to find a solution to our DWH growth problem. The solution could be sharding; it could be a commercial DWH product; anything that works.<!--more--></p>
+<h4>The approach we experiment with</h4>
+<p>It was at my initial interview that I suggested <a href="http://www.tokutek.com/products/tokudb-for-mysql/">TokuDB</a> might be a good solution, with the primary reason of being so good with compression. And we decided to experiment with this simple (setup-wise) solution of compression. If we could compress the data even by <strong>50%</strong>, that would buy us considerable time. And it's the simplest approach as we would need to change nothing at the application side, nor add additional frameworks.</p>
+<p>Of course, we were already using InnoDB <strong>COMPRESSED</strong> tables. How about just improving the compression? And here I thought to myself: we can try <strong>KEY_BLOCK_SIZE=4</strong>, which I know would generally compress by <strong>50%</strong> as compared to <strong>KEY_BLOCK_SIZE=8</strong> (not always, but in many use cases). We're already using InnoDB so this isn't a new beast; it will be "more of the same". It would work.</p>
+<p>I got myself a dedicated machine: a slave in our production topology I am free to play with. I installed TokuDB <strong>7.0.1</strong>, later upgraded to <strong>7.0.3</strong>, based on MySQL <strong>5.5.30</strong>.</p>
+<p>The machine is a Dell Inc. <strong>PowerEdge R510</strong> machine, with <b>16</b> CPUs @ <b>2.1 GHz</b> and <b>126 GiB</b> RAM, <b>16 GiB</b> Swap. OS is CentOS <strong>5.7</strong>,  kernel <strong>2.6.18</strong>. We have RAID <strong>10</strong> over local <strong>10k</strong> RPM SAS disks (10x<strong>600GB</strong> disks)</p>
+<h4>How to compare InnoDB &amp; TokuDB?</h4>
+<p><strong>2TB</strong> of compressed data (for absolute measurement I consider it to be a <strong>4TB</strong> worth of data) is quite a large setup. How do I do the comparison? I don't even have too much disk space here...</p>
+<p>We have tables of various size. Our largest is in itself <strong>1TB</strong> (<strong>2TB</strong> uncompressed) - half of the entire volume. The rest ranging <strong>330GB</strong>, <strong>140GB</strong>, <strong>120GB</strong>, <strong>90GB</strong>, <strong>50GB</strong> and below. We have <strong>MONTH</strong>ly partitioning schemes on most tables and obviously on our larger tables.</p>
+<p>For our smaller tables, we could just <strong>CREATE TABLE test_table LIKE small_table</strong>, populating it and comparing compression. However, the really interesting question (and perhaps the only interesting question compression-wise) is how well would our larger (and specifically largest) tables would compress.</p>
+<p>Indeed, for our smaller tables we saw between <strong>20%</strong> to <strong>70%</strong> reduction in size when using stronger InnoDB compression: <strong>KEY_BLOCK_SIZE=4/2/1</strong>. How well would that work on our larger tables? How much slower would it be?</p>
+<p>We know MySQL partitions are implemented by actual <em>independent</em> tables. Our testing approach was: let's build a test_table from a one month worth of data (== one single partition) of our largest table. We tested:</p>
+<ul>
+<li>The time it takes to load the entire partition (about <strong>120M</strong> rows, <strong>100GB COMPRESSED</strong> data as seen on <strong>.idb</strong> file)</li>
+<li>The time it would take to load a single day's worth of data from Hive/Hadoop (loading real data, as does our nightly import)</li>
+<li>The time it would take for various important <strong>SELECT</strong> query to execute on this data.</li>
+</ul>
+<h4>InnoDB vs. TokuDB comparison</h4>
+<p>In this post I will only describe our impressions of compression size. I have a lot to say about TokuDB vs InnoDB partitioning and queries; this will wait till later post.</p>
+<p>So here goes:</p>
+<table border="0" cellspacing="0">
+<colgroup width="85"></colgroup>
+<colgroup width="155"></colgroup>
+<colgroup width="152"></colgroup>
+<colgroup width="147"></colgroup>
+<colgroup width="141"></colgroup>
+<tbody>
+<tr>
+<td align="LEFT" bgcolor="#E6E6E6" height="31"><b>Engine</b></td>
+<td align="LEFT" bgcolor="#E6E6E6"><b>Compression</b></td>
+<td align="LEFT" bgcolor="#E6E6E6"><b>Time to Insert 1 month</b></td>
+<td align="LEFT" bgcolor="#E6E6E6"><b>Table size (optimized)</b></td>
+<td align="LEFT" bgcolor="#E6E6E6"><b>Time to import 1 day</b></td>
+</tr>
+<tr>
+<td align="LEFT" bgcolor="#FFFFCC" height="17">InnoDB</td>
+<td align="LEFT" bgcolor="#FFFFCC">8k</td>
+<td align="LEFT" bgcolor="#FFFFCC"><strong>10.5h</strong></td>
+<td align="LEFT" bgcolor="#FFFFCC">58GB</td>
+<td align="LEFT" bgcolor="#FFFFCC"><b>32m</b></td>
+</tr>
+<tr>
+<td align="LEFT" bgcolor="#FFFFCC" height="17">InnoDB</td>
+<td align="LEFT" bgcolor="#FFFFCC">4k</td>
+<td align="LEFT" bgcolor="#FFFFCC">48h</td>
+<td align="LEFT" bgcolor="#FFFFCC">33GB</td>
+<td align="LEFT" bgcolor="#FFFFCC">unknown (too long)</td>
+</tr>
+<tr>
+<td align="LEFT" bgcolor="#FFFFCC" height="17">TokuDB</td>
+<td align="LEFT" bgcolor="#FFFFCC">quicklz</td>
+<td align="LEFT" bgcolor="#FFFFCC">14h</td>
+<td align="LEFT" bgcolor="#FFFFCC">17GB</td>
+<td align="LEFT" bgcolor="#FFFFCC">40m</td>
+</tr>
+<tr>
+<td align="LEFT" bgcolor="#FFFFCC" height="17">TokuDB</td>
+<td align="LEFT" bgcolor="#FFFFCC">lzma (small/aggresive)</td>
+<td align="LEFT" bgcolor="#FFFFCC">15h</td>
+<td align="LEFT" bgcolor="#FFFFCC"><b>7.5GB</b></td>
+<td align="LEFT" bgcolor="#FFFFCC">42m</td>
+</tr>
+</tbody>
+</table>
+<p>Some comments and insights:</p>
+<ul>
+<li>Each test was performed 3-4 times. There were no significant differences on the various cycles.</li>
+<li>The <strong>1</strong> month insert was done courtesy <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_split.html">QueryScript split</a>,  <strong>5,000</strong> rows at a time, no throttling.</li>
+<li>The <strong>1</strong> day import via <em>mysqlimport</em>. There were multiple files imported. Each file is sorted by <strong>PRIMARY KEY ASC</strong>.</li>
+<li>Isn't it nice to know that your <strong>100GB</strong> InnoDB table actually fits within <strong>58GB</strong> when rebuilt?</li>
+<li>For InnoDB <strong>flush_logs_at_trx_commit=2</strong>, <strong>flush_method=O_DIRECT</strong>.</li>
+<li>I used default configuration to TokuDB -- touched nothing. More on this in later post.</li>
+<li>InnoDB <strong>4k</strong> was <em>prohibitively</em> slow to load data. It was so slow so as to be unacceptable. For the 1 day load it took <strong>1</strong> hour for a mere <strong>20%</strong> of data to load. <strong>1</strong> hour was already marginal for our requirements; waiting for <strong>5</strong> hours was out of the question. I tested several times, never got to wait for completion. Did I say it would just be "more of the same"? <strong>4k</strong> turned to be "not an option".</li>
+<li>I saw almost no difference in load time between the two TokuDB compression formats. Both somewhat (30%) longer than InnoDB to load, but comparable.</li>
+<li>TokuDB compression: nothing short of <em>amazing</em>.</li>
+</ul>
+<p>With InnoDB <strong>4k</strong> being "not an option", and with both TokuDB compressions being similar in load time yet so different in compression size, we are left with the following conclusion: if we want to compress more than our existing 8k (and we have to) - TokuDB's <em>agressive compression</em> (aka small, aka lzma) is our only option.</p>
+<h4>Shameless plug</h4>
+<p><a href="http://code.google.com/p/common-schema/">common_schema</a> turned to be quite the "save the day" tool here. Not only did we use it to extract 100GB of data from a large dataset and load it onto our tables, it also helped out in the ALTER process for TokuDB: at this time (&lt;=<strong> 7.0.4</strong>) TokuDB still has a bug with <strong>KEY_BLOCK_SIZE</strong>: when this option is found in table definition, it impacts TokuDB's indexes by bloating them. This is how <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/sql_alter_table_tokudb.html">sql_alter_table_tokudb</a> was born. Hopefully it will be redundant shortly.</p>
+<h4>More to come</h4>
+<p>Was our test fair? Should we have configure TokuDB differently? Is loading via small <strong>5,000</strong> row chunks the right way?</p>
+<p>In the next post I will describe the process of migrating our 4TB worth of data to TokuDB, pitfalls, issues, party crushers, sport spoilers, configuration, recovery, cool behaviour and general advice you should probably want to embrace. At later stage I'll describe how our DWH looks after migration. Finally I'll share some (ongoing) insights on performance.</p>
+<p>You'll probably want to know "How much is (non compressed) <strong>4TB</strong> of data worth in TokuDB?" Let's keep the suspense :)</p>

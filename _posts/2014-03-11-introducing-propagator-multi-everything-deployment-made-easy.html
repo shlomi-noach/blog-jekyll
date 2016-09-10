@@ -1,0 +1,52 @@
+---
+title: 'Introducing Propagator: multi-everything deployment made easy'
+date: 2014-03-11 08:09:23.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I'm happy to release Outbrain's <a href="https://github.com/outbrain/propagator">Propagator</a> as open source. <em>Propagator</em> is a schema &amp; data deployment tool which makes it easy to deploy, review, audit &amp; fix deployments to your database servers.</p>
+<p>What does multi-everything mean? It is:</p>
+<ul>
+<li>Multi-server: push your schema &amp; data changes to multiple instances in parallel</li>
+<li>Multi-role: different servers have different schemas</li>
+<li>Multi-environment: recognizes the differences between development, QA, build &amp; production servers</li>
+<li>Multi-technology: supports MySQL, Hive (Cassandra on the TODO list)</li>
+<li>Multi-user: allows users authenticated and audited access</li>
+<li>Multi-planetary: TODO</li>
+</ul>
+<p>With dozens of database servers in our company (and these are master database servers), from development machines to testing machines, through build machines to production servers, and with a growing team of over <strong>70</strong> engineers, we faced the growing problem of controlling our database schema evolution. Controlling creation of tables, columns, keys, foreign keys; controlling creation of data that must be consistent across all servers became an infeasible task. Some changes were lost; some servers forgotten along the way, and inconsistencies blocked our development &amp; deployments again and again.</p>
+<p>We have reviewed schema-versioning tools (e.g. FlywayDB and Liquibase) only to conclude they solve a fraction of the problem. We looked at some GUI tools that promise to deliver the solution, but frankly any Windows Desktop GUI application is by definition the wrong tool for the job, and not (only) because of the "Windows" part.</p>
+<p>Not all deployments are the same. Not all servers are the same. You don't ALTER a big table on production. You may be using different schema names on different servers. You may have multiple schemas on a single server with identical structure. You may wish to only deploy to some development servers, possibly to a test server, but not to all, and yet be able to pick up on where you left a few days later on to complete your deployment. Some deployments fail, and for various reasons (e.g. John created that table manually on this particular test server, so obviously you can't CREATE it again), and you want to be able to skip it, or mark it as "OK", or put some comments, or hint that you need assistance from a DBA. You want to be able to quickly add new servers to your deployment group.</p>
+<p>Above all, you want every single deployment to be fully audit-able. You want to know exactly who did what and when. If their deployment failed, you want to know that. You want to know why it failed. You want to be able to pick up and try it again, after your DBA found the problem. You want to be able to review yesterday's deployments, and be able to contact Jane and say "hey, I see you hit a problem here; I know what the problem is; you should do this and that, then please try to deploy again".</p>
+<p>There's so much more, but I'll stop telling you what you want to have, since there's a good <a href="https://github.com/outbrain/propagator/blob/master/MANUAL.md">manual</a> available.<!--more--></p>
+<p>This is how <em>Propagator</em> came to be. For the past three months it has been in production use at our company. Our engineers used it to deploy hundreds of schema and data changes, and provided with tons of feedback in the form of bug reports, feature requests and general hints on easy of use and expected behaviour.</p>
+<p>My company, <a href="http://www.outbrain.com/about/what-is-outbrain">Outbrain</a>, is a strong supporter of open source, and we mutually agreed that this would make for a good open source solution. My company provided me with the resources and patience to polish it to the level of an open source release: a fully featured, stable, documented, visually appealing product.</p>
+<p><em>Propagator</em> is available on <a href="https://github.com/outbrain/propagator">GitHub</a> and is released under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache 2.0 license</a>.</p>
+<h4>Some technical details</h4>
+<p><em>Propagator</em> is a PHP application, running on top Apache. It uses MySQL as backend for maintaining both internal data (instances, ports, roles, ...) as well as deployments status. On the frontend it uses Twitter Bootstrap, jQuery and all the usual suspects.</p>
+<p>It is loosely forked off from <a href="https://github.com/box/Anemometer/wiki">Anemometer</a> (get to know Anemometer if you haven't already).</p>
+<h4>Setting it up</h4>
+<p>It's mostly an "extract to apache, configure database access, put in some initial data" setup. There is some time to dwell on "putting the initial data". Which servers you have? What environments? What kind of roles you have? You'll need to set this up first.</p>
+<p>The following are screenshots from the sample-phpunit-database. I can't provide with a screenshot from our internal production service, but you can get the general picture.</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/03/propagator-sample-screenshot.png"><img class="alignnone size-large wp-image-6754" alt="propagator sample screenshot" src="{{ site.baseurl }}/assets/propagator-sample-screenshot-1024x629.png" width="1024" height="629" /></a></p>
+</blockquote>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/03/propagator-screnshot-031.png"><img class="alignnone size-full wp-image-6763" alt="propagator-screnshot-03" src="{{ site.baseurl }}/assets/propagator-screnshot-031.png" width="734" height="529" /></a></p>
+</blockquote>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/03/propagator-screnshot-02.png"><img class="alignnone size-large wp-image-6758" alt="propagator-screnshot-02" src="{{ site.baseurl }}/assets/propagator-screnshot-02-1024x580.png" width="1024" height="580" /></a></p>
+</blockquote>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/03/propagator-screnshot-01.png"><img class="alignnone size-large wp-image-6757" alt="propagator-screnshot-01" src="{{ site.baseurl }}/assets/propagator-screnshot-01-1024x364.png" width="1024" height="364" /></a></p>
+</blockquote>
+<p>Propagator is one of the tools discussed in my upcoming talk at Percona Live: <a href="https://www.percona.com/live/mysql-conference-2014/sessions/mysql-devops-outbrain">MySQL DevOps @ Outbrain</a></p>

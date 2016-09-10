@@ -1,0 +1,62 @@
+---
+title: Why delegating code to MySQL Stored Routines is poor engineering practice
+date: 2014-02-06 10:32:17.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- Development
+- Opinions
+- QueryScript
+- Stored routines
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I happen to use stored routines with MySQL. In fact, my open source project <a href="http://code.google.com/p/common-schema/">common_schema</a> heavily utilizes them. DBA-wise, I think they provide with a lot of power (alas, the ANSI:SQL 2003 syntax feels more like COBOL than a sane programming language, which is why I use <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script.html">QueryScript</a> instead).</p>
+<p>However I wish to discuss the use of stored routines as integral part of your application code, which I discourage.</p>
+<p>The common discussion on whether to user or not use stored routines typically revolves around data transfer (with stored routines you transfer less data since it's being processed on server side), security (with stored routines you can obfuscate/hide internal datasets, and provide with limited and expected API) and performance (with MySQL this is not what you would expect, as routines are interpreted &amp; their queries re-evaluated, as opposed to other RDBMS you may be used to).</p>
+<p>But I wish to discuss the use of stored routines from an engineering standpoint. The first couple of points I raise are cultural/behavioural.</p>
+<h4>2nd grade citizens</h4>
+<p>Your stored routines are not likely to integrate well with your IDE. While your Java/Scala/PHP/Ruby/whatnot code comfortably lies within your home directory, the stored routines live in their own space: a database container. They're not as visible to you as your standard code. Your IDE is unaware of their existence and is unlikely to have the necessary plugin/state of mind to be able to view these.</p>
+<p>This leads to difficulty in maintaining the code. People typically resort to using some SQL-oriented GUI tool such as MySQL Workbench, SequelPro or other, commercial tools. But these tools, while make it easy to edit your routine code, do not integrate (well?) with your source control. I can't say I've used all GUI tools; but how many of them will have Git/SVN/Mercurial connectors? How many of them will keep local history changes once you edit a routine? I'm happy to get introduced to such a tool.</p>
+<p>Even with such integration, you're split between two IDEs. And if you're the command line enthusiast, well, you can't just <strong>svn ci -m "fixed my stored procedure bug"</strong>. Your code is simply not in your trunk directory.</p>
+<p>It <em>can</em> be done. You <em>could</em> maintain the entire routine code from within your source tree, and hats off to all those who do it. Most will not. See later on about deployments for more on this.<!--more--></p>
+<h4>Testing</h4>
+<p>While engineers are keen on writing unit tests for every class and method they create, they are less keen on doing the same for stored routines. This is an observation, having seen many instalments. And I can tell you why: your stored routine testing will not integrate well with your JUnit/PHPUnit/...</p>
+<p>There are testing frameworks for databases, and indeed I hacked my own mini unit testing code with <em>common_schema</em>. But it's a <em>different</em> testing framework. You might also have realized by now that testing databases is somewhat different. It <em>can</em> be done, and hats off again to those that implement it as common practice. Many don't. Database are often more heavyweight to test. Not all operations done by routines are easily rolled back, which leads to having to rebuild the entire dataset before tests. This in itself leads to longer test periods and a need for multiple test databases so as to allow for concurrent builds.</p>
+<p>How many companies practice both version control and unit testing over their routine code? I believe not many (and am happy to hear about those who do). To be more direct, of all the companies I ever consulted to: <em>I have never seen one that does both</em>.</p>
+<h4>Debugging</h4>
+<p>MySQL stored routines have built in debugging capabilities. To debug your routines, you will have to use one of two methods:</p>
+<ul>
+<li>Simulate your routine code (ie mimic their execution on top of some interpreter). There are tools to do that. For me this is a complete NO GO and utterly untrustworthy. You can mimic what you think is how the routine should behave, but never they full behaviour. While developing <em>common_schema</em> I came upon plenty weird behaviour, some of it bugs, that you just can't build into your emulation.</li>
+<li>Inject debugging code into your routine code. I do that with <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/rdebug.html">RDebug</a>. You can do breakpoints, step into, step out, most of the interesting stuff. Other tools do that as well. It is not the right way to go: you're essentially modifying your code, placing more locks, communicating, and losing some functionality. It is a necessary evil solution for a necessary evil programming method... How good can that be?</li>
+</ul>
+<p>The right way to go would be to have debugging API built into the MySQL server.</p>
+<p>But, wait, that would still be next to worthless, since our discussion is over programming with stored routines: letting your application call upon stored routines in your database. Until the day where I could use my IntelliJ debugger to step from my java method which calls upon a stored procedure, and into the stored procedure itself, debugging your code is completely detached from your stored routine debugging.</p>
+<h4>Refactoring &amp; deploying</h4>
+<p>Say you wanted to add a column to your table: you would go ahead and add it, and perhaps populate it. You would then modify your application code to support this new column, and deploy. Say you wanted to drop a table column. You would first deploy changes to your application code that ignore said column, and once the code is in place you would go and actually make the DROP.</p>
+<p>How do you do the same with a stored routine? Support your routine accepts two parameters, and you wish to add a third?</p>
+<p>There is no support for optional parameters. Your routine either accepts two parameters or three. Your application code will have to provide the exact number of parameters. You will have to deploy <em>both your SQL changes and your application changes at the same time</em>. This is by definition impossible, unless you are OK with a <em>stop the world approach</em>, which is unlikely in production.</p>
+<h4>Code constraints</h4>
+<p>One solution to the above is to create a new routines. Somehow "overload" it. But you can't overload a stored routine; you'll have to create a routine by a new name. This will allow you to slowly and smoothly migrate between the two.</p>
+<p>Ahem, smoothly? How easy is it to find all invocations of a certain routines from your code? It will be typically lie in some String, or within some XML config file. There is no safe "find references to this procedure" IDE mechanism. There is no constraint in your IDE that will tell you "there is no such procedure" if you misspell the name.</p>
+<h4>Trash bin</h4>
+<p>Suppose you overcame the above. You now have two routines. You need to remember to DROP the old one, right? Will you?</p>
+<p>When presenting <em>common_schema</em>, a common question I ask the audience is as follows:</p>
+<blockquote><p>Suppose I accessed your database and listed the entire set of stored functions and procedures. How many of them are you not even sure are in use anymore? How many of them you think you can DROP, but are too afraid to, and keep them in <em>just in case</em>?</p></blockquote>
+<p>I wouldn't commonly ask that question had it not always provides a common nodding and smiling in the audience. People forget to drop their routines, and then forget about them, and are never sure whether they are used (your IDE doesn't easily tell you that, remember? Sure, you can grep around; that's not what most engineers would do). And those routines pile up to become trash.</p>
+<h4>Data or code?</h4>
+<p>Last but not least: a stored routine is a piece of code, right? Well, as far as the database is concerned, it's really a piece of data. It's located within a schema. It's <em>stored</em>. It is an integral part of your data set: when you back up your <em>data</em>, you're most likely to backup the <em>code</em> as well. When you restore, you're likely to restore <em>both</em>. There are obvious advantages to that, DB-wise. Or should I say, DBA-wise. Engineering-wise? Does a database-restore operation count as code deployment? We can argue over beer.</p>
+<h4>Final notes</h4>
+<p>Having said all that: yes, I'm using an occasional stored routine. I see these occasions as a necessary evil, and sometimes it's just the correct solution.</p>
+<p>I'm happy to know what methods have been developed out there to overcome the above, please share; and please feel free to contradict the above.</p>

@@ -1,0 +1,41 @@
+---
+title: 23:59:59 is not the end of the day. No, really!
+date: 2011-07-27 20:16:00.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Data Types
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>How would you check whether some <strong>TIMESTAMP</strong> column falls within a given day, say <strong>July 26th, 2011</strong>?</p>
+<p>This is a question I tend to ask students, and usually I get the same range of answers. Some are wrong; some cannot utilize an index, some are correct, and some are <em>temporarily correct</em>. I wish to take a closer look at the last. Such an answer looks like this:</p>
+<blockquote>
+<pre>SELECT * FROM some_table WHERE timstamp_column BETWEEN '2011-07-26 00:00:00' AND '2011-07-26 23:59:59'</pre>
+</blockquote>
+<p>Yikes! I get my allergies when I see this one.</p>
+<p>Technically this seems correct. And it seems to work so far for people. There are two things that disturb me:</p>
+<ol>
+<li><strong>'23:59:59'</strong> refers to the beginning of the last second of the day. This means a full second is missing in concept. No one would write such a code on a C, Java or PHP application: that would be a newbie's mistake. But people feel at ease doing it with SQL</li>
+<p>Of course, this works when timestamps are in a one second resolution. Which leads me to:</p>
+<li>One second resolution is a temporary issue. Already <a href="http://kb.askmonty.org/en/what-is-mariadb-53">MariaDB 5.3</a> presents with microsecond support for NOW() and TIMESTAMP, TIME and DATETIME columns. Sometime in the not-so-far future the standard MySQL distribution will have that, too.</li>
+</ol>
+<p><!--more-->Soon people will start losing data, reporting wrong numbers, perform incorrect aggregations. My advise:</p>
+<blockquote>
+<pre>grep -iR "23:59:59" /path/to/application/code/*</pre>
+</blockquote>
+<p>And get rid of it. A good alternative would be:</p>
+<blockquote>
+<pre>SELECT * FROM some_table WHERE timstamp_column &gt;= DATE('2011-07-26') AND timestamp_column &lt; (DATE('2011-07-26') + INTERVAL 1 DAY)</pre>
+</blockquote>
+<p>(Why use all this INTERVAL stuff? Think <strong>28/29/30/31</strong> days in month and get the answer)</p>
+<p>And do not use <strong>LIKE '2011-07-26 %'</strong>. Read <a href="http://code.openark.org/blog/mysql/beware-of-implicit-casting">this</a> if you're not sure why.</p>

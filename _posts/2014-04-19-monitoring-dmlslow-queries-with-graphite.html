@@ -1,0 +1,84 @@
+---
+title: Monitoring DML/slow queries with graphite
+date: 2014-04-19 07:59:23.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- graphite
+- Monitoring
+- scripts
+meta:
+  _edit_last: '2'
+  _syntaxhighlighter_encoded: '1'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><a href="http://www.percona.com/doc/percona-toolkit/2.2/pt-query-digest.html">pt-query-digest</a>, <a href="https://github.com/box/Anemometer/wiki">Anemometer</a> or <a href="http://code.openark.org/blog/mysql/anemomaster-dml-visibility-your-must-do-for-tomorrow">"Anemomaster"</a> do a great job of analysing your queries and giving you visibility into what's going on with your MySQL servers. However, the place where the query digests are written is just some MySQL tables on some server. Do you have monitoring/alerts on that table? How will you verify a specific query does not exceed some runtime/execution count threshold, and get notified when it does?</p>
+<p>At Outbrain we use <a href="http://graphite.wikidot.com/">Graphite</a> to collect almost all of our data. We like it for its simplicity and for the fact it has a "push" strategy as opposed to "pull" strategy: every service/server/collectd writes (<em>pushes</em>) its own data to Graphite, as opposed to having some centralized monitoring service trying to pull data from thousands of servers &amp; services. We also have a great Graphite dashboard (developed at our company by Erez Mazor) called <a href="https://github.com/ezbz/graphitus">graphitus</a>, which is a very sophisticated and easily configurable visualization solution (see <a href="http://ezbz.github.io/graphitus/">documentation</a>).</p>
+<p>Our love/hate relationship with <em>Nagios</em> boil down to having a single Nagios plugin: one that reads data from Graphite. We use Nagios to generate our alerts, and dream of the day we will substitute it with something else (there's not too much love in this love/hate relationship).</p>
+<p>Graphite is a <em>numeric timeseries data</em> monitoring solution. How do you throw MySQL query analysis into Graphite, then?</p>
+<p>The answer lies within the flexible structure of a Graphite metric entry, which is a freely composed path, such as <strong>collectd.hosts.us-east.myhost01.mysql.gauge-Threads_running.value</strong>. Graphite does not require you to pre-define paths, and you can use anything that makes sense to you. Thus, you can use a slow query's text, for example, as part of the Graphite entry <em>path</em>. This is not entirely simple as the graphite path limits the allowed characters. So this is what we do:<!--more--></p>
+<p>Any query that is written to Graphite is transformed into a "canonical form". We strip it of excessive information and write enough of it that still makes sense to us. Actually, we found out that we usually do well with just the bare bones of "what type of query this is and what tables are involved". For better drill down we then go to Anemometer/Anemomaster. Hence, the canonical form of the following query:</p>
+<blockquote>
+<pre>UPDATE my_documents SET document_owner='Wallace'  WHERE document_domain='Gromit'</pre>
+</blockquote>
+<p>is simply</p>
+<blockquote>
+<pre>update_my_documents</pre>
+</blockquote>
+<p>Thankfully the <em>pt-query-digest</em> report tables are already timestamp based, and are already aggregated by query "fingerprints". This makes writing this data to graphite just a matter of text normalizing. The following script is a slightly modified version of what we use. Do note that we have the notion of "clustername" which is the name of the replication topology we're looking at. We have many topologies, like OLTP, OLAP, Metadata, etc. etc. We support this notion by adding a <strong>clustername_max</strong> column to the report tables and instructing <em>pt-query-digest</em> fill in this value.</p>
+<p>We run the following shell script by cron every 10 minutes (based on the 10 minute interval of analysing our masters' DML):</p>
+<blockquote>
+<p>[code lang="bash"]<br />
+#!/bin/bash</p>
+<p>#<br />
+# This script should run on the anemomaster machine every 10 minutes, shortly after<br />
+# binary logs / relay logs are analyzed via pt-query-digest.<br />
+#</p>
+<p>unixtime=$(date +%s)</p>
+<p># Get stats for the last round 10 minutes<br />
+# The query only takes one representative from each cluster<br />
+query=&quot; select clustername_max, sum(ts_cnt), replace(fingerprint, '\n', ' ') from global_query_review_history join global_query_review using (checksum), (select date(now()) + interval hour(now()) hour + interval (minute(now()) div 10 *10) minute as search_to_timestamp) as search_to_timestamp_sel where ts_min &gt;= search_to_timestamp - interval 10 minute and ts_min &lt; search_to_timestamp and hostname_max in ( select min(hostname_max) from global_query_review_history where ts_min &gt;= search_to_timestamp - interval 10 minute and ts_min &lt; search_to_timestamp group by clustername_max) group by clustername_max, fingerprint order by sum(ts_cnt) desc &quot;</p>
+<p>mysql -umyself -psecret anemomaster --silent --silent --raw -e &quot;$query&quot; | while IFS=$'\t' read -r -a result_values<br />
+    do<br />
+        fingerprint_cluster=${result_values[0]} ;<br />
+        fingerprint_count=${result_values[1]} ;<br />
+        fingerprint_query=${result_values[2]} ;<br />
+        fingerprint_query=$(echo $fingerprint_query | sed -r -e &quot;s/^(-- .*)]//g&quot;)<br />
+        fingerprint_query=$(echo $fingerprint_query | tr '\n' ' ' | tr '\r' ' ' | tr '\t' ' ')<br />
+        fingerprint_query=${fingerprint_query%%(*}<br />
+        fingerprint_query=${fingerprint_query%%,*}<br />
+        fingerprint_query=${fingerprint_query%% set *}<br />
+        fingerprint_query=${fingerprint_query%% SET *}<br />
+        fingerprint_query=${fingerprint_query%% where *}<br />
+        fingerprint_query=${fingerprint_query%% WHERE *}<br />
+        fingerprint_query=${fingerprint_query%% join *}<br />
+        fingerprint_query=${fingerprint_query%% JOIN *}<br />
+        fingerprint_query=${fingerprint_query%% using *}<br />
+        fingerprint_query=${fingerprint_query%% USING *}<br />
+        fingerprint_query=${fingerprint_query%% select *}<br />
+        fingerprint_query=${fingerprint_query%% SELECT *}<br />
+        fingerprint_query=$(echo $fingerprint_query | tr -d &quot;\`&quot;)<br />
+        fingerprint_query=$(echo $fingerprint_query | tr -d &quot;*&quot;)<br />
+        fingerprint_query=$(echo $fingerprint_query | tr -d &quot;?&quot;)<br />
+        fingerprint_query=$(echo $fingerprint_query | tr &quot; &quot; &quot;_&quot;)<br />
+        fingerprint_query=$(echo $fingerprint_query | tr &quot;.&quot; &quot;__&quot;)<br />
+        echo &quot;data.mysql.dml.${fingerprint_cluster}.${fingerprint_query}.count ${fingerprint_count} $unixtime&quot; | nc -w 1 my.graphite.server 2003<br />
+    done</p>
+<p>[/code]</p>
+</blockquote>
+<p>If you don't need the "clustername stuff", modify the query to read:</p>
+<blockquote>
+<p>[code lang="sql"]<br />
+select 'mysql' as clustername_max, sum(ts_cnt), replace(fingerprint, '\n', ' ') from global_query_review_history join global_query_review using (checksum), (select date(now()) + interval hour(now()) hour + interval (minute(now()) div 10 *10) minute as search_to_timestamp) as search_to_timestamp_sel where ts_min &gt;= search_to_timestamp - interval 10 minute and ts_min &lt; search_to_timestamp and hostname_max in ( select min(hostname_max) from global_query_review_history where ts_min &gt;= search_to_timestamp - interval 10 minute and ts_min &lt; search_to_timestamp) group by fingerprint order by sum(ts_cnt) desc</p>
+<p>[/code]</p>
+</blockquote>
+<p>The graphite metric path will look like <strong>data.mysql.dml.oltp.update_my_documents.count</strong>, which makes for a perpefctly valid metric to monitor, graphically visualize and get alerts on.</p>

@@ -1,0 +1,76 @@
+---
+title: Verifying GROUP_CONCAT limit without using variables
+date: 2010-06-10 09:16:14.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Configuration
+- INFORMATION_SCHEMA
+- SQL
+meta:
+  _edit_last: '2'
+  _syntaxhighlighter_encoded: '1'
+  _sg_subscribe-to-comments: greenlion@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I have a case where I must know if <strong>group_concat_max_len</strong> is at its default value (<strong>1024</strong>), which means there are some operation I cannot work out. I've ranted on this <a href="http://code.openark.org/blog/mysql/those-oversized-undersized-variables-defaults">here</a>.</p>
+<p>Normally, I would simply:</p>
+<blockquote><p>[sql]<br />
+SELECT @@group_concat_max_len<br />
+[/sql]</p></blockquote>
+<p>However, I am using views, where session variables are not allowed. Using a stored function can <a href="http://code.openark.org/blog/mysql/views-better-performance-with-condition-pushdown">do the trick</a>, but I wanted to avoid stored routines. So here's a very simple test case: is the current <strong>group_concat_max_len</strong> long enough or not? I'll present the long version and the short version.</p>
+<h4>The long version</h4>
+<blockquote><p>[sql]<br />
+SELECT<br />
+  CHAR_LENGTH(<br />
+    GROUP_CONCAT(<br />
+      COLLATION_NAME SEPARATOR ''<br />
+    )<br />
+  )<br />
+FROM<br />
+  INFORMATION_SCHEMA.COLLATIONS;<br />
+[/sql]</p></blockquote>
+<p>If the result is <strong>1024</strong>, we are in a bad shape. I happen to know that the total length of collation names is above <strong>1800</strong>, and so it is trimmed down. Another variance of the above query would be:<!--more--></p>
+<blockquote><p>[sql]<br />
+SELECT<br />
+  CHAR_LENGTH(<br />
+    GROUP_CONCAT(<br />
+      COLLATION_NAME SEPARATOR ''<br />
+    )<br />
+  ) = SUM(CHAR_LENGTH(COLLATION_NAME))<br />
+    AS group_concat_max_len_is_long_enough<br />
+FROM<br />
+  INFORMATION_SCHEMA.COLLATIONS;</p>
+<p>+-------------------------------------+<br />
+| group_concat_max_len_is_long_enough |<br />
++-------------------------------------+<br />
+|                                   0 |<br />
++-------------------------------------+<br />
+[/sql]</p></blockquote>
+<p>The <strong>COLLATIONS</strong>, <strong>CHARACTER_SETS</strong> or <strong>COLLATION_CHARACTER_SET_APPLICABILITY</strong> tables provide with known to exist variables (assuming you did not compile MySQL with particular charsets). It's possible to <strong>CONCAT</strong>, <strong>UNION</strong> or <strong>JOIN</strong> columns and tables to detect longer than <strong>1800</strong> characters in <strong>group_concat_max_len</strong>. I admit this is becoming ugly, so let's move on.</p>
+<h4>The short version</h4>
+<p>Don't want to rely on existing tables? Not sure what values to expect? Look at this:</p>
+<blockquote><p>[sql]<br />
+SELECT CHAR_LENGTH(GROUP_CONCAT(REPEAT('0', 1025))) FROM DUAL<br />
+[/sql]</p></blockquote>
+<p><strong>GROUP_CONCAT</strong> doesn't really care about the number of rows. In the above example, I'm using a single row (retrieved from the <strong>DUAL</strong> virtual table), making sure it is long enough. Type in any number in place of <strong>1025</strong>, and you have a metric for your <strong>group_concat_max_len</strong>.</p>
+<blockquote><p>[sql]<br />
+SELECT<br />
+  CHAR_LENGTH(GROUP_CONCAT(REPEAT('0', 32768))) &gt;= 32768 As group_concat_max_len_is_long_enough<br />
+FROM<br />
+  DUAL;<br />
++-------------------------------------+<br />
+| group_concat_max_len_is_long_enough |<br />
++-------------------------------------+<br />
+|                                   0 |<br />
++-------------------------------------+<br />
+[/sql]</p></blockquote>
+<p>The above makes a computation with <strong>REPEAT</strong>. One can replace this with a big constant.</p>

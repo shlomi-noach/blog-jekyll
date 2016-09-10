@@ -1,0 +1,116 @@
+---
+title: 'Manually installing multiple MySQL instances on Linux: HOWTO'
+date: 2009-02-19 08:02:00.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Configuration
+- Installation
+- Linux
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: valesquezcozzens969@outlook.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Installing a single MySQL instance on a linux machine is a very simple operation. It may be as simple as:</p>
+<blockquote>
+<pre>apt-get install mysql-server</pre>
+</blockquote>
+<p>But you cannot use this method to install another MySQL instance. Moreover, if you try to manually install another instance, you may find that some collisions occur.</p>
+<p>For example, when trying to install two 5.0 servers, apt-get or yum will just tell me "package is already installed".</p>
+<p>When trying to install a new 5.1 server along with 5.0, an implicit upgrade is performed.</p>
+<p>But even if we try forcing the installation, there are collisions:</p>
+<ul>
+<li>A dpkg or rpm will install my.cnf under <strong>/etc</strong>. Two installations will override one another. With RPM you may get a .rpmsave backup file, but that doesn't help too much.</li>
+<li>The daemon file: <strong>/etc/init.d/mysql(d)</strong> is overwritten.</li>
+<li>The default data directory is used for both installations: <strong>/var/lib/mysql</strong></li>
+<li>The binaries are overwritten</li>
+<li>Both installations will use port 3306.</li>
+<li>In both installations, the same socket file (e.g. <strong>/var/run/mysql/mysql.sock</strong>) is used.</li>
+</ul>
+<p><!--more-->Interestingly, on Windows, multiple MySQL installations are by far easier:</p>
+<ul>
+<li>Binaries are under <strong>Program Files\\MySQL\\MySQLX.X</strong>. With two installations, you specify different directories.</li>
+<li>Data files are by default directly under the installations paths (MySQL 5.0) or under "<strong>Documents And Settings...</strong>" (MySQL 5.1) with no collisions.</li>
+<li>The <strong>my.ini</strong> files are located directly under the installation paths.</li>
+<li>The installer asks you for a service name, and notifies you if that name is already in use.</li>
+<li>The installer let's you know if port 3306 is already taken, and allows you to specify another one.</li>
+<li>Of course, there's no unix socket file.</li>
+</ul>
+<p>I usually install MySQL on Linux using the binary tarball. When there's only one instance expected, I go with the standards: my.cnf is in <strong>/etc</strong>, mysqld is under <strong>/etc/init.d</strong>, etc. (no pun intended)</p>
+<h4>Steps for multiple installation on Linux</h4>
+<p>When more than one installation is expected, here's a safe way to ensure no collisions occur. We will assume a 5.0 and 5.1 installation (say we want to upgrade):</p>
+<h4>Install the MySQL binaries under /usr/local</h4>
+<p>Following the INSTALL document file, we make symbolic links to the full path in the names</p>
+<blockquote>
+<pre>ln -s /usr/local/your-mysql-5.0-full-installation-path /usr/local/mysql50
+ln -s /usr/local/your-mysql-5.1-full-installation-path /usr/local/mysql51</pre>
+</blockquote>
+<p><strong> </strong></p>
+<h4>Do not put my.cnf under /etc</h4>
+<p>Instead, put them directly in the installation path:</p>
+<blockquote>
+<pre>touch /usr/local/mysql50/my.cnf
+touch /usr/local/mysql51/my.cnf</pre>
+</blockquote>
+<h4>Setup different port numbers in the my.cnf files</h4>
+<p>For example, in /usr/local/mysql50/my.cnf, use port 3350:</p>
+<blockquote>
+<pre>[mysql]
+port=3350
+
+[mysqld]
+port=3350</pre>
+</blockquote>
+<p>Choose another port (e.g. 3351) for the 5.1 installation, then have it written as above in the 5.1 my.cnf file.</p>
+<h4>Choose distinct socket files</h4>
+<p>For example,  in /usr/local/mysql50/my.cnf, add:</p>
+<blockquote>
+<pre>[mysql]
+port=3350
+<strong>socket=/tmp/mysql50.sock</strong>
+
+[mysqld]
+port=3350
+<strong>socket=/tmp/mysql50.sock
+</strong></pre>
+</blockquote>
+<p>Choose another socket and set it up in the second my.cnf file. You may also choose to put the socket files under the data paths or installation paths.</p>
+<h4>Choose distinct data paths</h4>
+<p>Either do not specify them at all, in which case they will reside under the installation path, or, if you want to enjoy another partition, use:</p>
+<blockquote>
+<pre>[mysql]
+port=3350
+socket=/tmp/mysql50.sock
+
+[mysqld]
+port=3350
+socket=/tmp/mysql50.sock
+<strong>datadir=/my_raid_path/mysql50/</strong></pre>
+</blockquote>
+<h4>Create distinct daemons</h4>
+<p>Manually copy support_files/mysql.server to /etc/init.d under distinct names. For example:</p>
+<blockquote>
+<pre>cp /usr/local/mysql50/support_files/mysql.server /etc/init.d/mysqld50
+cp /usr/local/mysql51/support_files/mysql.server /etc/init.d/mysqld51</pre>
+</blockquote>
+<h4>Other settings</h4>
+<p>You may wish to set up a soft link for the client binaries, for example:</p>
+<blockquote>
+<pre>ln -s /usr/local/mysql50/bin/mysql /usr/bin/mysql50</pre>
+</blockquote>
+<p>chkconfig (RedHat and derived) can be used to start/stop daemon as service:</p>
+<blockquote>
+<pre>chkconfig --add mysqld50</pre>
+</blockquote>
+<h4>Conclusion</h4>
+<p>I would prefer MySQL to come bundled in self-contained directory. The tarball is almost that, except it expects socket file to be on /tmp, and by default uses the 3306 port. I would further like to have a dpkg-reconfigure script to setup the above issues.</p>
+<p>Till then, it's manual configuration.</p>

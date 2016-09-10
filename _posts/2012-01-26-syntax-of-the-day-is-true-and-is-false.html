@@ -1,0 +1,86 @@
+---
+title: 'Syntax of the day: IS TRUE and IS FALSE'
+date: 2012-01-26 06:09:23.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- SQL
+- Syntax
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: mys@myname.nl
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>What makes for a <em>true</em> statement?</p>
+<p>We usually test statements using a WHERE clause:</p>
+<blockquote>
+<pre>SELECT * FROM world.City WHERE Population &gt; 1000000</pre>
+</blockquote>
+<p>The <strong>"Population &gt; 1000000"</strong> statement makes for a boolean expression. Using <strong>WHERE</strong> is just one way of evaluating it. One can also test with <a href="http://dev.mysql.com/doc/refman/5.1/en/control-flow-functions.html#function_if"><strong>IF()</strong></a>:</p>
+<blockquote>
+<pre>SET @val := 7;
+SELECT IF(@val &gt; 2, 'Yes', 'No')</pre>
+</blockquote>
+<h4>TRUE and FALSE</h4>
+<p>The two are keywords. They also map for the numerals <strong>1</strong> and <strong>0</strong>, as follows:</p>
+<blockquote>
+<pre>mysql&gt; SELECT TRUE, FALSE;
++------+-------+
+| TRUE | FALSE |
++------+-------+
+|    1 |     0 |
++------+-------+</pre>
+</blockquote>
+<p>Like in the <strong>C</strong> programming language, a nonzero value evaluates to a <em>true</em> value. A zero evaluates to <em>false</em>. A NULL evaluates to... well, NULL. But aside from 3-valued logic, what's important in our case is that it is <em>not true</em>.<!--more--></p>
+<p>However, simple value comparison is incorrect:</p>
+<blockquote>
+<pre>mysql&gt; SELECT @val, @val &gt; 3, @val &gt; 3 = TRUE as result;
++------+----------+--------+
+| @val | @val &gt; 3 | result |
++------+----------+--------+
+|    7 |        1 |      1 |
++------+----------+--------+
+
+mysql&gt; SELECT @val, @val = TRUE as result;
++------+--------+
+| @val | result |
++------+--------+
+|    7 |      0 |
++------+--------+</pre>
+</blockquote>
+<p>To test for the truth value of an expression, the correct syntax is by using <strong>IS TRUE</strong>:</p>
+<blockquote>
+<pre>SELECT @val, @val IS TRUE as result;
++------+--------+
+| @val | result |
++------+--------+
+|    7 |      1 |
++------+--------+</pre>
+</blockquote>
+<p>Likewise, one may use <strong>IS FALSE</strong> to test for falsehood. However, if you wish to note <strong>NULL</strong> as a <em>false</em> value this does not work:</p>
+<blockquote>
+<pre>SELECT @empty, @empty IS TRUE, @empty IS FALSE;
++--------+----------------+-----------------+
+| @empty | @empty IS TRUE | @empty IS FALSE |
++--------+----------------+-----------------+
+| NULL   |              0 |               0 |
++--------+----------------+-----------------+</pre>
+</blockquote>
+<p>If you're unsure why, you should read more on three-valued logic in SQL. To solve the above, simply use <strong>IS NOT TRUE</strong>:</p>
+<blockquote>
+<pre>SELECT @empty, @empty IS NOT TRUE;
++--------+--------------------+
+| @empty | @empty IS NOT TRUE |
++--------+--------------------+
+| NULL   |                  1 |
++--------+--------------------+</pre>
+</blockquote>
+<p>In summary, use <strong>IS TRUE</strong> and <strong>IS NOT TRUE</strong> so as to normalize truth values into a <strong>0</strong>, <strong>1</strong> value range, <strong>C</strong> style, including handling of <strong>NULL</strong>s.</p>

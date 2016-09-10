@@ -1,0 +1,2361 @@
+---
+title: Useful sed / awk liners for MySQL
+date: 2011-07-06 08:41:00.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Configuration
+- InnoDB
+- mysqldump
+- scripts
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+employees<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/,/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/p"</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific table:</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^-- Table structure for table <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+employees<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/,/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/p"</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific table:</li>
+</ul>
+<blockquote>
+departments<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+employees<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/,/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/p"</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific table:</li>
+</ul>
+<blockquote>
+/,/^-- Table structure for table/p"</pre>
+</blockquote>
+<ul>
+<li>Combine the above two statements to slice a specific table from a specific database:</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+employees<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/,/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/p"</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific table:</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^-- Table structure for table <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+employees<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/,/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/p"</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific table:</li>
+</ul>
+<blockquote>
+departments<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+employees<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/,/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/p"</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific table:</li>
+</ul>
+<blockquote>
+/,/^-- Table structure for table/p"</pre>
+</blockquote>
+<ul>
+<li>Combine the above two statements to slice a specific table from a specific database:</li>
+</ul>
+<blockquote>
+employees<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+employees<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/,/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/p"</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific table:</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^-- Table structure for table <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+employees<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/,/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/p"</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific table:</li>
+</ul>
+<blockquote>
+departments<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+employees<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/,/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/p"</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific table:</li>
+</ul>
+<blockquote>
+/,/^-- Table structure for table/p"</pre>
+</blockquote>
+<ul>
+<li>Combine the above two statements to slice a specific table from a specific database:</li>
+</ul>
+<blockquote>
+/,/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+employees<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/,/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/p"</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific table:</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^-- Table structure for table <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+employees<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/,/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/p"</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific table:</li>
+</ul>
+<blockquote>
+departments<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+employees<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/,/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/p"</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific table:</li>
+</ul>
+<blockquote>
+/,/^-- Table structure for table/p"</pre>
+</blockquote>
+<ul>
+<li>Combine the above two statements to slice a specific table from a specific database:</li>
+</ul>
+<blockquote>
+/p" | sed -n "/^-- Table structure for table <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+employees<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/,/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/p"</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific table:</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^-- Table structure for table <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+employees<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/,/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/p"</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific table:</li>
+</ul>
+<blockquote>
+departments<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+employees<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/,/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/p"</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific table:</li>
+</ul>
+<blockquote>
+/,/^-- Table structure for table/p"</pre>
+</blockquote>
+<ul>
+<li>Combine the above two statements to slice a specific table from a specific database:</li>
+</ul>
+<blockquote>
+departments<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+employees<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/,/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/p"</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific table:</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^-- Table structure for table <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+employees<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/,/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/p"</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific table:</li>
+</ul>
+<blockquote>
+departments<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+<pre>sed -n "/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+employees<p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/,/^USE <p>Listing some useful <strong>sed</strong> / <strong>awk</strong> liners to use with MySQL. I use these on occasion.</p>
+<p><strong>sed</strong>, <strong>awk</strong> &amp; <strong>grep</strong> have many overlapping features. Some simple tasks can be performed by either. For example, stripping empty lines can be performed by either:</p>
+<blockquote>
+<pre><strong>grep</strong> '.'
+<strong>awk</strong> '/./'
+<strong>sed</strong> '/./!d'
+<strong>grep</strong> -v '^$'
+<strong>awk</strong> '!/^$/'
+<strong>sed</strong> '/^$/d'</pre>
+</blockquote>
+<p>It's a matter of taste &amp; convention which tool and variation to use. So for any script I suggest, there may be many variations, possibly cleaner, shorter; feel free to comment.</p>
+<h4>mysqldump</h4>
+<p>The output of <em>mysqldump</em> is in particular useful when one wishes to make transformation on data or metadata.<!--more--></p>
+<ul>
+<li>Convert MyISAM tables to InnoDB:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=MyISAM/) ENGINE=InnoDB/'</pre>
+</blockquote>
+<p>I've had several occasion when people said this type of conversion assumes no <strong>'ENGINE=MyISAM'</strong> snippet exists within row data. This is not so. The <strong>'^) ENGINE=MyISAM/'</strong> pattern strictly requires that this text is outside row data. No row data begins with a <strong>')'</strong>. This is a safe conversion.</p>
+<ul>
+<li>Convert InnoDB to InnoDB plugin, compressed tables:</li>
+</ul>
+<blockquote>
+<pre>mysqldump | sed -e 's/^) ENGINE=InnoDB/) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8/'</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific database (assumes existence of the <strong>USE</strong> statement):</li>
+</ul>
+<blockquote>
+/p"</pre>
+</blockquote>
+<ul>
+<li>Slice out a specific table:</li>
+</ul>
+<blockquote>
+/,/^-- Table structure for table/p"</pre>
+</blockquote>
+<ul>
+<li>Combine the above two statements to slice a specific table from a specific database:</li>
+</ul>
+<blockquote>
+/,/^-- Table structure for table/p"</pre>
+</blockquote>
+<p>See also <a rel="bookmark" href="http://code.openark.org/blog/mysql/on-restoring-a-single-table-from-mysqldump">On restoring a single table from mysqldump</a>.</p>
+<h4>my.cnf</h4>
+<p>Some <em>my.cnf</em> files are just a mess to read. Here's some normalizing scripts:</p>
+<ul>
+<li>Strip a <em>my.cnf</em> file from comments, remove blank lines, normalize spaces:</li>
+</ul>
+<blockquote>
+<pre>cat my.sandbox.cnf | sed '/^#/d' | sed '/^$/d' | sed -e 's/[ \t]//g'</pre>
+</blockquote>
+<ul>
+<li>Same, but only present <strong>[mysqld]</strong> section parameters:</li>
+</ul>
+<blockquote>
+<pre>cat my.sandbox.cnf | sed -n '/^\[mysqld\]/,/^\[/p' | sed '/^\[/d' | sed '/^#/d' | sed '/^$/d' | sed -e 's/[ \t]//g'</pre>
+</blockquote>
+<ul>
+<li>Only present <strong>[mysqld]</strong> section parameters, tab delimited (this is useful in exporting and comparing instance parameters):</li>
+</ul>
+<blockquote>
+<pre>cat my.sandbox.cnf | sed -n '/^\[mysqld\]/,/^\[/p' | sed '/^\[/d' | sed '/^#/d' | sed '/^$/d' | sed -e 's/[ \t]//g' | sed -e 's/=/\t/'</pre>
+</blockquote>
+<ul>
+<li>Multi-word parameters in <em>my.cnf</em> can be written with either hyphens or underscores. <strong>innodb_file_per_</strong>table is the same as <strong>innodb-file-per-table</strong>, as well as <strong>innodb_file-per_table</strong>. The following normalizes the parameter names to using underscores only, keeping from changing values (e.g. <strong>'mysql-bin' </strong>parameter value should not change). It isn't pretty!</li>
+</ul>
+<blockquote>
+<pre>cat my.sandbox.cnf | awk -F "=" 'NF &lt; 2 {print} sub("=", "=~placeholder~=") {print}' | awk -F "=~placeholder~=" 'NF &lt; 2 {gsub("-", "_", $0); print} NF==2 {gsub("-", "_", $1); print $1 "=" $2}'</pre>
+</blockquote>
+<div id="_mcePaste" class="mcePaste" style="position: absolute; left: -10000px; top: 0px; width: 1px; height: 1px; overflow: hidden;">grep "."<br />
+awk '/./'<br />
+sed '/./!d'<br />
+grep -v '^$'<br />
+awk '!/^$/'<br />
+sed '/^$/d'</div>

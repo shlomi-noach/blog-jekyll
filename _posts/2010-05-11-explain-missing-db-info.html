@@ -1,0 +1,51 @@
+---
+title: 'EXPLAIN: missing db info'
+date: 2010-05-11 06:57:02.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Analysis
+- Execution plan
+- logs
+- openark kit
+- scripts
+meta:
+  _edit_last: '2'
+  _syntaxhighlighter_encoded: '1'
+  _sg_subscribe-to-comments: baron@xaprb.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I'm further developing a general log hook, which can stream queries from the general log.</p>
+<p>A particular direction I'm taking is to filter queries by their type of actions. For example, the tool (<a href="http://code.google.com/p/openarkkit/source/browse/trunk/openarkkit/src/oak/oak-hook-general-log.py">oak-hook-general-log</a>) can be instructed to only stream out those queries which involve creation of a temporary table; or those which cause for a filesort, or full index scan, etc.</p>
+<p>This is done by evaluating of query execution plans on the fly. I suspect the <a href="http://www.mysql.com/why-mysql/white-papers/mysql_wp_queryanalyzer.php">MySQL query analyzer</a> roughly does the same (as a small part of what it does).</p>
+<p>It's almost nothing one cannot do with sed/awk. However, I bumped into a couple of problems:</p>
+<ol>
+<li>The general log (and the <strong>mysql.general_log table</strong>, in  particular) does not indicate the particular database one is using for the query. Since slow log does indicate this data, I <a href="http://bugs.mysql.com/bug.php?id=52554">filed a bug</a> on this. I currently solve this by crossing connection id with the process list, where the current database is listed. It's shaky, but mostly works.</li>
+<li>Just realized: there's no DB info in the <strong>EXPLAIN</strong> output! It's weird, since I've been EXPLAINing queries for years now. But I've always had the advantage of <em>knowing</em> the schema used: either because I was manually executing the query on a known schema, or <a href="http://www.maatkit.org/doc/mk-query-digest.html">mk-query-digest</a> was kind enough to let me know.</li>
+</ol>
+<p><!--more-->For example, look at the following imaginary query, involving both the <strong>world</strong> and <strong>sakila</strong> databases:</p>
+<blockquote>
+<pre>mysql&gt; use test;
+Database changed
+mysql&gt; EXPLAIN SELECT * FROM world.Country JOIN sakila.city WHERE Country.Capital = city.city_id;
++----+-------------+---------+--------+---------------+---------+---------+-----------------------+------+-------------+
+| id | select_type | table   | type   | possible_keys | key     | key_len | ref                   | rows | Extra       |
++----+-------------+---------+--------+---------------+---------+---------+-----------------------+------+-------------+
+|  1 | SIMPLE      | Country | ALL    | NULL          | NULL    | NULL    | NULL                  |  239 |             |
+|  1 | SIMPLE      | city    | eq_ref | PRIMARY       | PRIMARY | 2       | world.Country.Capital |    1 | Using where |
++----+-------------+---------+--------+---------------+---------+---------+-----------------------+------+-------------+
+2 rows in set (0.00 sec)
+</pre>
+</blockquote>
+<p>The query is imaginary, since the tables don't actually have anything in common. But look at the <strong>EXPLAIN</strong> result: can you tell where <strong>city</strong> came from? <strong>Country</strong> can somehow be parsed from the <strong>ref</strong> column, but no help on <strong>city</strong>.</p>
+<p>Moreover, table aliases show on the <strong>EXPLAIN</strong> plan (which is good), but with no reference to the original table.</p>
+<p>So, is it back to parsing of the SQL query? I'm <span style="text-decoration: line-through;">lazy</span> reluctant to do that. It's error prone, and one needs to implement, or use, a good parser, which also accepts MySQL dialect. Haven't looked into this yet.</p>
+<p>I'm currently at a standstill with regard to automated query execution plan evaluation where database cannot be determined.</p>

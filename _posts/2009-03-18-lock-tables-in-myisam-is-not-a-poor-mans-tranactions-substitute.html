@@ -1,0 +1,31 @@
+---
+title: LOCK TABLES in MyISAM is NOT a poor man's tranactions substitute
+date: 2009-03-18 09:37:56.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- MyISAM
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I get to hear that a lot: that LOCK TABLES with MyISAM is some sort of replacement for transactions; some model we can work with which gives us 'transactional flavor'.</p>
+<p>It isn't, and here's why.</p>
+<p>When we speak of a transactional database/engine, we check out its ACID compliance. Let's break out the ACID and see what LOCK TABLES provides us with:</p>
+<ul>
+<li><strong>A</strong>: Atomicity. MyISAM does not provide atomicity.  If we have LOCK TABLES followed by two statements, then closed by UNLOCK TABLES, then it follows that a crash between the two statements will have the first one applied, the second one not not applied. No mechanism ensures an "all or nothing" behavior.</li>
+<li><strong>C</strong>: Consistency. An error in a statement would roll back the entire transaction in a transactional database. This won't work on MyISAM: every statement is "committed" immediately.</li>
+<li><strong>I</strong>: Isolation. Without LCOK TABLES, working with MyISAM resembles using the <strong>read uncommitted</strong>, or <strong>dirty read</strong> isolation level. With LOCK TABLES - it depends. If you were to use LOCK TABLES ... WRITE on all tables in all statements, you would get the <strong>serializable</strong> isolation level. Actually it would be more than <strong>serializable</strong>. It would be <em>truely serial</em>.</li>
+<li><strong>D</strong>: Durability. Did the INSERT succeed? And did the power went down just after? MyISAM provides not guarantees that the data will be there.</li>
+</ul>
+<p><!--more-->So of all ACID properties, the only thing we could get is a <strong>serializable</strong> isolation level, and that, too, only if we used LOCK TABLES ... WRITE  practically everywhere.</p>
+<p>Where does the notion come from, then?</p>
+<p>There's one thing which LOCK TABLES does help us with: race conditions. It effectively creates a mutex block. The same effect could be achieved when using GET_LOCK() and RELEASE_LOCK(). Perhaps this is the source of confusion.</p>

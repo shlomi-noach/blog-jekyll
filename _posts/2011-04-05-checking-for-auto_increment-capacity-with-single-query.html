@@ -1,0 +1,96 @@
+---
+title: Checking for AUTO_INCREMENT capacity with single query
+date: 2011-04-05 07:36:56.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Analysis
+- INFORMATION_SCHEMA
+- openark kit
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: martin.aleksov@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><em>Darn!</em> This means <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-show-limits.html">oak-show-limits</a> becomes redundant. Am I not supposed to speak about it on my <a href="http://en.oreilly.com/mysql2011/public/schedule/detail/17155">coming presentation</a>? Bad timing!</p>
+<p>You have <strong>AUTO_INCREMENT</strong> columns. How far are you pushing the limits? Are you going to run out of <strong>AUTO_INCREMENT</strong> values soon? Perhaps you wonder whether you should <strong>ALTER</strong> from <strong>INT</strong> to <strong>BIGINT</strong>?</p>
+<p>The answer is all there in <strong>INFORMATION_SCHEMA</strong>. The <strong>TABLES</strong> table shows the current <strong>AUTO_INCREMENT</strong> value per table, and the <strong>COLUMNS</strong> table tells us all about a column's data type.</p>
+<p>It takes some ugly code to deduce the maximum value per column type, what with signed/unsigned and data type, but then its very simple. Here is the query:<!--more--></p>
+<blockquote>
+<pre>SELECT
+  TABLE_SCHEMA,
+  TABLE_NAME,
+  COLUMN_NAME,
+  DATA_TYPE,
+  COLUMN_TYPE,
+  IF(
+    LOCATE('unsigned', COLUMN_TYPE) &gt; 0,
+    1,
+    0
+  ) AS IS_UNSIGNED,
+  (
+    CASE DATA_TYPE
+      WHEN 'tinyint' THEN 255
+      WHEN 'smallint' THEN 65535
+      WHEN 'mediumint' THEN 16777215
+      WHEN 'int' THEN 4294967295
+      WHEN 'bigint' THEN 18446744073709551615
+    END &gt;&gt; IF(LOCATE('unsigned', COLUMN_TYPE) &gt; 0, 0, 1)
+  ) AS MAX_VALUE,
+  AUTO_INCREMENT,
+  AUTO_INCREMENT / (
+    CASE DATA_TYPE
+      WHEN 'tinyint' THEN 255
+      WHEN 'smallint' THEN 65535
+      WHEN 'mediumint' THEN 16777215
+      WHEN 'int' THEN 4294967295
+      WHEN 'bigint' THEN 18446744073709551615
+    END &gt;&gt; IF(LOCATE('unsigned', COLUMN_TYPE) &gt; 0, 0, 1)
+  ) AS AUTO_INCREMENT_RATIO
+FROM
+  INFORMATION_SCHEMA.COLUMNS
+  INNER JOIN INFORMATION_SCHEMA.TABLES USING (TABLE_SCHEMA, TABLE_NAME)
+WHERE
+  TABLE_SCHEMA NOT IN ('mysql', 'INFORMATION_SCHEMA', 'performance_schema')
+  AND EXTRA='auto_increment'
+;
+</pre>
+</blockquote>
+<p>There's one row in the result set for each <strong>AUTO_INCREMENT</strong> column. since at most one <strong>AUTO_INCREMENT</strong> column can exist for any given table, each row also identifies a unique table. Resulting columns are mostly self-explanatory, but here's some details on some of the columns:</p>
+<ul>
+<li><strong>IS_UNSIGNED</strong>: <strong>1</strong> when the column is <strong>UNSIGNED</strong>, <strong>0</strong> otherwise.</li>
+<li><strong>MAX_VALUE</strong>: maximum value that can be contained within column.</li>
+<li><strong>AUTO_INCREMENT</strong>: current <strong>AUTO_INCREMENT</strong> value for table.</li>
+<li><strong>AUTO_INCREMENT_RATIO</strong>: value in the range <strong>[0..1]</strong>, where <strong>1</strong> means "100% full".</li>
+</ul>
+<p>A sample output:</p>
+<blockquote>
+<pre>+--------------+------------+--------------+-----------+-----------------------+-------------+------------+----------------+----------------------+
+| TABLE_SCHEMA | TABLE_NAME | COLUMN_NAME  | DATA_TYPE | COLUMN_TYPE           | IS_UNSIGNED | MAX_VALUE  | AUTO_INCREMENT | AUTO_INCREMENT_RATIO |
++--------------+------------+--------------+-----------+-----------------------+-------------+------------+----------------+----------------------+
+| sakila       | actor      | actor_id     | smallint  | smallint(5) unsigned  |           1 |      65535 |            201 |               0.0031 |
+| sakila       | address    | address_id   | smallint  | smallint(5) unsigned  |           1 |      65535 |            606 |               0.0092 |
+| sakila       | category   | category_id  | tinyint   | tinyint(3) unsigned   |           1 |        255 |             17 |               0.0667 |
+| sakila       | city       | city_id      | smallint  | smallint(5) unsigned  |           1 |      65535 |            601 |               0.0092 |
+| sakila       | country    | country_id   | smallint  | smallint(5) unsigned  |           1 |      65535 |            110 |               0.0017 |
+| sakila       | customer   | customer_id  | smallint  | smallint(5) unsigned  |           1 |      65535 |            600 |               0.0092 |
+| sakila       | film       | film_id      | smallint  | smallint(5) unsigned  |           1 |      65535 |           1001 |               0.0153 |
+| sakila       | inventory  | inventory_id | mediumint | mediumint(8) unsigned |           1 |   16777215 |           4582 |               0.0003 |
+| sakila       | language   | language_id  | tinyint   | tinyint(3) unsigned   |           1 |        255 |              7 |               0.0275 |
+| sakila       | payment    | payment_id   | smallint  | smallint(5) unsigned  |           1 |      65535 |          16050 |               0.2449 |
+| sakila       | rental     | rental_id    | int       | int(11)               |           0 | 2147483647 |          16050 |               0.0000 |
+| sakila       | staff      | staff_id     | tinyint   | tinyint(3) unsigned   |           1 |        255 |              3 |               0.0118 |
+| sakila       | store      | store_id     | tinyint   | tinyint(3) unsigned   |           1 |        255 |              3 |               0.0118 |
++--------------+------------+--------------+-----------+-----------------------+-------------+------------+----------------+----------------------+
+</pre>
+</blockquote>
+<h4>Bonus: free advice on increasing your AUTO_INCREMENT capacity</h4>
+<p>Make it <strong>UNSIGNED</strong>. No, really. Check your definitions now.</p>

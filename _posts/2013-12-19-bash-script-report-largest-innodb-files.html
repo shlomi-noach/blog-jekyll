@@ -1,0 +1,50 @@
+---
+title: 'Bash script: report largest InnoDB files'
+date: 2013-12-19 10:58:17.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Analysis
+- Monitoring
+- scripts
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+  _sg_subscribe-to-comments: art@spilgames.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>The following script will report the largest InnoDB tables under the data directory: schema, table &amp; length in bytes. The tables could be non-partitioned, in which case this is simply the size of the corresponding <strong>.ibd</strong> file, or they can be partitioned, in which case the reported size is the sum of all partition files. It is assumed tables reside in their own tablespace files, i.e. created with <strong>innodb_file_per_table=1</strong>.</p>
+<blockquote>
+<pre>(
+    mysql_datadir=$(grep datadir /etc/my.cnf | cut -d "=" -f 2)
+    cd $mysql_datadir
+    for frm_file in $(find . -name "*.frm")
+    do
+        tbl_file=${frm_file//.frm/.ibd}
+        table_schema=$(echo $frm_file | cut -d "/" -f 2)
+        table_name=$(echo $frm_file | cut -d "/" -f 3 | cut -d "." -f 1)
+        if [ -f $tbl_file ]
+        then
+            # unpartitioned table
+            file_size=$(du -cb $tbl_file 2&gt; /dev/null | tail -n 1) 
+        else
+            # attempt partitioned innodb table
+            tbl_file_partitioned=${frm_file//.frm/#*.ibd}
+            file_size=$(du -cb $tbl_file_partitioned 2&gt; /dev/null | tail -n 1)
+        fi
+        file_size=${file_size//total/}
+        # Replace the below with whatever action you want to take,
+        # for example, push the values into graphite.
+        echo $file_size $table_schema $table_name
+    done
+) | sort -k 1 -nr | head -n 20</pre>
+</blockquote>
+<p>We use this to push table statistics to our graphite service; we keep an eye on table growth (we actually do not limit to top <strong>20</strong> but just monitor them all). File size does not report the real table data size (this can be smaller due to tablespace fragmentation). It does give the correct information if you're concerned about disk space. For table data we also monitor <strong>SHOW TABLE STATUS</strong> / <strong>INFORMATION_SCHEMA.TABLES</strong>, themselves being inaccurate. Gotta go by something.</p>

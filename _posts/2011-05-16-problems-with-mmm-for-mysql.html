@@ -1,0 +1,51 @@
+---
+title: Problems with MMM for MySQL
+date: 2011-05-16 07:31:32.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- High availability
+- Replication
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I recently encountered troubling issues with MMM for MySQL deployments, leading me to the decision to cease using it on production.</p>
+<p>At the very same day I started writing about it, Baron published <a href="http://www.xaprb.com/blog/2011/05/04/whats-wrong-with-mmm/">What's wrong with MMM?</a>. I wish to present the problems I encountered and the reasons I find MMM is flawed. In a period of two weeks, two different deployments presented me with <strong>4</strong> crashes, in <strong>3</strong> different scenarios.</p>
+<p>In all the following scenarios, there is an Active/Passive Master-Master deployment, with one VIP (virtual IP) set for <em>writer</em> role, one VIP set for <em>reader</em> role.</p>
+<h4>Problem #1: unjustified failover, broken replication</h4>
+<p>Unjustified failover must be the common scenario. It's also a scenario I can live with. A few seconds of downtime are OK with me once in a couple of months.</p>
+<p>But on two different installations, a few days apart, I had two seemingly unjustified failovers followed by a troubling issue: replication got broken.<!--more--></p>
+<p>How broken? The previously active master, now turned inactive, suddenly changed master position to a roughly <strong>10</strong> days old position. I don't keep master logs for <strong>10</strong> days, so this led to an immediate replication fail.</p>
+<p>Now, I cannot directly point my finger at MMM, but:</p>
+<ul>
+<li>There was no power failure</li>
+<li>MySQL daemon did not go down</li>
+<li>Replication was just fine both 	ways up to the failover moment</li>
+<li>There was no human intervention on 	this (myself and once more person had access at that time).</li>
+</ul>
+<p>I know the above since I've got it all monitored. So I can't blame it on “replication not synching <strong>master.info</strong> file to disk when power went down”. I confess, this is very suspicious; but, <em>twice</em>, on two different deployments...</p>
+<p>So much for suspicions. Now for the smoking guns.</p>
+<h4>Problem #2: hanging master, no failover</h4>
+<p>The active master went down. Either hardware or software problem caused it to freeze. It was not executing its chores; it became inaccessible by TCP/IP.</p>
+<p>But not just inaccessible: freezing inaccessible. If you were to attempt an SSH connection, the connection would just hang; not refused. The SSH client would not terminate in any reasonable time.</p>
+<p>Ahem, time to do failover?</p>
+<p>Apparently not. Phones start ringing. Emails sent. Time for manual intervention. But, what does the MMM monitor have to say? Nothing. It's frozen. Now, I didn't read the source code; I'm not even competent with PERL; but is <em>seems</em> to me like the monitor daemon works single threaded: it attempts to connect all hosts on the same thread. But, connecting to active master makes for hanging connection, so the entire monitor goes down. Impossible to stop it gracefully, I had to kill it. I had the choice of reconfiguring it to ignore active master, but decided to try starting it up again. I had to do it twice before it started acting sanely again, and realized it was time for failover.</p>
+<p>Why is this bad? Assuming my analysis is correct, this is a major design flaw. You must never do a single threaded monitoring on a multiple-machine deployment.</p>
+<h4>Problem #3: no servers</h4>
+<p>System is down! No access to the database. What does MMM monitor have to say?</p>
+<p>Both machines are HARD_OFFLINE.</p>
+<p>Ahem. Both machines are up and running; they are both replicating each other. They are both accessible. MySQL is accessible.</p>
+<p>But neither machine has any VIP associated with.</p>
+<p>Does it matter whether both agents fail to realize their associated MySQL servers were actually up and running, or whether the monitor fail to receive that information? It does not. MMM should not have removed all VIPs. OK, suppose it believes the two machines are down. So what? Just throw all VIPs on one of the machines. If it's inaccessible, then what's wrong with that? (assuming the previous problem never existed, that is).</p>
+<p>You should always have <em>some</em> machine associated with the VIPs.</p>
+<h4>Temper down</h4>
+<p>None of the above is meant as offense to the creators of MMM, whom I greatly respect. This isn't an easy problem to solve, and it should be obvious there's no 100% guaranteed solution. But, for myself, I will not be using MMM as it stands right now anymore.</p>

@@ -1,0 +1,69 @@
+---
+title: 'MySQL terminology: processes, threads & connections'
+date: 2010-11-03 08:38:03.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Configuration
+- Syntax
+meta:
+  _edit_last: '2'
+  _wp_old_slug: ''
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>There's some confusion in the MySQL terminology for processes, threads &amp; connections, which I will try to resolve. I can't explain the full nature of what processes and threads are; please see Wikipedia <a href="http://en.wikipedia.org/wiki/Process_%28computing%29">[1]</a> <a href="http://en.wikipedia.org/wiki/Thread_%28computer_science%29">[2]</a> for that. But here's some basics with regard to MySQL:</p>
+<ul>
+<li>MySQL server is a single process application.</li>
+<li>It is multithreaded.</li>
+<li>It (usually) acts as a TCP/IP server, accepting connections.</li>
+<li>Each connection gets a dedicated thread.</li>
+<li>These threads are sometimes named processes, and sometimes they're referred to as connections.</li>
+</ul>
+<p>The last part is where confusion arises, so let me discuss again the use of threads and connections in MySQL.</p>
+<p><!--more-->MySQL truly is a single process server. It is multi threaded, in that there are many obvious and less obvious threads comprising the server. Such threads are the InnoDB I/O threads, the DELAYED INSERT thread, etc. Oh, and of course: the connection threads. More on this in a short while.</p>
+<p>On older Linux versions or on glibc-static versions, one may view MySQL as a multi-process server. This is not so: it is merely because threads are mapped to OS processes. For the sake of this discussion this is irrelevant. mysqld is a single process.</p>
+<p>So, every new connection gets its own thread. Assuming no thread pool is in use, every new connection makes for the creation of a new thread, and a disconnect causes for that thread's destruction. Hence, there is a 1-1 mapping between connections and active threads. But then, there <em>is</em> a thread pool, which means there can be threads which are not associated with any connection. So, the number of threads is greater than or equal to the number of connections.</p>
+<p>Here's where terminology gets confusing. When you want to see what's executing on the server, you issue <strong>SHOW PROCESSLIST</strong>:</p>
+<blockquote>
+<pre>mysql&gt; SHOW PROCESSLIST\G
+*************************** 1. row ***************************
+     Id: 4
+   User: root
+   Host: localhost
+     db: mycheckpoint
+Command: Query
+   Time: 0
+  State: NULL
+   Info: SHOW PROCESSLIST
+1 row in set (0.02 sec)</pre>
+</blockquote>
+<p>Perhaps this should have been called SHOW THREADLIST; the acting queries are not really processes.</p>
+<p>OK, so there's process #4 which is executing a query. What's <em>my</em> process id? Turns out I don't have a process id. I do get to have a <strong>CONNECTION_ID()</strong>:</p>
+<blockquote>
+<pre>mysql&gt; SELECT CONNECTION_ID();
++-----------------+
+| CONNECTION_ID() |
++-----------------+
+|               4 |
++-----------------+</pre>
+</blockquote>
+<p>So how many processes or connections are now actually doing anything? We now must check for <strong>'Threads_running'</strong>.</p>
+<blockquote>
+<pre>mysql&gt; SHOW GLOBAL STATUS LIKE 'Threads_running';
++-----------------+-------+
+| Variable_name   | Value |
++-----------------+-------+
+| Threads_running | 1     |
++-----------------+-------+</pre>
+</blockquote>
+<p>And so we have <strong>'Threads_cached'</strong>, <strong>'Threads_connected'</strong> &amp; <strong>'Max_used_connections'</strong>.</p>
+<p>Confusing?</p>
+<p>Most of the time one can simply think of processes, threads and connections as 1-1-1 mapped, and not bother with it.</p>

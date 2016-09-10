@@ -1,0 +1,28 @@
+---
+title: InnoDB is dead. Long live InnoDB!
+date: 2009-09-10 07:04:38.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- InnoDB
+- Performance
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: alaric@geniedb.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I find myself converting more and more customers' databases to InnoDB plugin. In one case, it was a last resort: disk space was running out, and plugin's compression released 75% space; in another, a slow disk made for IO bottlenecks, and plugin's improvements &amp; compression alleviated the problem; in yet another, I used the above to fight replication lag on a stubborn slave.</p>
+<p>In all those case, I needed to justify the move to "new technology". The questions "Is it GA? Is it stable?" are being asked a lot. Well, just a few days ago the MySQL 5.1 distribution started shipping with InnoDB plugin 1.0.4. That gives some weight to the stability question when facing a doubtful customer.</p>
+<p>But I realized <em>that wasn't the point</em>.</p>
+<p><!--more-->Before InnoDB plugin was first announced, little was going on with InnoDB. There were concerns about the slow/nonexistent progress on this important storage engine, essentially the heart of MySQL. Then the plugin was announced, and everyone went happy.</p>
+<p>The point being, since then I only saw (or was exposed to, at least) progress on the plugin. The way I understand it, the plugin is the main (and only?) focus of development. And this is the significant thing to consider: if you're keeping to "old InnoDB", fine - but it won't get you much farther; you're unlikely to see great performance improvements (will 5.4 make a change? An ongoing improvement to InnoDB?). It may eventually become stale.</p>
+<p>Converting to InnoDB plugin means you're working with the technology at focus. It's being tested, benchmarked, forked, improved, talked about, explained. I find this to be a major motive.</p>
+<p>So, long live InnoDB Plugin! (At least till next year, that is, when we may all find ourselves migrating to PBXT)</p>

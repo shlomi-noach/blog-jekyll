@@ -1,0 +1,599 @@
+---
+title: Generic, auto scaling, scaled SQL graphs
+date: 2009-07-27 12:17:16.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Graphs
+- SQL
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>In <a href="http://code.openark.org/blog/mysql/rotating-sql-graphs-horizontally">Rotating SQL graphs horizontally</a>, I have shown how to rotate an ASCII SQL graph into horizontal position.</p>
+<p>I was dissatisfied with some parts of the solution, which I will show now how to fix:</p>
+<ul>
+<li>I had to manually scale the graph values so as to fit nicely into screen.</li>
+<li>I had to rely on hard coded scaling schemes.</li>
+<li>I had to rely on hard coded column names.</li>
+<li>I had no y-axis legend.</li>
+</ul>
+<p>I will now present an SQL query which allows for <em>pluggable queries</em>, which creates self, <em>auto scaling graphs</em>, along with <em>y-axis scales</em>.</p>
+<p>Using deeply nested subqueries, we will evolve a simple SELECT query into an elaborate graph. I will present the many steps required, followed by explanations and sample results. But in the end - the steps are unimportant. I'll present a <em>generic query</em>, into which your own SELECT can be embedded, and which will provide you with the graph.</p>
+<p>We'll use the same example, found in <a href="http://code.openark.org/blog/wp-content/uploads/2009/07/graph2.sql">graph.sql</a>.</p>
+<h4><!--more-->Recap</h4>
+<p>Following is the table data we want to use. Values represent a sinus function.</p>
+<blockquote>
+<pre>SELECT * FROM sample_values;
++-----+----------------------+
+| id  | val                  |
++-----+----------------------+
+|   0 |                    1 |
+|   1 |     1.09983341664683 |
+|   2 |     1.19866933079506 |
+|   3 |     1.29552020666134 |
+|   4 |     1.38941834230865 |
+|   5 |      1.4794255386042 |
+|   6 |     1.56464247339504 |
+|   7 |     1.64421768723769 |
+|   8 |     1.71735609089952 |
+|   9 |     1.78332690962748 |
+...
+| 246 |    0.492103409609378 |
+| 247 |    0.580639083926769 |
+| 248 |    0.673364873895278 |
+| 249 |    0.769354294072604 |
+| 250 |    0.867648249902227 |
+| 251 |    0.967264620669155 |
+| 252 |     1.06720807252547 |
+| 253 |     1.16648000353716 |
+| 254 |     1.26408852138447 |
+| 255 |     1.35905835402217 |
++-----+----------------------+
+256 rows in set (0.00 sec)</pre>
+</blockquote>
+<h4>Step 1: Generic query</h4>
+<p>The only requirements from your query is for it to be generic. It need to provide tow columns:</p>
+<ul>
+<li><strong>ordering_column</strong>: A column which orders the values, e.g. an <strong>AUTO_INCREMENT</strong>, some <strong>TIMESTAMP</strong> etc.</li>
+<li><strong>value_column</strong>: The values themselves.</li>
+</ul>
+<p>In the above example, the generic query will be:</p>
+<blockquote>
+<pre>SELECT id AS <strong>ordering_column</strong>, val AS <strong>value_column</strong> FROM sample_values LIMIT 100</pre>
+</blockquote>
+<p>From this point on, <em>everything else</em> is self-computed. The above is the only thing that needs to change if you wish to provide your own graphs.</p>
+<h4>Problem: hard coded scaling</h4>
+<p>In the following example I generate a vertical graph, but I need to hard-code the scaling:</p>
+<blockquote>
+<pre>SELECT
+  ordering_column,
+  CONCAT(REPEAT('-',(value_column*10+1)-1),'#',REPEAT('-',22-(value_column*10+1))) AS graph_bar
+FROM
+  (
+  SELECT id AS ordering_column, val AS value_column FROM sample_values LIMIT 100
+  ) AS value_select
+;
++-----------------+------------------------+
+| ordering_column | graph_bar              |
++-----------------+------------------------+
+|               0 | ----------#----------- |
+|               1 | -----------#---------- |
+|               2 | ------------#--------- |
+|               3 | -------------#-------- |
+|               4 | --------------#------- |
+|               5 | ---------------#------ |
+|               6 | ----------------#----- |
+|               7 | ----------------#----- |
+|               8 | -----------------#---- |
+|               9 | ------------------#--- |
+|              10 | ------------------#--- |
+|              11 | -------------------#-- |
+|              12 | -------------------#-- |
+|              13 | --------------------#- |
+|              14 | --------------------#- |
+|              15 | --------------------#- |
+|              16 | --------------------#- |</pre>
+</blockquote>
+<h4>Step 2: towards auto-scaling</h4>
+<p>In this step we will find the minimum/maximum values for <strong>value_column</strong>. We will as yet do nothing with these.</p>
+<blockquote>
+<pre>SELECT
+  <strong>@min_value := LEAST(@min_value, value_column) AS min_value</strong>,
+  <strong>@max_value := GREATEST(@max_value, value_column) AS max_value</strong>,
+  ordering_column,
+  CONCAT(REPEAT('-',(value_column*10+1)-1),'#',REPEAT('-',22-(value_column*10+1))) AS graph_bar
+FROM
+  (
+  SELECT id AS ordering_column, val AS value_column FROM sample_values LIMIT 100
+  ) AS value_select,
+  <strong>(SELECT @min_value := 1000000) AS select_min</strong>,
+  <strong>(SELECT @max_value := -1000000) AS select_max</strong>
+;
++---------------------+-----------------+-----------------+------------------------+
+| min_value           | max_value       | ordering_column | graph_bar              |
++---------------------+-----------------+-----------------+------------------------+
+|                   1 |               1 |               0 | ----------#----------- |
+|                   1 | 1.0998334166468 |               1 | -----------#---------- |
+|                   1 | 1.1986693307951 |               2 | ------------#--------- |
+|                   1 | 1.2955202066613 |               3 | -------------#-------- |
+|                   1 | 1.3894183423086 |               4 | --------------#------- |
+|                   1 | 1.4794255386042 |               5 | ---------------#------ |
+|                   1 |  1.564642473395 |               6 | ----------------#----- |
+|                   1 | 1.6442176872377 |               7 | ----------------#----- |
+|                   1 | 1.7173560908995 |               8 | -----------------#---- |
+|                   1 | 1.7833269096275 |               9 | ------------------#--- |
+|                   1 | 1.8414709848079 |              10 | ------------------#--- |
+|                   1 | 1.8912073600614 |              11 | -------------------#-- |
+|                   1 | 1.9320390859672 |              12 | -------------------#-- |
+|                   1 | 1.9635581854172 |              13 | --------------------#- |
+|                   1 | 1.9854497299885 |              14 | --------------------#- |
+|                   1 |  1.997494986604 |              15 | --------------------#- |
+|                   1 | 1.9995736030415 |              16 | --------------------#- |
+|                   1 | 1.9995736030415 |              17 | --------------------#- |
+|                   1 | 1.9995736030415 |              18 | --------------------#- |
+|                   1 | 1.9995736030415 |              19 | -------------------#-- |
+|                   1 | 1.9995736030415 |              20 | -------------------#-- |
+|                   1 | 1.9995736030415 |              21 | -------------------#-- |
+|                   1 | 1.9995736030415 |              22 | ------------------#--- |
+|                   1 | 1.9995736030415 |              23 | -----------------#---- |
+|                   1 | 1.9995736030415 |              24 | -----------------#---- |
+|                   1 | 1.9995736030415 |              25 | ----------------#----- |
+|                   1 | 1.9995736030415 |              26 | ---------------#------ |
+|                   1 | 1.9995736030415 |              27 | --------------#------- |
+|                   1 | 1.9995736030415 |              28 | -------------#-------- |
+|                   1 | 1.9995736030415 |              29 | ------------#--------- |
+|                   1 | 1.9995736030415 |              30 | -----------#---------- |
+|                   1 | 1.9995736030415 |              31 | ----------#----------- |
+|    0.94162585657242 | 1.9995736030415 |              32 | ---------#------------ |
+|    0.84225430585675 | 1.9995736030415 |              33 | --------#------------- |
+|    0.74445889797317 | 1.9995736030415 |              34 | -------#-------------- |
+...</pre>
+</blockquote>
+<p>I'm using ugly values for initial min/max comparison (-100000, 1000000). I'll soon get rid of them, don't worry!</p>
+<h4>Step 3: formalizing min/max values</h4>
+<p>Using another sub-query, we will isolate the minimum/maximum values, and forget about the graph for the moment.</p>
+<blockquote>
+<pre>SELECT
+  <strong>@min_value</strong>,
+  <strong>@max_value</strong>,
+  ordering_column,
+  value_column
+FROM
+  (
+  SELECT
+    @min_value := LEAST(@min_value, value_column) AS min_value,
+    @max_value := GREATEST(@max_value, value_column) AS max_value,
+    ordering_column,
+    value_column
+  FROM
+    (
+    SELECT id AS ordering_column, val AS value_column FROM sample_values LIMIT 100
+    ) AS value_select,
+    (SELECT @min_value := 1000000) AS select_min,
+    (SELECT @max_value := -1000000) AS select_max
+  ) AS select_range
+;
++---------------------+-----------------+-----------------+----------------------+
+| @min_value          | @max_value      | ordering_column | value_column         |
++---------------------+-----------------+-----------------+----------------------+
+| 7.6742435899169e-05 | 1.9995736030415 |               0 |                    1 |
+| 7.6742435899169e-05 | 1.9995736030415 |               1 |     1.09983341664683 |
+| 7.6742435899169e-05 | 1.9995736030415 |               2 |     1.19866933079506 |
+| 7.6742435899169e-05 | 1.9995736030415 |               3 |     1.29552020666134 |
+| 7.6742435899169e-05 | 1.9995736030415 |               4 |     1.38941834230865 |
+| 7.6742435899169e-05 | 1.9995736030415 |               5 |      1.4794255386042 |
+| 7.6742435899169e-05 | 1.9995736030415 |               6 |     1.56464247339504 |
+| 7.6742435899169e-05 | 1.9995736030415 |               7 |     1.64421768723769 |
+| 7.6742435899169e-05 | 1.9995736030415 |               8 |     1.71735609089952 |
+| 7.6742435899169e-05 | 1.9995736030415 |               9 |     1.78332690962748 |
+| 7.6742435899169e-05 | 1.9995736030415 |              10 |      1.8414709848079 |
+| 7.6742435899169e-05 | 1.9995736030415 |              11 |     1.89120736006144 |
+...</pre>
+</blockquote>
+<h4>Step 4: scaling the values</h4>
+<p>In this step I'll do two things:</p>
+<ul>
+<li>Get rid of ugly hard coded values for min/max comparison. I'll use the <strong>IFNULL</strong> function to check for initial conditions.</li>
+<li>Introduce self scaling: I will assume a 21-rows high graph is desired, and will auto-scale the values to fit in. Don't worry, I'll get rid of those values later on!</li>
+</ul>
+<blockquote>
+<pre>SELECT
+  @min_value AS min_value,
+  @max_value AS max_value,
+  value_column,
+  <strong>@scaled_value := CONVERT((value_column-@min_value)*20/(@max_value-@min_value), UNSIGNED) AS scaled_value</strong>,
+  <strong>CONCAT(REPEAT('-',@scaled_value),'#',REPEAT('-',20-@scaled_value)) AS graph_bar</strong>
+FROM
+  (
+  SELECT
+    @min_value := LEAST(<strong>IFNULL(@min_value, value_column)</strong>, value_column) AS min_value,
+    @max_value := GREATEST(<strong>IFNULL(@max_value, value_column)</strong>, value_column) AS max_value,
+    ordering_column,
+    value_column
+  FROM
+    (
+    SELECT id AS ordering_column, val AS value_column FROM sample_values LIMIT 100
+    ) AS value_select,
+    (SELECT @min_value := <strong>NULL</strong>) AS select_min,
+    (SELECT @max_value := <strong>NULL</strong>) AS select_max
+  ) AS select_range
+;
++---------------------+-----------------+----------------------+--------------+-----------------------+
+| min_value           | max_value       | value_column         | scaled_value | graph_bar             |
++---------------------+-----------------+----------------------+--------------+-----------------------+
+| 7.6742435899169e-05 | 1.9995736030415 |                    1 |           10 | ----------#---------- |
+| 7.6742435899169e-05 | 1.9995736030415 |     1.09983341664683 |           11 | -----------#--------- |
+| 7.6742435899169e-05 | 1.9995736030415 |     1.19866933079506 |           12 | ------------#-------- |
+| 7.6742435899169e-05 | 1.9995736030415 |     1.29552020666134 |           13 | -------------#------- |
+| 7.6742435899169e-05 | 1.9995736030415 |     1.38941834230865 |           14 | --------------#------ |
+| 7.6742435899169e-05 | 1.9995736030415 |      1.4794255386042 |           15 | ---------------#----- |
+| 7.6742435899169e-05 | 1.9995736030415 |     1.56464247339504 |           16 | ----------------#---- |
+| 7.6742435899169e-05 | 1.9995736030415 |     1.64421768723769 |           16 | ----------------#---- |
+| 7.6742435899169e-05 | 1.9995736030415 |     1.71735609089952 |           17 | -----------------#--- |
+| 7.6742435899169e-05 | 1.9995736030415 |     1.78332690962748 |           18 | ------------------#-- |
+| 7.6742435899169e-05 | 1.9995736030415 |      1.8414709848079 |           18 | ------------------#-- |
+| 7.6742435899169e-05 | 1.9995736030415 |     1.89120736006144 |           19 | -------------------#- |
+| 7.6742435899169e-05 | 1.9995736030415 |     1.93203908596723 |           19 | -------------------#- |
+| 7.6742435899169e-05 | 1.9995736030415 |     1.96355818541719 |           20 | --------------------# |
+| 7.6742435899169e-05 | 1.9995736030415 |     1.98544972998846 |           20 | --------------------# |
+| 7.6742435899169e-05 | 1.9995736030415 |     1.99749498660405 |           20 | --------------------# |
+| 7.6742435899169e-05 | 1.9995736030415 |      1.9995736030415 |           20 | --------------------# |
+| 7.6742435899169e-05 | 1.9995736030415 |     1.99166481045247 |           20 | --------------------# |
+| 7.6742435899169e-05 | 1.9995736030415 |      1.9738476308782 |           20 | --------------------# |
+| 7.6742435899169e-05 | 1.9995736030415 |     1.94630008768741 |           19 | -------------------#- |
+| 7.6742435899169e-05 | 1.9995736030415 |     1.90929742682568 |           19 | -------------------#- |
+| 7.6742435899169e-05 | 1.9995736030415 |     1.86320936664887 |           19 | -------------------#- |
+| 7.6742435899169e-05 | 1.9995736030415 |     1.80849640381959 |           18 | ------------------#-- |
+| 7.6742435899169e-05 | 1.9995736030415 |     1.74570521217672 |           17 | -----------------#--- |
+| 7.6742435899169e-05 | 1.9995736030415 |     1.67546318055115 |           17 | -----------------#--- |
+| 7.6742435899169e-05 | 1.9995736030415 |     1.59847214410396 |           16 | ----------------#---- |</pre>
+</blockquote>
+<p>I have now re-introduced the graph. Note that while values are in the range 0..2, the SQL query <em>automatically scales</em> to a 1-21 long graph bar.</p>
+<h4>Step 5: rotation</h4>
+<p>Shall we now present this as a horizontal graph?</p>
+<blockquote>
+<pre>SELECT
+  <strong>GROUP_CONCAT(SUBSTRING(graph_bar, tinyint_asc.value, 1) ORDER BY ordering_column SEPARATOR '') AS `result`</strong>
+FROM
+  <strong>tinyint_asc</strong>
+<strong>INNER JOIN</strong> (
+  SELECT
+    ordering_column,
+    @min_value AS min_value,
+    @max_value AS max_value,
+    value_column,
+    @scaled_value := CONVERT((value_column-@min_value)*20/(@max_value-@min_value), UNSIGNED) AS scaled_value,
+    CONCAT(REPEAT('-',@scaled_value),'#',REPEAT('-',20-@scaled_value)) AS graph_bar
+  FROM
+    (
+    SELECT
+      @min_value := LEAST(IFNULL(@min_value, value_column), value_column) AS min_value,
+      @max_value := GREATEST(IFNULL(@max_value, value_column), value_column) AS max_value,
+      ordering_column,
+      value_column
+    FROM
+      (
+      SELECT id AS ordering_column, val AS value_column FROM sample_values LIMIT 100
+      ) AS value_select,
+      (SELECT @min_value := NULL) AS select_min,
+      (SELECT @max_value := NULL) AS select_max
+    ) AS select_range
+  ) AS select_vertical
+WHERE
+  <strong>tinyint_asc.value BETWEEN 1 AND CHAR_LENGTH(graph_bar)</strong>
+<strong>GROUP BY</strong>
+  <strong>tinyint_asc.value</strong>
+<strong>ORDER BY</strong>
+  <strong>tinyint_asc.value DESC;</strong>
+;
++------------------------------------------------------------------------------------------------------+
+| result                                                                                               |
++------------------------------------------------------------------------------------------------------+
+| -------------######---------------------------------------------------------######------------------ |
+| -----------##------###---------------------------------------------------###------###--------------- |
+| ---------##-----------#-------------------------------------------------#------------#-------------- |
+| --------#--------------##---------------------------------------------##--------------##------------ |
+| ------##-----------------#-------------------------------------------#------------------#----------- |
+| -----#--------------------#-----------------------------------------#--------------------#---------- |
+| ----#----------------------#---------------------------------------#----------------------#--------- |
+| ---#------------------------#-------------------------------------#------------------------#-------- |
+| --#--------------------------#-----------------------------------#--------------------------#------- |
+| -#----------------------------#---------------------------------#----------------------------#------ |
+| #------------------------------#-------------------------------#------------------------------#----- |
+| --------------------------------#-----------------------------#--------------------------------#---- |
+| ---------------------------------#---------------------------#----------------------------------#--- |
+| ----------------------------------#-------------------------#------------------------------------#-- |
+| -----------------------------------##----------------------#--------------------------------------#- |
+| -------------------------------------#--------------------#----------------------------------------# |
+| --------------------------------------#-----------------##------------------------------------------ |
+| ---------------------------------------#---------------#-------------------------------------------- |
+| ----------------------------------------##-----------##--------------------------------------------- |
+| ------------------------------------------##-------##----------------------------------------------- |
+| --------------------------------------------#######------------------------------------------------- |
++------------------------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>We now have a <em>self-scaling</em> horizontal graph! Phew!</p>
+<p>But I'm not satisfied yet.</p>
+<h4>Step 6: towards Y-axis scaling</h4>
+<p>We will now introduce min/max Y-scale values into the graph. Note the following:</p>
+<ul>
+<li>I'll be using a counter to count rows.</li>
+<li>I'll rely on previous knowledge of hard-coded 21 rows value (I promise, this will be fixed soon).</li>
+<li>We already have min/max values. Using the two, I'll also provide the mid-value.</li>
+<li>I chose to use <strong>ROUND()</strong>. This may not be the best idea when your values are very small fractions. Remove the<strong> ROUND()</strong> if it does not fit in with your values.</li>
+</ul>
+<blockquote>
+<pre>SELECT
+  <strong>@row_number := @row_number+1,</strong>
+  <strong>CASE @row_number</strong>
+    <strong>WHEN 1  THEN ROUND(max_value)</strong>
+    <strong>WHEN 11 THEN ROUND((max_value+min_value)/2)</strong>
+    <strong>WHEN 21 THEN ROUND(min_value)</strong>
+    <strong>ELSE ''</strong>
+  <strong>END AS y_scale</strong>,
+  horizontal_bar
+FROM
+  <strong>(SELECT @row_number := 0) AS select_row</strong>
+  INNER JOIN
+  (
+  SELECT
+    min_value,
+    max_value,
+    value_column,
+    GROUP_CONCAT(SUBSTRING(graph_bar, tinyint_asc.value, 1) ORDER BY ordering_column SEPARATOR '') AS horizontal_bar
+  FROM
+    (SELECT @row_number := 0) AS select_row,
+    tinyint_asc
+  INNER JOIN (
+    SELECT
+      ordering_column,
+      @min_value AS min_value,
+      @max_value AS max_value,
+      value_column,
+      @scaled_value := CONVERT((value_column-@min_value)*20/(@max_value-@min_value), UNSIGNED) AS scaled_value,
+      CONCAT(REPEAT('-',@scaled_value),'#',REPEAT('-',20-@scaled_value)) AS graph_bar
+    FROM
+      (
+      SELECT
+        @min_value := LEAST(IFNULL(@min_value, value_column), value_column) AS min_value,
+        @max_value := GREATEST(IFNULL(@max_value, value_column), value_column) AS max_value,
+        ordering_column,
+        value_column
+      FROM
+        (
+        SELECT id AS ordering_column, val AS value_column FROM sample_values LIMIT 100
+        ) AS value_select,
+        (SELECT @min_value := NULL) AS select_min,
+        (SELECT @max_value := NULL) AS select_max
+      ) AS select_range
+    ) AS select_vertical
+  WHERE
+    tinyint_asc.value BETWEEN 1 AND CHAR_LENGTH(graph_bar)
+  GROUP BY
+    tinyint_asc.value
+  ORDER BY
+    tinyint_asc.value DESC
+  ) AS select_horizontal
+;+------------------------------+---------+------------------------------------------------------------------------------------------------------+
+| @row_number := @row_number+1 | y_scale | horizontal_bar                                                                                       |
++------------------------------+---------+------------------------------------------------------------------------------------------------------+
+|                            1 | 2       | -------------######---------------------------------------------------------######------------------ |
+|                            2 |         | -----------##------###---------------------------------------------------###------###--------------- |
+|                            3 |         | ---------##-----------#-------------------------------------------------#------------#-------------- |
+|                            4 |         | --------#--------------##---------------------------------------------##--------------##------------ |
+|                            5 |         | ------##-----------------#-------------------------------------------#------------------#----------- |
+|                            6 |         | -----#--------------------#-----------------------------------------#--------------------#---------- |
+|                            7 |         | ----#----------------------#---------------------------------------#----------------------#--------- |
+|                            8 |         | ---#------------------------#-------------------------------------#------------------------#-------- |
+|                            9 |         | --#--------------------------#-----------------------------------#--------------------------#------- |
+|                           10 |         | -#----------------------------#---------------------------------#----------------------------#------ |
+|                           11 | 1       | #------------------------------#-------------------------------#------------------------------#----- |
+|                           12 |         | --------------------------------#-----------------------------#--------------------------------#---- |
+|                           13 |         | ---------------------------------#---------------------------#----------------------------------#--- |
+|                           14 |         | ----------------------------------#-------------------------#------------------------------------#-- |
+|                           15 |         | -----------------------------------##----------------------#--------------------------------------#- |
+|                           16 |         | -------------------------------------#--------------------#----------------------------------------# |
+|                           17 |         | --------------------------------------#-----------------##------------------------------------------ |
+|                           18 |         | ---------------------------------------#---------------#-------------------------------------------- |
+|                           19 |         | ----------------------------------------##-----------##--------------------------------------------- |
+|                           20 |         | ------------------------------------------##-------##----------------------------------------------- |
+|                           21 | 0       | --------------------------------------------#######------------------------------------------------- |
++------------------------------+---------+------------------------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>Well, now we're getting somewhere!</p>
+<h4>Step 7: cleaning up</h4>
+<p>In this step I'll do the following:</p>
+<ul>
+<li>Using yet another subquery (how many do we have already?), I'll get rid of the counter column.</li>
+<li>I'll remove the 21-rows hard coding. There will only be one session variable set to this value; All calculations will scale themselves according to that value.</li>
+</ul>
+<blockquote>
+<pre>SELECT
+  y_scale,
+  horizontal_bar
+  FROM
+  (
+  SELECT
+    @row_number := @row_number+1,
+    CASE @row_number
+      WHEN 1  THEN ROUND(max_value)
+      WHEN <strong>(@graph_rows+1)/2</strong> THEN ROUND((max_value+min_value)/2)
+      WHEN <strong>@graph_rows</strong> THEN ROUND(min_value)
+      ELSE ''
+    END AS y_scale,
+    horizontal_bar
+  FROM
+    (SELECT @row_number := 0) AS select_row
+    INNER JOIN
+    (
+    SELECT
+      min_value,
+      max_value,
+      value_column,
+      GROUP_CONCAT(SUBSTRING(graph_bar, tinyint_asc.value, 1) ORDER BY ordering_column SEPARATOR '') AS horizontal_bar
+    FROM
+      (SELECT @row_number := 0) AS select_row,
+      tinyint_asc
+    INNER JOIN (
+      SELECT
+        ordering_column,
+        @min_value AS min_value,
+        @max_value AS max_value,
+        value_column,
+        @scaled_value := CONVERT((value_column-@min_value)*(@graph_rows-1)/(@max_value-@min_value), UNSIGNED) AS scaled_value,
+        CONCAT(REPEAT('-',@scaled_value),'#',REPEAT('-',(@graph_rows-1)-@scaled_value)) AS graph_bar
+      FROM
+        (
+        SELECT
+          @min_value := LEAST(IFNULL(@min_value, value_column), value_column) AS min_value,
+          @max_value := GREATEST(IFNULL(@max_value, value_column), value_column) AS max_value,
+          ordering_column,
+          value_column
+        FROM
+          (
+            SELECT id AS ordering_column, val AS value_column
+            FROM sample_values LIMIT 100
+          ) AS value_select,
+          (SELECT @min_value := NULL) AS select_min,
+          (SELECT @max_value := NULL) AS select_max,
+          <strong>(SELECT @graph_rows := 21) AS select_graph_rows</strong>
+        ) AS select_range
+      ) AS select_vertical
+    WHERE
+      tinyint_asc.value BETWEEN 1 AND CHAR_LENGTH(graph_bar)
+    GROUP BY
+      tinyint_asc.value
+    ORDER BY
+      tinyint_asc.value DESC
+    ) AS select_horizontal
+  ) AS select_horizontal_untitled
+;
++---------+------------------------------------------------------------------------------------------------------+
+| y_scale | horizontal_bar                                                                                       |
++---------+------------------------------------------------------------------------------------------------------+
+| 2       | -------------######---------------------------------------------------------######------------------ |
+|         | -----------##------###---------------------------------------------------###------###--------------- |
+|         | ---------##-----------#-------------------------------------------------#------------#-------------- |
+|         | --------#--------------##---------------------------------------------##--------------##------------ |
+|         | ------##-----------------#-------------------------------------------#------------------#----------- |
+|         | -----#--------------------#-----------------------------------------#--------------------#---------- |
+|         | ----#----------------------#---------------------------------------#----------------------#--------- |
+|         | ---#------------------------#-------------------------------------#------------------------#-------- |
+|         | --#--------------------------#-----------------------------------#--------------------------#------- |
+|         | -#----------------------------#---------------------------------#----------------------------#------ |
+| 1       | #------------------------------#-------------------------------#------------------------------#----- |
+|         | --------------------------------#-----------------------------#--------------------------------#---- |
+|         | ---------------------------------#---------------------------#----------------------------------#--- |
+|         | ----------------------------------#-------------------------#------------------------------------#-- |
+|         | -----------------------------------##----------------------#--------------------------------------#- |
+|         | -------------------------------------#--------------------#----------------------------------------# |
+|         | --------------------------------------#-----------------##------------------------------------------ |
+|         | ---------------------------------------#---------------#-------------------------------------------- |
+|         | ----------------------------------------##-----------##--------------------------------------------- |
+|         | ------------------------------------------##-------##----------------------------------------------- |
+| 0       | --------------------------------------------#######------------------------------------------------- |
++---------+------------------------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>And that's as far as we go in our example.</p>
+<h4>Proof of concept</h4>
+<p>Just to prove my point, I'll present another SQL graph. This time the function is <strong>x*sin(x)</strong>, which has a nice curve.</p>
+<ul>
+<li>Take a look at the <strong>bold text</strong> in the query. This is <em>the only thing</em> that changes. Replace this with your generic query, and you're done!</li>
+<li>I've also set the number of rows to be <strong>11</strong>. Also find bold text in query. Change this to scale the graph!</li>
+</ul>
+<p>Note how the graph <em>automatically</em> scales to the range [-17,16].</p>
+<blockquote>
+<pre>SELECT
+  y_scale,
+  horizontal_bar
+  FROM
+  (
+  SELECT
+    @row_number := @row_number+1,
+    CASE @row_number
+      WHEN 1  THEN ROUND(max_value)
+      WHEN (@graph_rows+1)/2 THEN ROUND((max_value+min_value)/2)
+      WHEN @graph_rows THEN ROUND(min_value)
+      ELSE ''
+    END AS y_scale,
+    horizontal_bar
+  FROM
+    (SELECT @row_number := 0) AS select_row
+    INNER JOIN
+    (
+    SELECT
+      min_value,
+      max_value,
+      value_column,
+      GROUP_CONCAT(SUBSTRING(graph_bar, tinyint_asc.value, 1) ORDER BY ordering_column SEPARATOR '') AS horizontal_bar
+    FROM
+      (SELECT @row_number := 0) AS select_row,
+      tinyint_asc
+    INNER JOIN (
+      SELECT
+        ordering_column,
+        @min_value AS min_value,
+        @max_value AS max_value,
+        value_column,
+        @scaled_value := CONVERT((value_column-@min_value)*(@graph_rows-1)/(@max_value-@min_value), UNSIGNED) AS scaled_value,
+        CONCAT(REPEAT('-',@scaled_value),'#',REPEAT('-',(@graph_rows-1)-@scaled_value)) AS graph_bar
+      FROM
+        (
+        SELECT
+          @min_value := LEAST(IFNULL(@min_value, value_column), value_column) AS min_value,
+          @max_value := GREATEST(IFNULL(@max_value, value_column), value_column) AS max_value,
+          ordering_column,
+          value_column
+        FROM
+          (
+            <strong>SELECT id AS ordering_column, SIN(id/5)*id/5 AS value_column FROM sample_values LIMIT 100</strong>
+          ) AS value_select,
+          (SELECT @min_value := NULL) AS select_min,
+          (SELECT @max_value := NULL) AS select_max,
+          (SELECT @graph_rows := <strong>11</strong>) AS select_graph_rows
+        ) AS select_range
+      ) AS select_vertical
+    WHERE
+      tinyint_asc.value BETWEEN 1 AND CHAR_LENGTH(graph_bar)
+    GROUP BY
+      tinyint_asc.value
+    ORDER BY
+      tinyint_asc.value DESC
+    ) AS select_horizontal
+  ) AS select_horizontal_untitled
+;
++---------+------------------------------------------------------------------------------------------------------+
+| y_scale | horizontal_bar                                                                                       |
++---------+------------------------------------------------------------------------------------------------------+
+| 16      | ---------------------------------------------------------------------------------------------------# |
+|         | --------------------------------------------------------------------#######-----------------------#- |
+|         | ---------------------------------------##-------------------------##-------#---------------------#-- |
+|         | -----------------------------------####--####--------------------#----------##------------------#--- |
+|         | ------########-------------------##----------##-----------------#-------------#----------------#---- |
+| -1      | ######--------#####-----------###--------------##-------------##---------------#--------------#----- |
+|         | -------------------###########-------------------##----------#------------------#------------#------ |
+|         | ---------------------------------------------------##------##--------------------#----------#------- |
+|         | -----------------------------------------------------######-----------------------#--------#-------- |
+|         | -----------------------------------------------------------------------------------##----##--------- |
+| -17     | -------------------------------------------------------------------------------------####----------- |
++---------+------------------------------------------------------------------------------------------------------</pre>
+</blockquote>
+<h4>Conclusion</h4>
+<p>There goes my Saturday afternoon nap.</p>
+<p>To be done:</p>
+<ul>
+<li>Present X-axis values.</li>
+<li>Do better work with value precision.</li>
+<li>Present proper titles. This is easy with session variables. I'll make a draft.</li>
+</ul>
+<p>To be continued... (and concluded, I don't mean to drag this much longer).</p>
+<p>[Continues on: <a href="http://code.openark.org/blog/mysql/auto-scaling-scaled-sql-graphs-concluded">Auto scaling, scaled SQL graphs concluded</a>]</p>

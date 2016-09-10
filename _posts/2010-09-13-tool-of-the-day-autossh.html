@@ -1,0 +1,23 @@
+---
+title: 'Tool of the day: autossh'
+date: 2010-09-13 09:42:25.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Security
+meta:
+  _edit_last: '2'
+  _wp_old_slug: ''
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Maybe I'm like an old replication server, lagging way behind, but a couple of weeks ago I found <em><a href="http://www.harding.motd.ca/autossh/">autossh</a></em>, which is a wrapper around <em>ssh</em>, that keeps reconnecting the session if it breaks.</p>
+<p>With public key encryption, I am now able to work out pretty reliable SSH tunneling among servers, which doesn't break. It seems to be working well during these couple of weeks. And it's in my favorite distro's repository :)</p>
+<p>I suppose use cases are as many as those for SSH or SSH tunneling, and I'm putting it to an interesting use. But I suppose the most obvious use in the MySQL world would be to encrypt client connections over unsafe network, or make the network more reliable, for that matter. Yes, there's SSL connections, but opening your <strong>3306</strong> port on your firewall? Too risky for my taste.</p>

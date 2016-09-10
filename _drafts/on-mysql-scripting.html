@@ -1,0 +1,43 @@
+---
+layout: post
+title: On MySQL scripting
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>How easy is to write scripts for MySQL? There are several possible common layers where you can write your script, none of which makes perfect sense.</p>
+<p>As examples of scripts I would include:</p>
+<ul>
+<li>My nightly cleanup job which purges rows from some event table</li>
+<li>A one time gig to create and populate a new table</li>
+<li>A necessary <strong>UPDATE</strong> on a large table, denormalizing data from other tables</li>
+<li>An analysis script based on querying table data, generating some simple report</li>
+<li>etc.</li>
+</ul>
+<p>Far client</p>
+<p>I guess the most common way to do it is to go ahead and write a Perl script. Or Python, or PHP, whatever. There are toolkits based on this approach. And why not?</p>
+<p>You get the benefit of a well established programming language, a proven interface to MySQL, easy to find developers... All very true.</p>
+<p>I find some problems in this approach:</p>
+<ul>
+<li>You rely on external dependencies:</li>
+</ul>
+<ul>
+<li>You must have Perl/Python/PHP, perhaps of certain version (ah, those old installations where you can only get up to Python <strong>2.3</strong>!).</li>
+<li>You must have the MySQL driver installed (<strong>libdbd-mysql-perl</strong>, <strong>python-mysqldb</strong>, etc.). I take notice that many users of my toolkits have trouble with that.</li>
+<li>You may need additional packages (<strong>Term::ReadKey</strong> etc.), so <strong>CPAN</strong> or <strong>yum</strong> or <strong>apt-get</strong> missing packages</li>
+<li>You store those scripts somewhere outside your database. To make a finer point, sometimes those scripts make for an integral part of your database and code.</li>
+<li>You schedule those scripts using yet another tool, e.g. <em>crontab</em>.</li>
+</ul>
+<p>What's the trouble? Though everything can lie in your code repository, it is too much of a hassle to gather or deploy them all. A sophisticated deployment tool</p>

@@ -1,0 +1,30 @@
+---
+layout: post
+title: MySQL, DNS and mimicking Roles
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags:
+- Security
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I've encountered a couple of cases where a misconfigured local DNS caused MySQL to hang connecting clients. That is, the time reuqired for setting up a connection to MySQL was taking minutes.</p>
+<p>The reason? MySQL was attempting to match the connection to the <strong>mysql.user</strong> table, where the privileges were listed by host names. For example, the following provilege:</p>
+<blockquote>
+<pre>GRANT USAGE ON *.* TO 'webuser'@'web1.example.com'</pre>
+</blockquote>
+<p>is just fine. Thing is, when the client connects to MySQL, the server needs to match the client's IP with the listed hosts in <strong>mysql.user</strong>. It needs to resolve <strong>web1.example.com</strong> to realize it's the same as the connecting IP.</p>
+<p>I'm all for listing host names in <strong>mysql.user</strong>: listing IP addresses is not as intuitive. But the fact that MySQL relies on the DNS working properly, is troubling. Since I'm not a DNS expert, nor an expert in Switch configuration, I rely on a very easy and well working trick: the hosts file.</p>
+<p>On Linux, MySQL will first try to resolve the domain name using <strong>/etc/hosts</strong>. By listing all machines which need to connect to MySQL in <strong>/etc/hosts</strong>, we make an instantaneous resolving solution.</p>
+<p>Roles</p>
+<p>Moreover, we can further utilize the naming on /etc/hosts</p>

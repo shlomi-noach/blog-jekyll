@@ -1,0 +1,38 @@
+---
+title: 'Further experiments with MySQL 5.6.7-RC: submit your bugs'
+date: 2012-10-22 07:52:40.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- New Features
+- Opinions
+meta:
+  _edit_last: '2'
+  _oembed_55835302a9154b1a33fa9bef669291f7: '<iframe src="http://www.slideshare.net/slideshow/embed_code/28163348"
+    width="427" height="356" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"
+    style="border:1px solid #CCC; border-width:1px 1px 0; margin-bottom:5px; max-width:
+    100%;" allowfullscreen> </iframe> <div style="margin-bottom:5px"> <strong> <a
+    href="https://www.slideshare.net/shlominoach/commonschema-22" title="common_schema
+    2.2 DBA&#x27;s framework for MySQL" target="_blank">common_schema 2.2 DBA&#x27;s
+    framework for MySQL</a> </strong> from <strong><a href="http://www.slideshare.net/shlominoach"
+    target="_blank">Shlomi Noach</a></strong> </div>'
+  _sg_subscribe-to-comments: justin.swanhart@percona.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Here's the background: I'm testing many features of MySQL <strong>5.6.7-RC</strong> due to two reasons:</p>
+<ul>
+<li>I'm verifying my <a href="http://code.google.com/p/common-schema">common_schema</a> installs and works properly on <strong>5.6</strong></li>
+<li>I promised I would present a <strong>45</strong> minute <em>"what's new in MySQL 5.6"</em> seminar in the upcoming <a href="http://www.oracleweek.com/">OracleWeek (Israel)</a></li>
+</ul>
+<p>In the case of <em>common_schema</em>, I have managed to find one <a href="http://bugs.mysql.com/67313">weird bug</a> (a behavior regression from <strong>5.5</strong>) and one <a href="http://bugs.mysql.com/67315">server-crashing bug</a>, by merely running the project's<strong></strong> tests, known to pass on <strong>5.1</strong> and <strong>5.5</strong> (and not utilizing any <strong>5.6</strong> features).</p>
+<p>In the case of my presentation, I'm getting acquainted with new syntax and functionality, and am getting <a href="http://code.openark.org/blog/mysql/thoughts-on-mysql-5-6-new-replication-features">unexpected results</a>. I've hit replication issues and <a href="http://code.openark.org/blog/mysql/innodb-ddl-kudos-to-quick-responders-on-bugs-mysql-com">locking issues</a> in online DDL.</p>
+<p>If I am able to find these bugs within a few hours of experimenting &amp; testing, then it is safe to assume we can extrapolate to many more bugs. This is not surprising; <strong>5.6</strong> boasts some <strong>120</strong> new features (I didn't actually count them). Of course they would introduce new bugs.</p>
+<p>The moral is this: if you're interested in <strong>5.6</strong> as I am - and there's a lot to wait for - please consider experimenting with it, and report as many bugs to <a href="http://bugs.mysql.com/">bugs.mysql.com</a> as possible. Reporting bugs is the user's authoritative way of improving an open source product and pushing towards a stable release. Provide your feedback today!</p>

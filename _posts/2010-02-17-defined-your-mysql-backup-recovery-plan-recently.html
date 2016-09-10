@@ -1,0 +1,35 @@
+---
+title: Defined your MySQL backup & recovery plan recently?
+date: 2010-02-17 11:52:00.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Backup
+- Replication
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Following up on <a href="http://ronaldbradford.com/">Ronald Bradford</a>'s <a href="http://ronaldbradford.com/blog/checked-your-mysql-recovery-process-recently-2010-02-15/">Checked your MySQL recovery process recently?</a> post, I wish to add a <em>prequel</em>.</p>
+<p>To see whether you have a clear definition of your backup requirements, ask yourself these questions:</p>
+<ul>
+<li>Is there a backup/restore plan?</li>
+<li>Is there a written backup/restore plan?</li>
+<li>How fast do you need to recover a backup? What's the longest downtime you will allow from the point of failure to the point of restored, functional database?</li>
+<li>How much data are you willing to lose in case of crash? A second's worth of data? An hour's worth? A day's worth? None?</li>
+<li>Are you willing to allow that the database becomes read-only when taking the backup? Or completely down?</li>
+<li>Are you willing to take the risk that the backup will not be 100% compatible with the data? (Backing up your slave holds this risk)</li>
+<li>Is your manager willing to all that you are willing?</li>
+<li>Is the backup plan known to the management team, or do they just know that "<em>the database has backups</em>"?</li>
+</ul>
+<p>The above checklist is by no means complete.</p>
+<p>I have a vivid memory of a very good sys admin who failed on the last two points. He had some very sour days when recovering a lost file from tape took much longer than was affordable to some contract.</p>
+<p>I found that technical people rarely share the same views as marketing/management. Make sure to consult with the management team; they will have a clearer view on what the company can afford and what it cannot afford.</p>

@@ -1,0 +1,108 @@
+---
+title: 'Converting an OLAP database to TokuDB, part 2: the process of migration'
+date: 2013-09-09 05:29:30.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- Percona Toolkit
+- TokuDB
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This is a second in a series of posts describing our experience in migrating a large DWH server to TokuDB. This post discusses the process of migration itself.</p>
+<p>As a quick recap (<a href="http://code.openark.org/blog/mysql/converting-an-olap-database-to-tokudb-part-1">read part 1 here</a>), we have a <strong>2TB</strong> compressed InnoDB (<strong>4TB</strong> uncompressed) based DWH server. Space is running low, and we're looking at TokuDB for answers. Early experiments show that TokuDB's compression could make a good impact on disk space usage. I'm still not discussing performance -- keeping this till later post.</p>
+<p>Those with weak hearts can skip right to the end, where we finally have a complete conversion. You can also peek at the very end to find out how much <strong>4TB</strong> uncompressed InnoDB data is worth in TokuDB. But you might want to read through. The process was not smooth, and not as expected (it's a war story thing). Throughout the migration we got a lot of insight on TokuDB's behaviour, limitations, conveniences, inconveniences and more.</p>
+<p>Disclosure: I have no personal interests and no company interests; throughout the process we were in touch with Tokutek engineers, getting free, friendly &amp; professional advice and providing with input of our own. Most of this content has already been presented to Tokutek throughout the process. TokuDB is open source and free to use, though commercial license is also available.</p>
+<h4>How do you convert 4TB worth of data to TokuDB?</h4>
+<p>Obviously one table at a time. But we had another restriction: you may recall I took a live slave for the migration process. And we wanted to end the process with a live slave. So the restriction was: keep it replicating!</p>
+<p>How easy would that be? Based on our initial tests, I extrapolated over <strong>20</strong> days of conversion from InnoDB to TokuDB. Even with one table at a time, our largest table was expected to convert in some <strong>12-14</strong> days. Can we retain <strong>14</strong> days of binary logs on a server already running low on disk space? If only I knew then what I know today :)<!--more--></p>
+<p>I recently claimed (as I recall it was in one of the <a href="https://twitter.com/DBHangops">@DBHangops</a> meetings) I was <em>done</em> with <strong>ALTER TABLE</strong> statements. I would not touch them again: with <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-online-alter-table.html">oak-online-alter-table</a> and <a href="http://www.percona.com/doc/percona-toolkit/2.2/pt-online-schema-change.html">pt-online-schema-change</a> I can get better control of my server (and my sleep). Can I use an online migration tool?</p>
+<p>Fortunately we are using Statement Based Replication on this MySQL topology. This makes for good news, because triggers are activated on slave as it is replicating its master's statements. You can run an online migration tool <em>on the slave</em>, while it <em>keeps replicating</em>. This is so cool. I don't need to worry too much about binary logs and relay logs. I can take my time with conversion...</p>
+<p>I chose to use <em>pt-online-schema-change</em>. Why choose Percona's tool over my own? Percona's tool supports the <strong>--check-slave-lag</strong> option, which throttles the operation should the server's slaves start lagging. Wait, I'm running the tool <em>on a slave</em>, so what's the point? Well, you can cheat and provide <strong>--check-slave-lag=h=127.0.0.1</strong> so that the tool assumes the localhost is the slave (while it is actually the server being altered); which means it will check <em>on its own slave lag</em> to do the throttling. This works well and is fun to watch.</p>
+<h4>Starting the migration</h4>
+<p>Some of our tables had the <strong>KEY_BLOCK_SIZE</strong> explicitly declared. As I mentioned in previous post, for TokuDB &lt;= <strong>7.0.4</strong> this causes problems by bloating the indexes instead of compressing them (and Tim Callaghan of Tokutek notes this is fixed in next version). <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/sql_alter_table_tokudb.html">common_schema to the rescue</a>: the <strong>ALTER</strong> statement has to include a <strong>DROP</strong> and recreate of all indexes.</p>
+<p>This is the place to mention our tables are heavily partitioned. This will play a crucial role in the next events. We use RANGE partitions over dates. We have a monthly partitioning scheme on all partitioned tables. And we have partitions to spare: starting a few years back from today (depending on the table) and made until <strong>Dec. 2025</strong> -- making for some <strong>170 - 200</strong> partitions per table.</p>
+<p>Starting from smallest table (a few rows) and increasing in size, we migrated tables one by one to TokuDB.</p>
+<h4>Party crashers</h4>
+<p>A few party crashers were made obvious right from the start (they are all being addressed by Tokutek as far as I know):</p>
+<ol>
+<li><strong>@@datadir</strong>: all TokuDB files reside in @@datadir. You get a pile of files in the same directory where you would find your ib_logfile*, master.info, etc. files.</li>
+<li>File names: you do not get file names after table names. Instead, you get cryptic names like <strong>./_myschema_sql_7fda_8e73_*</strong>.You would suspect that there is some uniqueness to the <strong>7fda_8e73</strong> thing; that it relates to a single table -- it doesn't. Same table get different file names, different tables get similar names -- there's not one regular expression to differentiate tables -- and I do know my regexes.</li>
+<li><strong>INFORMATION_SCHEMA.Tokudb_file_map</strong> doesn't make it much easier, either. It is meant to tell you about tables to file names mappings. But the tables are not laid out in easy TABLE_SCHEMA, TABLE_NAME columns, but are denormalized themselves, and can be vague and almost ambiguous, to some extent. <em>common_schema</em> to the rescue, its rewritten <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/tokudb_file_map.html">tokudb_file_map</a> maps your tables to aggregated list of file names, along with shell commands you would typically want to issue.</li>
+</ol>
+<p>But let me emphasize these issues, before you think I'm just spoiled. TokuDB creates multiple files per table: other than the standard <strong>.frm</strong> file, you get one "main" file for each table, and then another file for each index. So it's quite possible your table will consist of some <strong>7</strong> files.</p>
+<p>Well, as you may know, MySQL's implementation of partitioning is that each partition is made of its own standalone table, hidden from the user (but easily viewable on the filesystem). Now this means a single table with <strong>170</strong> partitions and a few indexes can make for over <strong>1,000</strong> files. That's right - for a single table. We have a few dozens like this.</p>
+<p>Now consider:</p>
+<ul>
+<li>You may need to accommodate thousands or tens of thousands of files in your <strong>@@datadir</strong></li>
+<li>None of which it is easy for you to know who to relate to.</li>
+</ul>
+<p>So <em>common_schema</em>'s <strong>tokudb_file_map</strong> gives you this crazy list of <strong>1,000</strong> files which make up your single table. This isn't too friendly, either.</p>
+<p>I think Tokutek are missing here on one of the greatest advantages they bring to the table. The one thing a DBA want to know when looking at her MySQL's filesystem is: how much disk space is used by a schema/table. And this information becomes hard to get. Again, <em>common_schema</em>'s view will provide you with the script to do it (<strong>du -c ... | tail -1</strong>) -- but you would have to go into MySQL, out to shell... Bother.</p>
+<h4>Crashes and failures</h4>
+<p>The above did not stop at inconveniences. Soon enough, and while still altering my smaller tables, I would get failures from <strong>pt-online-schema-change</strong>. Checking manually to eliminate the possibility of a bug in Percona's tool, I got:</p>
+<blockquote>
+<pre>mysql&gt; alter table my_schema.my_table engine=tokudb row_format=tokudb_small;
+ERROR 1016 (HY000): Can't open file: './my_schema/#sql-80d_2.frm' (errno: 24)</pre>
+</blockquote>
+<p>This would happen again and again and again. What's the deal here?</p>
+<p>Let me cut short on this one: we got over <strong>20,000</strong> files in <strong>@@datadir</strong>. And MySQL was unable to open any more files. Mind you, we had:</p>
+<ul>
+<li><strong>open_files_limit</strong>=30000</li>
+<li><strong>open_table_cache</strong>=16000</li>
+<li><strong>table_definition_cache</strong>=3000</li>
+</ul>
+<p>Quite the generous numbers (also backed up by <strong>ulimit</strong>, to be on the safe side; and also note we're using <strong>XFS</strong> file system). And yet, open files were an issue. To prove my point, it was possible to <strong>ALTER</strong> a table with a fewer number of partitions. It was then possible to <strong>ALTER</strong> another smaller table without partitions. It was then impossible to alter any additional partitioned table. Once I dropped partitioning for some very small table some room was made and I was again able to <strong>ALTER</strong> a partitioned table... And this would happen for completely empty tables -- no data involved. We were on some file limit here.</p>
+<p>Another such <strong>ALTER</strong> and the server crashed. This was quite unceremonious. The error log produced nothing; no stack trace. Zit.</p>
+<p>I was fervently querying the <strong>Tokudb_file_map</strong> to get a picture of what's going on. I would need to do a self join on the table (as <em>common_schema</em>'s view does) to get a per-table listing of files. This would occasionally crash the server. I guess I had <strong>3</strong> or <strong>4</strong> such crashes.</p>
+<h4>Recovery</h4>
+<p>On this I feel I'm quite the veteran here :D. TokuDB recovery works well. As with InnoDB, TokuDB recognize there has been a crash, and before allowing MySQL to open connections it restores to a stable state.</p>
+<h4>ALTER TABLE in TokuDB</h4>
+<p>Here I found two comforting features (the third and fourth yet to be discovered). As indicated above, I did turn to issue a manual ALTER TABLE. What I found was:</p>
+<ol>
+<li>A TokuDB <strong>ALTER TABLE</strong> statement lets you know its progress. This is no little thing! Your <strong>SHOW PROCESSLIST</strong> output shows messages like <strong>"Fetched about 312724000 rows, loading data still remains"</strong>, or <strong>"Loading of data about 66.1% done"</strong>, or <strong>"Queried about 33113001 rows, Inserted about 33113000 rows"</strong>. Cool!</li>
+<li>Even better, the crash I had during the <strong>ALTER TABLE</strong>? I thought that would be the end of it. If you ever had a crash while <strong>ALTER</strong>ing an InnoDB table, you know how it goes: InnoDB will forever complain about some table existing but not listed (or the other way around). And don't get me started with <strong>DISCARD TABLESPACE</strong>; when InnoDB decides it is upset about something - you cannot convince it otherwise.<br />
+Thankfully, TokuDB completely reverted the <strong>ALTER</strong> operation. It removed what temporary files were created (further notes following) and forgot all about it. No complaints, no ghosts. Great! Back to consistency!</li>
+</ol>
+<h4>What do we do now?</h4>
+<p>Throwing my hands up in the air, having worked on this for many days, I thought to myself: OK, I still have this server all to myself. If TokuDB is not going to work out, I have some time to come up with a sharding/commercial solution. Let's use up this time and learn something about TokuDB. And I decided to re-create all tables without partitions. My colleague argued that she was not ready to give up on partitioning altogether and we decided to try again with <strong>YEAR</strong>ly partitioing scheme. This would reduce number of files by factor of <strong>12</strong>. Also, <strong>2025</strong> is so far away, we agreed to settle for <strong>2015</strong>. So reducing number of files by factor of <strong>25-30</strong>.</p>
+<p>And this made all the difference in the world. Having reduced number of files made the impact we were hoping for. Suddenly all went well. No crashes, no weird complaints, little proliferation of files in <strong>@@datadir</strong>.</p>
+<h4>ALTER TABLE</h4>
+<p>And I did notice that a manual <strong>ALTER TABLE</strong> went <em>considerably</em> faster than I would expect. And by far faster than the <em>pt-online-schema-change</em> pace. I tried a couple more -- sure thing. <strong>ALTER</strong>ing a table from InnoDB to TokuDB is <em>fast</em>.</p>
+<p>How fast?</p>
+<ul>
+<li>I converted a <strong>47GB</strong> InnoDB COMPRESSED table to TokuDB in <strong>73</strong> minutes. By the way, resulting table size measured <strong>3.4GB</strong>.</li>
+<li>A <strong>330GB</strong> InnoDB COMPRESSED table converted to TokuDB took little over <strong>9</strong> hours. I dare you alter 600GB worth of uncompressed data into InnoDB (COMPRESSED) in less than a few days. It went down to <strong>31GB</strong>.</li>
+<li>And our largest, <strong>1TB COMPRESSED</strong>  table (<strong>2TB</strong> worth of uncompressed data)? There's yet another story here.</li>
+</ul>
+<h4>Altering 1 (2 uncomressed) TB of data</h4>
+<p>Here's a tip that will save you some exhaustion: <strong>SET tokudb_load_save_space := 1</strong>.</p>
+<p>While <strong>ALTER</strong>ing our largest table, I was concerned to find our disk space was running low. Plenty temporary TokuDB files were created. I assumed these would consume only so much disk space, but to my surprise they accumulated and accumulated... It turns out for <strong>ALTER</strong>ing a table TokuDB creates the equivalent of the table in temporary files, and only then generates the new table. This means you need to have enough room for your own original table, the equivalent in temporary files, and your new table altogether.</p>
+<p>With great compression that would be nothing. However you'll be surprised to learn that by default those temporary files are <em>not compressed</em>. Thus, the <strong>ALTER</strong> operation consumed more than <strong>1.3TB</strong> of disk space in temporary files, until I had no choice and (<strong>36</strong> hours into the operation) had to <strong>KILL</strong> it before it consumed the entire <strong>3TB</strong> of disk space.</p>
+<p>Setting the variable as specified and the next attempt was far more successful: the temporary files were created with same compression algorithm as target table, which left with a lot of free space to work with.</p>
+<p>ALTER time took about <strong>40</strong> hours.</p>
+<h4>Well, what's the resulting size?</h4>
+<p>And we were finally done! It took the better part of three weeks to work through all the pitfalls, the <em>pt-online-schems-change</em> attempts, the crashes, the tests, the no-partitions, the <strong>YEAR</strong>ly partitions... Finally we are with a TokuDB version of our data warehouse.</p>
+<p>Suspension is over. We got from <strong>2TB</strong> of InnoDB <strong>COMPRESSED</strong> (<strong>KEY_BLOCK_SIZE=8</strong>) down to <strong>200GB</strong> of <strong>TokuDB_SMALL</strong> (aka agressive, aka lzma) tables.</p>
+<p>I mean, this is beyond expectations. It is <em>ridiculously</em> small. From <strong>80%</strong> disk space utilization down to <strong>8%</strong> disk space utilization. <em>Absolutely ridiculous!</em></p>
+<h4>Conclusions</h4>
+<ul>
+<li>TokuDB does not play well with many partitions.</li>
+<li>Crashes encountered. Recovery is fine.</li>
+<li>Good <strong>ALTER TABLE</strong> experience</li>
+<li><strong>SET tokudb_load_save_space := 1</strong></li>
+<li>Great compression (<strong>x20</strong> from uncompressed InnoDB; <strong>x10</strong> from KEY_BLOCK_SIZE=8)</li>
+</ul>
+<h4>Next</h4>
+<p>In the following post I'll share some observations on how well our newly converted TokuDB slave performs as compared to our equivalent InnoDB slaves; some configuration you might care about; and some things you can do with TokuDB that would be so very painful with InnoDB. Stay tuned!</p>

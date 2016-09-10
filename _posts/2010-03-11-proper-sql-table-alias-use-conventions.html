@@ -1,0 +1,100 @@
+---
+title: Proper SQL table alias use conventions
+date: 2010-03-11 09:10:09.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Java
+- Opinions
+- python
+- SQL
+- Syntax
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: yuguhun11@hotmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>After seeing quite some SQL statements over the years, something is bugging me: there is no consistent convention as for how to write an SQL query.</p>
+<p>I'm going to leave formatting, upper/lower-case issues aside, and discuss a small part of the SQL syntax: table aliases. Looking at three different queries, I will describe what I find to be problematic table alias use.</p>
+<p>Using the <a href="http://dev.mysql.com/doc/sakila/en/sakila.html">sakila</a> database, take a look at the following queries:<!--more--></p>
+<h4>Query #1</h4>
+<blockquote>
+<pre><strong>SELECT</strong>
+ R.rental_date, C.customer_id, C.first_name, C.last_name
+<strong>FROM</strong>
+ rental R
+ <strong>JOIN</strong> customer C <strong>USING</strong> (customer_id)
+<strong>WHERE</strong>
+ R.rental_date &gt;= DATE('2005-10-01')
+ <strong>AND</strong> C.store_id=1;
+</pre>
+</blockquote>
+<p>The above looks for film rentals done in a specific store (store #<strong>1</strong>), as of Oct. 1st, 2005.</p>
+<h4>Query #2</h4>
+<blockquote>
+<pre><strong>SELECT</strong>
+ F.title, C.name
+<strong>FROM</strong>
+ film <strong>AS</strong> F
+ <strong>JOIN</strong> film_category <strong>AS</strong> S <strong>ON</strong> (F.film_id = S.film_id)
+ <strong>JOIN</strong> category <strong>AS</strong> C <strong>ON</strong> (S.category_id = C.category_id)
+<strong>WHERE</strong> F.length &gt; 180;</pre>
+</blockquote>
+<p>The above lists the title and category for all films longer than three hours.</p>
+<h4>Query #3</h4>
+<blockquote>
+<pre><strong>SELECT</strong> c.customer_id, c.last_name
+<strong>FROM</strong>
+  customer c
+  <strong>INNER JOIN</strong> address a ON (c.address_id = a.address_id)
+  <strong>INNER JOIN</strong> (
+    <strong>SELECT</strong>
+      c.city_id
+    <strong>FROM</strong>
+      city AS c
+      <strong>JOIN</strong> country s <strong>ON</strong> (c.country_id = s.country_id)
+    <strong>WHERE</strong>
+      s.country <strong>LIKE</strong> 'F%'
+  ) s1 <strong>USING</strong> (city_id)
+<strong>WHERE</strong>
+  create_date &gt;= DATE('2005-10-01');
+</pre>
+</blockquote>
+<p>The above lists customers created as of Oct. 1st, 2005, and who live in countries starting with an 'F'. The query could be solved without a subquery, but there's a good reason why I made it so.</p>
+<h4>The problems</h4>
+<p>I used very different conventions on any one of the queries, and sometimes within each query. And it's common that I see the same on a customer's site, what with having many programmers do the SQL coding. Again, I will only discuss the table aliases conventions. I'll leaver the rest to the reader.</p>
+<p>Here's where I see problems:</p>
+<ul>
+<li>Query <strong>#1</strong>: In itself, it looks fine. <strong>Rental</strong> turns to <strong>R</strong>, <strong>Customer</strong> turns to <strong>C</strong>. I will comment on this slightly later on when I provide my full opinion.</li>
+<li>Query <strong>#2</strong>: So <strong>film</strong> turns to <strong>F</strong>, <strong>category</strong> turns to <strong>C</strong>. What should <strong>film_category</strong> turn into? <em>Out of letters?</em> Let's just go for <strong>S</strong>, shall we? But <strong>S</strong> has nothing do with <strong>film_category</strong>. Yet it's so commonly seen.</li>
+<li>Query <strong>#2</strong>: We're using the <strong>AS</strong> keyword now. We didn't use it before.</li>
+<li>Queries <strong>#1</strong>, <strong>#2</strong>: Hold on. Wasn't <strong>C</strong> taken for <strong>customer</strong> in Query <strong>#1</strong>? Now, in Query <strong>#2</strong> it stands for <strong>category</strong>? I'm beginning to get confused.</li>
+<li>Query <strong>#3</strong>: Now aliases are lower case; I was just getting used to them being upper case.</li>
+<li>Query <strong>#3</strong>: But, hey, <strong>c</strong> is back to <strong>customer</strong>!</li>
+<li>Query <strong>#3</strong>: Or, is it? Take a look at the subquery. Theres another <strong>c</strong> in there! This time it's <strong>city</strong>! And it's perfectly valid syntax. We actually have two identical aliases in the same query.</li>
+<li>Query <strong>#3</strong>: If I could, I would name country with <strong>c</strong> as well. But I can't. So why not throw in <strong>s</strong> again?</li>
+<li>Query <strong>#3</strong>: and now I don't even bother using the alias when accessing the <strong>create_date</strong>. Well, there's no such column in any of the other tables!</li>
+</ul>
+<h4>Proper conventions</h4>
+<p>What I find so disturbing is that whenever I read a complex query, I need to go back and forth, back and forth between table aliases (found everywhere in the query) and their declaration point. Such irregularities make the queries difficult to read.</p>
+<p>Any of the above issues could be justified. But I wish to make some suggestions:</p>
+<ul>
+<li>Decide whether you're going for upper or lower case.</li>
+<li>Do not use the same alias twice in your query, even if it's valid.</li>
+<li>Aliases do not have to be single character. <strong>film_category</strong> may just as well be <strong>FC</strong>.</li>
+<li>Do not alias something that is hard to interpret. <strong>s</strong> does not stand for <strong>country</strong>.</li>
+<li>Think ahead: use same aliases throughout all your queries, as far as you can. If uniqueness is a problem, make for longer aliases. Use <strong>cust</strong> instead of <strong>c</strong>.</li>
+</ul>
+<p>The above should make for more organized and readable SQL code. Remember: what one programmer finds as a very intuitive alias, is unintuitive to another!</p>
+<h4>My own convention</h4>
+<p>Simple: I <em>only use aliases</em> when using self joins. I am aware that queries are much longer what with long table names. I go farther than that: I prefer fully qualifying questionable columns throughout the query. Yes, it makes the query even longer.</p>
+<p>I know this does not appeal to many. But there's no confusion. And it's easily searchable. And it's consistent. And if properly formatted, as in the above queries, is well readable.</p>
+<p>Now please join me in asking Oracle if they can add multi-line Strings for java, as there are for python.</p>

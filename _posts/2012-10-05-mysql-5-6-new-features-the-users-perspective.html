@@ -1,0 +1,75 @@
+---
+title: 'MySQL 5.6 new features: the user''s perspective'
+date: 2012-10-05 09:20:20.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- InnoDB
+- memcached
+- New Features
+- Opinions
+- Replication
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This is a yet-another compilation of the new MySQL <strong>5.6</strong> feature set. It is not a complete drill down. This list reflects what I believe to be the interesting new features user and usability -wise.</p>
+<p>For example, I won't be listing InnoDB's split of kernel mutex. I'm assuming it can have a great impact on overall performance due to reducing lock contention; but usability-wise, this is very internal.</p>
+<p>The complication is an aggregate of the many announcements and other complications published earlier on. See a reference at the end of this post.</p>
+<p>Do note I am not using <strong>5.6</strong> as yet; it is in RC, not GA. I am mostly excited just to write down this list.</p>
+<h4>InnoDB</h4>
+<ul>
+<li>Online <strong>ALTER TABLE</strong>: if there is one major new feature in <strong>5.6</strong> you would want to upgrade for, this would be it. Add columns, drop columns, rename columns, add indexes, drop indexes - now online, while your <strong>SELECT, INSERT, UPDATE</strong> and <strong>DELETE</strong> statements are running.</li>
+<li>Transportable tablespace files: copy+paste <strong>your_table.ibd</strong> files with <strong>FLUSH TABLE FOR EXPORT</strong> and <strong>ALTER TABLE ... IMPORT TABLESPACE</strong>.</li>
+<li><strong>FULLTEXT</strong>: for many, the one thing holding them back from leaving MyISAM behind. Now available in InnoDB with same syntax as with MyISAM.</li>
+<li>Memcached API: access InnoDB data via memcahced protocol, and skip the SQL interface.</li>
+<li>User defined table location: place your tables in your pre-defined location. Place other tables elsewhere. This is something I've been asked about for ages.</li>
+</ul>
+<h4><!--more-->Replication</h4>
+<ul>
+<li>Global Transaction IDs: I'm still to fully understand the limitations: MyISAM and temporary tables make a mess; this could be a killer feature when it comes to replication: no more master log file, master log pos, relay master log file, relay log pos, read master log file, read master log pos (if I wake you up at <strong>3:00am</strong>, will you be able to cite the difference?). Just one single unique identifier for each transaction in the binary log, so it's much easier for slaves to connect to master, or to switch over to replicate another server.</li>
+<li>Multi threaded slaves: with a thread-per-schema, and assuming complete isolation of schemas</li>
+<li>Delayed replication: a must-have, in my opinion, on any replication topology using <strong>3-4</strong> servers.</li>
+<li>Checksums: verify shipment of binary logs from master to slave by adding a checksum on log entries.</li>
+<li>Crash safe slaves: forget about master.info not syncing to disk. Now using InnoDB for that.</li>
+</ul>
+<h4>Partitioning</h4>
+<ul>
+<li>Partition-to-table, table-to-partition: I've encountered the need for this in the past. In one case, it was the issue of backing up single partitions for archiving, then restoring particular partitions from the past into the existing table. Some Oracle users, upon hearing about the <strong>5.1</strong>, <strong>5.5</strong> partition features, were wondering about this missing feature. Their words: "MySQL is still in the very early stages of managing partitions. As it grows it will have to include partition-to-table, as well as other already-standard-in-Oracle features". They were right.</li>
+<li>Reduced locking: don't you hate it when you partition by date, INSERT into the last partition, only to find out you actually acquired locks for <em>all</em> partitions? Hopefully this is gone now (hoping I'm not wrong on this?)</li>
+<li>Choose partitions in query à la <strong>SELECT * FROM my_table PARTITION (p7)</strong></li>
+</ul>
+<h4>Query Execution Plan</h4>
+<ul>
+<li><strong>EXPLAIN</strong> for <strong>UPDATE, DELETE, INSERT</strong>: pretty sure everyone wanted that.</li>
+<li>Optimizing subqueries (the notorious <strong>WHERE IN (SELECT ...)</strong>): the <em>"MySQL does WHAT with subqueries?!?!?!"</em> invoking behavior of subquery execution is now hopefully met. No longer "execute the subquery for each row in the outer query".</li>
+<li>Index merge optimization: this optimization was rare, in my experience. The new improvements are expected to make it more common.</li>
+<li><strong>EXPLAIN FORMAT=JSON</strong>: I like this kind of stuff. The Json format is much more verbose, and shows the tree-structure of the query execution plan. This would make for a great analysis tool for GUI editors!</li>
+</ul>
+<h4>PERFORMANCE_SCHEMA</h4>
+<ul>
+<li>A gazillion more tables. I am yet to drill down into <strong>P_S</strong>. However I can already verify that <strong>5.6</strong> introduces a lot of new tables I've been longing for. Some are actually more fitting in <strong>INFORMATION_SCHEMA</strong>. A lot of new metadata tables. Will write more in the future.</li>
+</ul>
+<p>Some of the above features already exists in earlier releases of Google Patches for MySQL, Percona Server and MariaDB. For example, global transaction IDs and binlog checksums first appeared three and a half years ago in Google Patches, and only now re-created in MySQL. Sometimes the community is far ahead of the MySQL development. But then Oracle does its thing and makes for a great release.</p>
+<p>No doubt the above is an impressive list of enhancements to the server. Some make it a significant step into the "things are getting serious here" realm. I can do well with online alter table, auto replication recovery, execution plan improvements, and the many performance boosts not listed here. Not everything will work in all scenarios; but this makes for one release of MySQL I'm anxious to use.</p>
+<h4>References, chronologically DESC</h4>
+<ul>
+<li><a href="http://mikaelronstrom.blogspot.com/2012/10/my-personal-list-of-new-features-in.html">My personal list of new features in MySQL 5.6 </a>- Mikael Ronström</li>
+<li><a href="http://svenmysql.blogspot.com/2012/10/failover-and-flexible-replication.html"> Failover and Flexible Replication Topologies in MySQL 5.6 </a>- Sven</li>
+<li><a href="http://jorgenloland.blogspot.com/2012/10/index-merge-annoyances-fixed-in-mysql-56.html">Index merge annoyances fixed in MySQL 5.6 </a>- Jørgen Løland</li>
+<li><a href="http://larsthalmann.blogspot.com/2012/10/mysql-connect-2012.html">MySQL Connect 2012 </a>- Lars Thalmann</li>
+<li><a href="http://lstigile.wordpress.com/2012/09/29/mysqlconnect-auditing-online-ddl-fk-in-cluster-and-more/">MySQLConnect — Auditing, Online DDL, FK in Cluster and More </a>- Lee Stigile</li>
+<li><a href="http://www.sheeri.com/content/my-thoughts-about-mysql-56">My Thoughts About MySQL 5.6 </a>- Sheeri K. Cabral</li>
+<li><a href="https://blogs.oracle.com/mysqlinnodb/entry/online_alter_table_in_mysql">Online ALTER TABLE in MySQL 5.6 </a> - Oracle</li>
+<li><a href="http://dev.mysql.com/tech-resources/articles/mysql-5.6-rc.html"> What's New in MySQL 5.6 Release Candidate </a>- Oracle</li>
+<li><a href="http://www.xaprb.com/blog/2012/08/21/a-summary-of-changes-in-mysql-5-6/">A summary of changes in MySQL 5.6 </a> - Baron Schwartz</li>
+<li><a href="http://dev.mysql.com/tech-resources/articles/whats-new-in-mysql-5.6.html">What's New in MySQL 5.6</a> - Oracle</li>
+</ul>

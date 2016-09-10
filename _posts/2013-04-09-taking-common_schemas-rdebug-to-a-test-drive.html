@@ -1,0 +1,221 @@
+---
+title: Taking common_schema's rdebug to a test-drive
+date: 2013-04-09 09:36:17.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- rdebug
+- Stored routines
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This is a simple step-by-step introduction to <strong><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/rdebug.html">rdebug</a>: Debugger and Debugging API for MySQL Stored Routines</strong>, as part of <a href="https://code.google.com/p/common-schema/">common_schema</a>.</p>
+<p>In other words: let me take you through the steps for debugging your stored routines on your own server. We will step into, step over, step out, modify variables, set a breakpoint, run to breakpoint...</p>
+<p>Command line geeks, this one's for you. GUI lovers, this is actually an API; I am hoping for someone wrap it up with a plugin for your favorite GUI editor.</p>
+<h4>Requirements:</h4>
+<ul>
+<li>Install <a href="https://code.google.com/p/common-schema/"><em>common_schema</em> 2.0</a> or above (at this time of writing <a href="http://code.openark.org/blog/mysql/common_schema-2-0-0-alpha-rdebug-gpl">2.0.0-alpha is released</a>).</li>
+<li>Get sample data &amp; routine file [download id="4" format="1"]</li>
+<li>mysql&gt; <strong>SOURCE rdebug_demo.sql_.txt</strong>
+<ul>
+<li>You should now have a table called <strong>color_count</strong> in the test database, along with two routines: <strong>review_colors()</strong> and <strong>review_single_color()</strong>.</li>
+</ul>
+</li>
+<li>Open two sessions. We call them the <em>debugger</em> session and the <em>worker</em> session. The <em>worker</em> session will execute the routine; the <em>debugger</em> session will control it.</li>
+</ul>
+<h4>Walk-through: preparation</h4>
+<p>Walk this thing with me. We will alternate between the <em>debugger</em> and the <em>worker</em>.<!--more--></p>
+<p><strong>1. worker session:</strong> get connection ID.</p>
+<blockquote>
+<pre><em><span style="color: #003300;">mysql [worker]&gt; <strong>select CONNECTION_ID();</strong>
++-----------------+
+| CONNECTION_ID() |
++-----------------+
+|            1234 |
++-----------------+</span></em></pre>
+</blockquote>
+<p>I'll use <strong>1234</strong>, you will use whatever connection ID your worker has.</p>
+<p><strong>2. debugger session:</strong> "compile" routine with debug info (this injects code into your routines).</p>
+<blockquote>
+<pre><span style="color: #000080;">mysql [debugger]&gt; <strong>use common_schema;</strong>
+mysql [debugger]&gt; <strong>call rdebug_compile_routine('test', 'review_colors', true);</strong>
+mysql [debugger]&gt; <strong>call rdebug_compile_routine('test', 'review_single_color', true);</strong></span></pre>
+</blockquote>
+<p>If you like, review the routines after compilation as follows:</p>
+<blockquote>
+<pre><span style="color: #000080;">mysql [debugger]&gt; <strong>call rdebug_show_routine('test', 'review_colors');</strong>
++---------------------------------------------------------------------------------+
+| `test`.`review_colors` breakpoints                                              |
++---------------------------------------------------------------------------------+
+| begin                                                                           |
+|   declare done bool default false;                                              |
+|   declare current_color varchar(32) default null;                               |
+|   declare current_count int unsigned;                                           |
+|   declare color_cursor cursor for                                               |
+|             select color_name, count from test.color_count order by color_name; |
+|   declare continue handler for not found set done := true;                      |
+|                                                                                 |
+|   [:94]open color_cursor;                                                       |
+|   [:100]cursor_loop: while not done do                                          |
+|     [:112]fetch color_cursor into current_color, current_count;                 |
+|     [:125]if done then                                                          |
+|       [:132]leave cursor_loop;                                                  |
+|     [:138]end if;                                                               |
+|                                                                                 |
+|     [:145]call review_single_color(current_color);                              |
+|   [:154]end while;                                                              |
+|   [:160]close color_cursor;                                                     |
+| [:165]end                                                                       |
++---------------------------------------------------------------------------------+
+
+mysql [debugger]&gt; <strong>call rdebug_show_routine('test', 'review_single_color');</strong>
++----------------------------------------------------------------+
+| `test`.`review_single_color` breakpoints                       |
++----------------------------------------------------------------+
+| begin                                                          |
+|   [:4]set @review_message := concat(color_name, ' is pretty'); |
+|   [:20]select @review_message;                                 |
+| [:25]end                                                       |
++----------------------------------------------------------------+
+</span></pre>
+</blockquote>
+<p>The above shows the routine code with symbolic breakpoint IDs.</p>
+<h4>Walk-through - start debugging</h4>
+<p><strong>3. debugger session:</strong> Start a debug session, attach to <i>worker</i> session using its connection ID:</p>
+<blockquote>
+<pre><span style="color: #000080;">mysql [debugger]&gt; <strong>call rdebug_start(1234);</strong></span></pre>
+</blockquote>
+<p>Replace <strong>1234</strong> with your own worker's connection ID as read above.</p>
+<p>Let's set verbose mode on; more fun on command line, less typing.</p>
+<blockquote>
+<pre><span style="color: #000080;">mysql [debugger]&gt; <strong>call rdebug_set_verbose(true);</strong></span></pre>
+</blockquote>
+<p>And step into it!</p>
+<blockquote>
+<pre><span style="color: #000080;">mysql [debugger]&gt; <strong>call rdebug_step_into();</strong></span></pre>
+</blockquote>
+<p>This should hang the debugger. Why? Because it's stepping into, and is expecting the worker to actually do something.</p>
+<p><strong>4. worker session:</strong> execute routine</p>
+<blockquote>
+<pre><span style="color: #003300;"><em>mysql [worker]&gt; <strong>call test.review_colors();</strong></em></span></pre>
+</blockquote>
+<h4>Walk-through - debug</h4>
+<p>The debugger session should immediately follow with the following (all by <strong>entry_time</strong> should be identical to your output):</p>
+<blockquote>
+<pre><span style="color: #000080;">+-------------+----------------+---------------+--------------+---------------------+</span>
+<span style="color: #000080;">| stack_level | routine_schema | routine_name  | statement_id | entry_time          |</span>
+<span style="color: #000080;">+-------------+----------------+---------------+--------------+---------------------+</span>
+<span style="color: #000080;">|           1 | test           | review_colors |           94 | 2013-04-08 15:41:28 |</span>
+<span style="color: #000080;">+-------------+----------------+---------------+--------------+---------------------+</span>
+
+<span style="color: #000080;">+----------------+---------------+---------------+---------------+----------------+</span>
+<span style="color: #000080;">| routine_schema | routine_name  | variable_name | variable_type | variable_value |</span>
+<span style="color: #000080;">+----------------+---------------+---------------+---------------+----------------+</span>
+<span style="color: #000080;">| test           | review_colors | current_color | local         | NULL           |</span>
+<span style="color: #000080;">| test           | review_colors | current_count | local         | NULL           |</span>
+<span style="color: #000080;">| test           | review_colors | done          | local         | 0              |</span>
+<span style="color: #000080;">+----------------+---------------+---------------+---------------+----------------+</span>
+
+<span style="color: #000080;">+----------------+---------------+--------------+-------------------+</span>
+<span style="color: #000080;">| routine_schema | routine_name  | statement_id | statement         |</span>
+<span style="color: #000080;">+----------------+---------------+--------------+-------------------+</span>
+<span style="color: #000080;">| test           | review_colors |           94 | open color_cursor |</span>
+<span style="color: #000080;">+----------------+---------------+--------------+-------------------+</span></pre>
+</blockquote>
+<p>That's the result of setting verbose mode. From here, if you've ever debugged code, the way is clear:</p>
+<p><strong>5. debugger session:</strong> Step into a few more times:</p>
+<blockquote>
+<pre><span style="color: #000080;">mysql [debugger]&gt; <strong>call rdebug_step_into();</strong>
+mysql [debugger]&gt; <strong>call rdebug_step_into();</strong>
+mysql [debugger]&gt; <strong>call rdebug_step_into();</strong>
+...</span></pre>
+</blockquote>
+<p>Until the stack shows that you have entered the second routine: <strong>review_single_color():</strong></p>
+<blockquote>
+<pre><span style="color: #000080;">+-------------+----------------+---------------------+--------------+---------------------+</span>
+<span style="color: #000080;">| stack_level | routine_schema | routine_name        | statement_id | entry_time          |</span>
+<span style="color: #000080;">+-------------+----------------+---------------------+--------------+---------------------+</span>
+<span style="color: #000080;">|           1 | test           | review_colors       |          145 | 2013-04-08 15:41:28 |</span>
+<span style="color: #000080;">|           <strong>2</strong> | <strong>test</strong>           | <strong>review_single_color</strong> |           20 | 2013-04-08 15:45:23 |</span>
+<span style="color: #000080;">+-------------+----------------+---------------------+--------------+---------------------+</span>
+
+<span style="color: #000080;">+----------------+---------------------+-----------------+---------------+-----------------+</span>
+<span style="color: #000080;">| routine_schema | routine_name        | variable_name   | variable_type | variable_value  |</span>
+<span style="color: #000080;">+----------------+---------------------+-----------------+---------------+-----------------+</span>
+<span style="color: #000080;">| test           | review_single_color | @review_message | user_defined  | green is pretty |</span>
+<span style="color: #000080;">| test           | review_single_color | color_name      | param         | green           |</span>
+<span style="color: #000080;">+----------------+---------------------+-----------------+---------------+-----------------+</span>
+
+<span style="color: #000080;">+----------------+---------------------+--------------+------------------------+</span>
+<span style="color: #000080;">| routine_schema | routine_name        | statement_id | statement              |</span>
+<span style="color: #000080;">+----------------+---------------------+--------------+------------------------+</span>
+<span style="color: #000080;">| test           | review_single_color |           20 | select @review_message |</span>
+<span style="color: #000080;">+----------------+---------------------+--------------+------------------------+</span></pre>
+</blockquote>
+<p>You can further call <strong>rdebug_step_out()</strong> to leave this routine, <strong>rdebug_step_over()</strong> to avoid re-entry...</p>
+<p><strong>6. debugger session:</strong> modify variables</p>
+<p>Assuming you are inside the <strong>review_single_color()</strong> routine, would you like to modify a variable?</p>
+<blockquote>
+<pre><span style="color: #000080;">mysql [debugger]&gt; <strong>call rdebug_set_variable('color_name', 'A flower');</strong></span></pre>
+</blockquote>
+<p>Step over a few more times till the worker produces:</p>
+<blockquote>
+<pre><span style="color: #003300;"><em>+--------------------+</em></span>
+<span style="color: #003300;"><em>| @review_message    |</em></span>
+<span style="color: #003300;"><em>+--------------------+</em></span>
+<span style="color: #003300;"><em>| A flower is pretty |</em></span>
+<span style="color: #003300;"><em>+--------------------+</em></span></pre>
+</blockquote>
+<p>Continue playing with <strong>rdebug_step_into()</strong>, <strong>rdebug_step_over()</strong>, <strong>rdebug_step_out()</strong>.</p>
+<p><strong>7. debugger session:</strong> setting a breakpoint</p>
+<p>Based on the output of <strong>rdebug_show_routine('test', 'review_colors')</strong>, above, we now choose to set a non-conditional breakpoint, just before the statement <strong>call review_single_color(current_color)</strong>. That makes breakpoint ID <strong>145</strong>.</p>
+<blockquote><p><span style="color: #000080;">mysql [debugger]&gt; <strong>call rdebug_set_breakpoint('test', 'review_colors', 145, NULL, true);</strong></span></p></blockquote>
+<p><strong>8. debugger session:</strong> running up to a breakpoint<strong><br />
+</strong></p>
+<p>Now, let's allow the worker to run until it reaches this breakpoint:</p>
+<blockquote>
+<pre><span style="color: #000080;">mysql [debugger]&gt; <strong>call rdebug_run();</strong>
++-------------+----------------+---------------+--------------+---------------------+
+| stack_level | routine_schema | routine_name  | statement_id | entry_time          |
++-------------+----------------+---------------+--------------+---------------------+
+|           1 | test           | review_colors |          145 | 2013-04-08 15:41:28 |
++-------------+----------------+---------------+--------------+---------------------+
+
++----------------+---------------+---------------+---------------+----------------+
+| routine_schema | routine_name  | variable_name | variable_type | variable_value |
++----------------+---------------+---------------+---------------+----------------+
+| test           | review_colors | current_color | local         | white          |
+| test           | review_colors | current_count | local         | 10             |
+| test           | review_colors | done          | local         | 0              |
++----------------+---------------+---------------+---------------+----------------+
+
++----------------+---------------+--------------+-----------------------------------------+
+| routine_schema | routine_name  | statement_id | statement                               |
++----------------+---------------+--------------+-----------------------------------------+
+| test           | review_colors |          <strong>145</strong> | <strong>call review_single_color(current_color)</strong> |
++----------------+---------------+--------------+-----------------------------------------+</span></pre>
+</blockquote>
+<p>Run the above a few times: we always get back to the same statement. That is, until there's nothing more to do and the routine leaves.</p>
+<h4>Walk-through - stopping and cleanup</h4>
+<p><strong>8. debugger session:</strong> Stop the debugging session:</p>
+<blockquote>
+<pre><span style="color: #000080;">mysql [debugger]&gt; <strong>call rdebug_stop();</strong></span></pre>
+</blockquote>
+<p>You can start again via <strong>rdebug_start()</strong>. If, however, you're no longer interested in debugging, you should remove debugging code from your routines:</p>
+<blockquote>
+<pre><span style="color: #000080;">mysql [debugger]&gt; <strong>call rdebug_compile_routine('test', 'review_colors', false);</strong></span>
+<span style="color: #000080;">mysql [debugger]&gt; <strong>call rdebug_compile_routine('test', 'review_single_color', false);</strong></span></pre>
+</blockquote>
+<h4>Conclusion</h4>
+<p>This is most there is to it. Read the <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/rdebug_api.html"><strong>API</strong></a> for a complete list of functionality</p>

@@ -1,0 +1,188 @@
+---
+title: Pseudo GTID
+date: 2014-10-22 07:22:26.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- GTID
+- orchestrator
+- Pseudo GTID
+- replic
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Pseudo GTID is a method to implement a GTID-like solution where slaves are easily connected to one another. This blog post and the following ones will describe work in progress (some 80% completed), where simulation of GTID makes for a <em>good enough</em> basis for refactoring replication topologies. I'm coding this in <a href="https://github.com/outbrain/orchestrator">orchestrator</a>, which already provides a substantial infrastructure support for this.</p>
+<p>The final goal: <em>orchestrator</em> will allow you to move a slave below another, using only the data available by those two slaves. The usage is obvious:</p>
+<ul>
+<li>Easy master failover (master dead? <em>Orchestrator</em> will choose the most advanced slave to promote <em>and</em> make it master of its siblings)</li>
+<li>Slave promotion in complex topologies (with <a href="http://code.openark.org/blog/mysql/using-deep-nested-replication-topologies">deep nested topologies</a>, be able to move a slave up the hierarchy even if its local master is corrupted).</li>
+</ul>
+<p>This can all happen with your normal, <em>non GTID</em>, MySQL replication, using your normal binary log files &amp; positions.</p>
+<p>This work in progress is inspired by <strong><a href="https://github.com/samlambert">Sam Lambert</a></strong> at GitHub, who has worked on a similar solution with different implementation. I also recall discussions with other DBAs having similar solution.</p>
+<h4>Pseudo GTID</h4>
+<p>First thing's first, the basis for proposed solution is a <em>pseudo-GTID</em>. A unique entry in the binary logs (not necessarily sequential; not necessarily in ascending order). While in GTID implementations we have a unique identifier <em>for each entry</em> in the binary log, with pseudo-GTID we accept an <em>occasional</em> (or <em>frequent</em>) unique entry in the binary log.</p>
+<p>There are many ways to do so. Certainly a client can generate a unique Id and invoke some statement on MySQL involving that ID. That would serve as valid grounds for the proposed solution. But I like things to be contained within MySQL. Consider, for example, the following event, which would be my preferred choice in Statement Based Replication (for RBR solution, see next post):</p>
+<blockquote>
+<pre>drop table if exists test.pseudo_gtid;
+create table if not exists test.pseudo_gtid (
+  id int unsigned not null primary key,
+  ts timestamp,
+  gtid varchar(64) charset ascii
+);
+
+
+drop event if exists test.update_pseudo_gtid_event;
+
+delimiter ;;
+create event if not exists
+  test.update_pseudo_gtid_event
+  on schedule every 10 second starts current_timestamp
+  on completion preserve
+  enable
+  do
+    begin
+      set @pseudo_gtid := uuid();
+      insert into test.pseudo_gtid (id, ts, gtid) values (1, NOW(), @pseudo_gtid) on duplicate key update ts=NOW(), gtid=VALUES(gtid);
+    end
+;;
+
+delimiter ;</pre>
+</blockquote>
+<p>The above is based on <a title="Link to Making UUID() and RAND() replication safe" href="http://code.openark.org/blog/mysql/making-uuid-and-rand-replication-safe" rel="bookmark">Making UUID() and RAND() replication safe</a>. What do we get? Once in 10 seconds (or what have you), a unique entry is written to the binary log.</p>
+<p><!--more-->Consider that the event is already running by now, and the next conventional statements executed by the application:</p>
+<blockquote>
+<pre>master [localhost] {msandbox} (test) &gt; create table test.vals(id int);
+master [localhost] {msandbox} (test) &gt; insert into test.vals (id) values (17);
+master [localhost] {msandbox} (test) &gt; insert into test.vals (id) values (18);
+master [localhost] {msandbox} (test) &gt; insert into test.vals (id) values (19);
+master [localhost] {msandbox} (test) &gt; insert into test.vals (id) values (23);
+
+master [localhost] {msandbox} (test) &gt; show master logs;
++------------------+-----------+
+| Log_name         | File_size |
++------------------+-----------+
+| mysql-bin.000036 |       531 |
+| mysql-bin.000037 |      1269 |
+| mysql-bin.000038 |      6627 |
+| mysql-bin.000039 |      3313 |
++------------------+-----------+
+</pre>
+</blockquote>
+<p>Let's look at the binary logs content:</p>
+<blockquote>
+<pre>master [localhost] {msandbox} (test) &gt; show binlog events in 'mysql-bin.000039';
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+| Log_name         | Pos  | Event_type  | Server_id | End_log_pos | Info                                                                                                                                        |
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+| mysql-bin.000039 |    4 | Format_desc |         1 |         107 | Server ver: 5.5.32-log, Binlog ver: 4                                                                                                       |
+| mysql-bin.000039 |  107 | Query       |         1 |         183 | BEGIN                                                                                                                                       |
+| mysql-bin.000039 |  183 | User var    |         1 |         263 | <strong>@`pseudo_gtid`=_utf8 0x37383435623633382D353631612D313165342D393135642D336339373065613331656138 COLLATE utf8_general_ci</strong>                     |
+| mysql-bin.000039 |  263 | Query       |         1 |         461 | use `test`; insert into test.pseudo_gtid (id, ts, gtid) values (1, NOW(), @pseudo_gtid) on duplicate key update ts=NOW(), gtid=VALUES(gtid) |
+| mysql-bin.000039 |  461 | Xid         |         1 |         488 | COMMIT /* xid=74 */                                                                                                                         |
+| mysql-bin.000039 |  488 | Query       |         1 |         581 | use `test`; create table test.vals(id int)                                                                                                  |
+| mysql-bin.000039 |  581 | Query       |         1 |         657 | BEGIN                                                                                                                                       |
+| mysql-bin.000039 |  657 | User var    |         1 |         737 | <strong>@`pseudo_gtid`=_utf8 0x37653362616434382D353631612D313165342D393135642D336339373065613331656138 COLLATE utf8_general_ci</strong>                     |
+| mysql-bin.000039 |  737 | Query       |         1 |         935 | use `test`; insert into test.pseudo_gtid (id, ts, gtid) values (1, NOW(), @pseudo_gtid) on duplicate key update ts=NOW(), gtid=VALUES(gtid) |
+| mysql-bin.000039 |  935 | Xid         |         1 |         962 | COMMIT /* xid=82 */                                                                                                                         |
+| mysql-bin.000039 |  962 | Query       |         1 |        1038 | BEGIN                                                                                                                                       |
+| mysql-bin.000039 | 1038 | User var    |         1 |        1118 | <strong>@`pseudo_gtid`=_utf8 0x38343331396662332D353631612D313165342D393135642D336339373065613331656138 COLLATE utf8_general_ci</strong>                     |
+| mysql-bin.000039 | 1118 | Query       |         1 |        1316 | use `test`; insert into test.pseudo_gtid (id, ts, gtid) values (1, NOW(), @pseudo_gtid) on duplicate key update ts=NOW(), gtid=VALUES(gtid) |
+| mysql-bin.000039 | 1316 | Xid         |         1 |        1343 | COMMIT /* xid=84 */                                                                                                                         |
+| mysql-bin.000039 | 1343 | Query       |         1 |        1411 | BEGIN                                                                                                                                       |
+| mysql-bin.000039 | 1411 | Query       |         1 |        1512 | use `test`; insert into test.vals (id) values (17)                                                                                          |
+| mysql-bin.000039 | 1512 | Xid         |         1 |        1539 | COMMIT /* xid=84 */                                                                                                                         |
+| mysql-bin.000039 | 1539 | Query       |         1 |        1607 | BEGIN                                                                                                                                       |
+| mysql-bin.000039 | 1607 | Query       |         1 |        1708 | use `test`; insert into test.vals (id) values (18)                                                                                          |
+| mysql-bin.000039 | 1708 | Xid         |         1 |        1735 | COMMIT /* xid=85 */                                                                                                                         |
+| mysql-bin.000039 | 1735 | Query       |         1 |        1803 | BEGIN                                                                                                                                       |
+| mysql-bin.000039 | 1803 | Query       |         1 |        1904 | use `test`; insert into test.vals (id) values (19)                                                                                          |
+| mysql-bin.000039 | 1904 | Xid         |         1 |        1931 | COMMIT /* xid=86 */                                                                                                                         |
+| mysql-bin.000039 | 1931 | Query       |         1 |        2007 | BEGIN                                                                                                                                       |
+| mysql-bin.000039 | 2007 | User var    |         1 |        2087 | <strong>@`pseudo_gtid`=_utf8 0x38613237376232352D353631612D313165342D393135642D336339373065613331656138 COLLATE utf8_general_ci</strong>                     |
+| mysql-bin.000039 | 2087 | Query       |         1 |        2285 | use `test`; insert into test.pseudo_gtid (id, ts, gtid) values (1, NOW(), @pseudo_gtid) on duplicate key update ts=NOW(), gtid=VALUES(gtid) |
+| mysql-bin.000039 | 2285 | Xid         |         1 |        2312 | COMMIT /* xid=89 */                                                                                                                         |
+| mysql-bin.000039 | 2312 | Query       |         1 |        2380 | BEGIN                                                                                                                                       |
+| mysql-bin.000039 | 2380 | Query       |         1 |        2481 | use `test`; insert into test.vals (id) values (23)                                                                                          |
+| mysql-bin.000039 | 2481 | Xid         |         1 |        2508 | COMMIT /* xid=89 */                                                                                                                         |
+| mysql-bin.000039 | 2508 | Query       |         1 |        2584 | BEGIN                                                                                                                                       |
+| mysql-bin.000039 | 2584 | User var    |         1 |        2664 | <strong>@`pseudo_gtid`=_utf8 0x39303164373731612D353631612D313165342D393135642D336339373065613331656138 COLLATE utf8_general_ci</strong>                     |
+| mysql-bin.000039 | 2664 | Query       |         1 |        2862 | use `test`; insert into test.pseudo_gtid (id, ts, gtid) values (1, NOW(), @pseudo_gtid) on duplicate key update ts=NOW(), gtid=VALUES(gtid) |
+| mysql-bin.000039 | 2862 | Xid         |         1 |        2889 | COMMIT /* xid=92 */                                                                                                                         |
+| mysql-bin.000039 | 2889 | Query       |         1 |        2965 | BEGIN                                                                                                                                       |
+| mysql-bin.000039 | 2965 | User var    |         1 |        3045 | <strong>@`pseudo_gtid`=_utf8 0x39363133363965382D353631612D313165342D393135642D336339373065613331656138 COLLATE utf8_general_ci</strong>                     |
+| mysql-bin.000039 | 3045 | Query       |         1 |        3243 | use `test`; insert into test.pseudo_gtid (id, ts, gtid) values (1, NOW(), @pseudo_gtid) on duplicate key update ts=NOW(), gtid=VALUES(gtid) |
+| mysql-bin.000039 | 3243 | Xid         |         1 |        3270 | COMMIT /* xid=94 */                                                                                                                         |
+| mysql-bin.000039 | 3270 | Rotate      |         1 |        3313 | mysql-bin.000040;pos=4                                                                                                                      |
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>Marked in bold are the pseudo-GTID statements, aptly read <strong>"@`pseudo_gtid`=_utf8 0x..."</strong>, and which are the resulting entry of the <strong>set @pseudo_gtid := uuid();</strong> statement. These are interleaved with our normal statements. In busier servers there could be hundreds or thousands of statements between any two pseudo-GTID entries.</p>
+<p>We have a replicating slave to the above, which uses <strong>log_slave_updates</strong>. For reasons to be explained later, I prefer and require <strong>log_slave_updates</strong>, and will examine the slave's binary logs (instead of directly looking at the slave's relay logs):</p>
+<blockquote>
+<pre>slave3 [localhost] {msandbox} ((none)) &gt; show master logs;
+
++------------------+-----------+
+| Log_name         | File_size |
++------------------+-----------+
+| mysql-bin.000046 |      1077 |
+| mysql-bin.000047 |       126 |
+| mysql-bin.000048 |       150 |
+| mysql-bin.000049 |       150 |
+| mysql-bin.000050 |     13860 |
+| mysql-bin.000051 |       107 |
++------------------+-----------+
+
+slave3 [localhost] {msandbox} ((none)) &gt; show binlog events in 'mysql-bin.000051';
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+| Log_name         | Pos  | Event_type  | Server_id | End_log_pos | Info                                                                                                                                        |
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+| mysql-bin.000051 |    4 | Format_desc |       103 |         107 | Server ver: 5.5.32-log, Binlog ver: 4                                                                                                       |
+| mysql-bin.000051 |  107 | Query       |         1 |         174 | BEGIN                                                                                                                                       |
+| mysql-bin.000051 |  174 | User var    |         1 |         254 | <strong>@`pseudo_gtid`=_utf8 0x37383435623633382D353631612D313165342D393135642D336339373065613331656138 COLLATE utf8_general_ci</strong>                     |
+| mysql-bin.000051 |  254 | Query       |         1 |         452 | use `test`; insert into test.pseudo_gtid (id, ts, gtid) values (1, NOW(), @pseudo_gtid) on duplicate key update ts=NOW(), gtid=VALUES(gtid) |
+| mysql-bin.000051 |  452 | Xid         |         1 |         479 | COMMIT /* xid=2141 */                                                                                                                       |
+| mysql-bin.000051 |  479 | Query       |         1 |         572 | use `test`; create table test.vals(id int)                                                                                                  |
+| mysql-bin.000051 |  572 | Query       |         1 |         639 | BEGIN                                                                                                                                       |
+| mysql-bin.000051 |  639 | User var    |         1 |         719 | <strong>@`pseudo_gtid`=_utf8 0x37653362616434382D353631612D313165342D393135642D336339373065613331656138 COLLATE utf8_general_ci</strong>                     |
+| mysql-bin.000051 |  719 | Query       |         1 |         917 | use `test`; insert into test.pseudo_gtid (id, ts, gtid) values (1, NOW(), @pseudo_gtid) on duplicate key update ts=NOW(), gtid=VALUES(gtid) |
+| mysql-bin.000051 |  917 | Xid         |         1 |         944 | COMMIT /* xid=2150 */                                                                                                                       |
+| mysql-bin.000051 |  944 | Query       |         1 |        1011 | BEGIN                                                                                                                                       |
+| mysql-bin.000051 | 1011 | User var    |         1 |        1091 | <strong>@`pseudo_gtid`=_utf8 0x38343331396662332D353631612D313165342D393135642D336339373065613331656138 COLLATE utf8_general_ci</strong>                     |
+| mysql-bin.000051 | 1091 | Query       |         1 |        1289 | use `test`; insert into test.pseudo_gtid (id, ts, gtid) values (1, NOW(), @pseudo_gtid) on duplicate key update ts=NOW(), gtid=VALUES(gtid) |
+| mysql-bin.000051 | 1289 | Xid         |         1 |        1316 | COMMIT /* xid=2152 */                                                                                                                       |
+| mysql-bin.000051 | 1316 | Query       |         1 |        1375 | BEGIN                                                                                                                                       |
+| mysql-bin.000051 | 1375 | Query       |         1 |        1476 | use `test`; insert into test.vals (id) values (17)                                                                                          |
+| mysql-bin.000051 | 1476 | Xid         |         1 |        1503 | COMMIT /* xid=2154 */                                                                                                                       |
+| mysql-bin.000051 | 1503 | Query       |         1 |        1562 | BEGIN                                                                                                                                       |
+| mysql-bin.000051 | 1562 | Query       |         1 |        1663 | use `test`; insert into test.vals (id) values (18)                                                                                          |
+| mysql-bin.000051 | 1663 | Xid         |         1 |        1690 | COMMIT /* xid=2156 */                                                                                                                       |
+| mysql-bin.000051 | 1690 | Query       |         1 |        1749 | BEGIN                                                                                                                                       |
+| mysql-bin.000051 | 1749 | Query       |         1 |        1850 | use `test`; insert into test.vals (id) values (19)                                                                                          |
+| mysql-bin.000051 | 1850 | Xid         |         1 |        1877 | COMMIT /* xid=2158 */                                                                                                                       |
+| mysql-bin.000051 | 1877 | Query       |         1 |        1944 | BEGIN                                                                                                                                       |
+| mysql-bin.000051 | 1944 | User var    |         1 |        2024 | <strong>@`pseudo_gtid`=_utf8 0x38613237376232352D353631612D313165342D393135642D336339373065613331656138 COLLATE utf8_general_ci</strong>                     |
+| mysql-bin.000051 | 2024 | Query       |         1 |        2222 | use `test`; insert into test.pseudo_gtid (id, ts, gtid) values (1, NOW(), @pseudo_gtid) on duplicate key update ts=NOW(), gtid=VALUES(gtid) |
+| mysql-bin.000051 | 2222 | Xid         |         1 |        2249 | COMMIT /* xid=2160 */                                                                                                                       |
+| mysql-bin.000051 | 2249 | Query       |         1 |        2308 | BEGIN                                                                                                                                       |
+| mysql-bin.000051 | 2308 | Query       |         1 |        2409 | use `test`; insert into test.vals (id) values (23)                                                                                          |
+| mysql-bin.000051 | 2409 | Xid         |         1 |        2436 | COMMIT /* xid=2162 */                                                                                                                       |
+| mysql-bin.000051 | 2436 | Query       |         1 |        2503 | BEGIN                                                                                                                                       |
+| mysql-bin.000051 | 2503 | User var    |         1 |        2583 | <strong>@`pseudo_gtid`=_utf8 0x39303164373731612D353631612D313165342D393135642D336339373065613331656138 COLLATE utf8_general_ci</strong>                     |
+| mysql-bin.000051 | 2583 | Query       |         1 |        2781 | use `test`; insert into test.pseudo_gtid (id, ts, gtid) values (1, NOW(), @pseudo_gtid) on duplicate key update ts=NOW(), gtid=VALUES(gtid) |
+| mysql-bin.000051 | 2781 | Xid         |         1 |        2808 | COMMIT /* xid=2164 */                                                                                                                       |
+| mysql-bin.000051 | 2808 | Rotate      |       103 |        2851 | mysql-bin.000052;pos=4                                                                                                                      |
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+</pre>
+</blockquote>
+<p>We can see the <strong>"@`pseudo_gtid`=_utf8 0x"</strong> entries are replicated well, and are identical throughout the topology (this continue to work well on second-level slaves etc.).</p>
+<p>To be continued.</p>
+<p>&nbsp;</p>

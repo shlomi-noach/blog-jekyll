@@ -1,0 +1,126 @@
+---
+title: 'SQL: selecting top N records per group, another solution'
+date: 2012-08-21 06:49:43.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Hack
+- SQL
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: mysql@rjweb.org
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>A while back I presented <a title="Permanent Link to SQL: selecting top N records per group" href="http://code.openark.org/blog/mysql/sql-selecting-top-n-records-per-group" rel="bookmark">SQL: selecting top N records per group</a>, a "give me the top <strong>5</strong> countries in each continent" type of query, and which used an external <em>numbers</em> table and a lot of tedious casting.</p>
+<p>Here's another solution I came up with (<a href="#update">*</a>). Still using <strong>GROUP_CONCAT</strong> (how else?), but no external table and no casting. The query outputs the largest <strong>5</strong> countries (by surface area) per continent.</p>
+<blockquote>
+<pre>SELECT
+  Continent,
+  Name,
+  SurfaceArea,
+  Population
+FROM
+  world.Country,
+  (
+    SELECT 
+      GROUP_CONCAT(top_codes_per_group) AS top_codes
+    FROM
+      (
+        SELECT 
+          SUBSTRING_INDEX(GROUP_CONCAT(<strong>Code ORDER BY SurfaceArea DESC</strong>), ',', <strong>5</strong>) AS top_codes_per_group
+        FROM
+          world.Country
+        GROUP BY
+          Continent
+      ) s_top_codes_per_group
+  ) s_top_codes
+WHERE
+  FIND_IN_SET(Code, top_codes)
+ORDER BY
+  Continent,
+  SurfaceArea DESC
+;
+
++---------------+----------------------------------------------+-------------+------------+
+| Continent     | Name                                         | SurfaceArea | Population |
++---------------+----------------------------------------------+-------------+------------+
+| Asia          | China                                        |  9572900.00 | 1277558000 |
+| Asia          | India                                        |  3287263.00 | 1013662000 |
+| Asia          | Kazakstan                                    |  2724900.00 |   16223000 |
+| Asia          | Saudi Arabia                                 |  2149690.00 |   21607000 |
+| Asia          | Indonesia                                    |  1904569.00 |  212107000 |
+| Europe        | Russian Federation                           | 17075400.00 |  146934000 |
+| Europe        | Ukraine                                      |   603700.00 |   50456000 |
+| Europe        | France                                       |   551500.00 |   59225700 |
+| Europe        | Spain                                        |   505992.00 |   39441700 |
+| Europe        | Sweden                                       |   449964.00 |    8861400 |
+| North America | Canada                                       |  9970610.00 |   31147000 |
+| North America | United States                                |  9363520.00 |  278357000 |
+| North America | Greenland                                    |  2166090.00 |      56000 |
+| North America | Mexico                                       |  1958201.00 |   98881000 |
+| North America | Nicaragua                                    |   130000.00 |    5074000 |
+| Africa        | Sudan                                        |  2505813.00 |   29490000 |
+| Africa        | Algeria                                      |  2381741.00 |   31471000 |
+| Africa        | Congo, The Democratic Republic of the        |  2344858.00 |   51654000 |
+| Africa        | Libyan Arab Jamahiriya                       |  1759540.00 |    5605000 |
+| Africa        | Chad                                         |  1284000.00 |    7651000 |
+| Oceania       | Australia                                    |  7741220.00 |   18886000 |
+| Oceania       | Papua New Guinea                             |   462840.00 |    4807000 |
+| Oceania       | New Zealand                                  |   270534.00 |    3862000 |
+| Oceania       | Solomon Islands                              |    28896.00 |     444000 |
+| Oceania       | New Caledonia                                |    18575.00 |     214000 |
+| Antarctica    | Antarctica                                   | 13120000.00 |          0 |
+| Antarctica    | French Southern territories                  |     7780.00 |          0 |
+| Antarctica    | South Georgia and the South Sandwich Islands |     3903.00 |          0 |
+| Antarctica    | Heard Island and McDonald Islands            |      359.00 |          0 |
+| Antarctica    | Bouvet Island                                |       59.00 |          0 |
+| South America | Brazil                                       |  8547403.00 |  170115000 |
+| South America | Argentina                                    |  2780400.00 |   37032000 |
+| South America | Peru                                         |  1285216.00 |   25662000 |
+| South America | Colombia                                     |  1138914.00 |   42321000 |
+| South America | Bolivia                                      |  1098581.00 |    8329000 |
++---------------+----------------------------------------------+-------------+------------+
+</pre>
+</blockquote>
+<p>In bold are the conditions by which we nominate our selected rows (condition is <strong>SurfaceArea DESC</strong>, number of rows is <strong>5</strong>, so 5 largest countries).</p>
+<h4><!--more-->What's going on here?</h4>
+<p>So the inner <strong>s_top_codes_per_group</strong> query produces the codes for largest countries per continent:</p>
+<blockquote>
+<pre>+---------------------+
+| top_codes_per_group |
++---------------------+
+| CHN,IND,KAZ,SAU,IDN |
+| RUS,UKR,FRA,ESP,SWE |
+| CAN,USA,GRL,MEX,NIC |
+| SDN,DZA,COD,LBY,TCD |
+| AUS,PNG,NZL,SLB,NCL |
+| ATA,ATF,SGS,HMD,BVT |
+| BRA,ARG,PER,COL,BOL |
++---------------------+</pre>
+</blockquote>
+<p>The wrapping <strong>s_top_codes</strong> query concatenates all the above to one long text:</p>
+<blockquote>
+<pre>+---------------------------------------------------------------------------------------------------------------------------------------------+
+| top_codes                                                                                                                                   |
++---------------------------------------------------------------------------------------------------------------------------------------------+
+| CHN,IND,KAZ,SAU,IDN,RUS,UKR,FRA,ESP,SWE,CAN,USA,GRL,MEX,NIC,SDN,DZA,COD,LBY,TCD,AUS,PNG,NZL,SLB,NCL,ATA,ATF,SGS,HMD,BVT,BRA,ARG,PER,COL,BOL |
++---------------------------------------------------------------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>And the final query simply demands that <strong>Code</strong> must be found within this string, by calling upon <strong>FIND_IN_SET(Code, top_codes)</strong>.</p>
+<h4>Notes</h4>
+<ul>
+<li>This solution works for <strong>PRIMARY KEY</strong>s or otherwise <strong>UNIQUE KEY</strong>s of all sorts (a <strong>CHAR(3)</strong> in our example, but same for integers etc.)</li>
+<li>And you still have to have a sufficient <strong>group_concat_max_len</strong> (see <a title="Those oversized, undersized variables defaults" href="http://code.openark.org/blog/mysql/those-oversized-undersized-variables-defaults">this post</a>). You <em>must</em> have a large enough value to fit in the very long text you may be expecting in <strong>s_top_codes</strong>.</li>
+<li>Performance-wise there are full scans here, as well as string searching.</li>
+</ul>
+<p><a name="update"></a></p>
+<h4>* UPDATE</h4>
+<p>I should pay closer attention. <a href="http://www.xaprb.com/blog/2006/12/07/how-to-select-the-firstleastmax-row-per-group-in-sql/#comment-13284">This comment</a> had it <strong>5</strong> years ago.</p>

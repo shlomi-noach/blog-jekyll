@@ -1,0 +1,42 @@
+---
+title: 'MySQL Conference 2009 daily summary: Monday'
+date: 2009-04-21 03:27:20.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- mysqlconf
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>[See  <a rel="nofollow" href="http://forge.mysql.com/wiki/MySQLConf2009MondayNotes">http://forge.mysql.com/wiki/MySQLConf2009MondayNotes</a>]</p>
+<p>Monday: day of tutorials. Plenty of interesting tutorials on the Conference itself, plus a session with Mark Callaghan - it was hard to choose. I settled for two tutorials, which turned out to be three.</p>
+<p><a href="http://www.mysqlconf.com/mysql2009/public/schedule/detail/5364">Practical MySQL Plugin Development</a>: As a C/C++/Java developer, I am very interested in the plugin API. I have used UDF before, and these turned out to be extremely helpful, and solved me a lot of headache. With the new plugin API I was expecting to learn how to properly write INFORMATION_SCHEMA tables, functions and engines.</p>
+<p class="fn">Wasn't it possible to learn all this on the web? Sure, but this presentation was delivered by Roland Bouman and Sergei Golubchik, and I was anxious to hear from their experience. Well, that's what the conference is all about, isn't it?</p>
+<p class="fn">The session was very good. Roland &amp; Sergei covered the basics of the Plugin API, the general ideas, then went on to present the specific implementations: daemon plugins, INFORMATION_SCHEMA, FULLTEXT. The session was accompanied by convincing and enlighting examples. For example, a QUERY_CACHE_TABLE: an INFORMATION_SCHEMA table which lists which queries are currently in the query cache, along with the number of used blocks etc.</p>
+<p class="fn"><!--more-->However, I was a bit discouraged by several findings:</p>
+<ul>
+<li>The Plugin API is not well defined. It is not stabilized nor well documented. This means the API may change frequently, rendering your plugins useless.</li>
+<li>In order to develop a plugin, you must compile it against every single MySQL version you want the plugin to be deployed with. You actually need to recompile MySQL from source to do so. I find this discouraging, since it's a lot of hassle: each time you change anything in your plugin, you get to have a dozen, maybe more, MySQL source compilations to work through. I believe this will generally make developers less eager to develop plugins (but maybe it's just me!).</li>
+</ul>
+<p class="fn">
+<p class="fn">I next attended <a href="http://www.mysqlconf.com/mysql2009/public/schedule/detail/6067">SQL Antipatterns Strike Back</a> by Bill Karwin. I was impressed by his last year "SQL Antipatterns" presentation (I didn't attend, just downloaded) and was keen to see what he had to add.</p>
+<p class="fn">A lot of interesting issues were presented: trees, polymorphic tables, and more. Some were less of an interest (e.g. using a separate table instead of ENUM, using DECIMAL instead of FLOAT for currency calculations), and I found them to be very basic (of course, I don't consider this as 'bad').</p>
+<p class="fn">On a critic note, with pardon, the presenter seemed a bit out of date with regard to MySQL's abilities, or with common utilities such as maatkit's mk-duplicate-key-checker; with long-time solved bugs in MySQL and more.</p>
+<p class="fn">But allow me to be clear that the presenter made very good points, and had a lot of insight with regard to improper practices and with common problems. I found the session to be interesting and good. The audience was actively participating, asking, suggesting or rejecting: this is always an indication for an interesting session!</p>
+<p class="fn">I later joined the <span class="summary"><a class="url uid" href="http://www.mysqlconf.com/mysql2009/public/schedule/detail/5442">Partitioning in MySQL 5.1</a></span><span class="description"> session by </span><span class="description">Giuseppe Maxia &amp; Sarah Sproehnle. I found the presentation to be in good spirits, and it shed some new light on some partitioning behavior I was wondering about. It also presented some utilities and use cases. I only attended the last 40 minutes or so of this session, but was very pleased.</span></p>
+<p class="fn"><span class="description">Of course, the joke of the day was Sun's acquisition by Oracle. So if Giuseppe was saying that "we are rather limited by working on InnoDB partitioning, since they're not our guys - those who are developing InnoDB" - hey, now they are!</span></p>
+<p class="fn"><span class="description">Anyway, Giuseppe sent some thick hints about an important announcement tomorrow, after which he will be free to discuss further issues. Will we all be sent home tomorrow, I wonder?</span></p>
+<p class="fn"><span class="description">I'm not much into pondering about the acquisition. <em>Ke sera sera</em>, as the song goes. Looking forward for tomorrow's announcement, though.</span></p>
+<p class="fn"><span class="description">Tomorrow, Tuesday, will be a much busier day, with lots of interesting sessions, shorter ones. Besides, tomorrow's the day when everyone get over their jet lag!<br />
+</span></p>
+<p class="fn">
+<p class="fn">

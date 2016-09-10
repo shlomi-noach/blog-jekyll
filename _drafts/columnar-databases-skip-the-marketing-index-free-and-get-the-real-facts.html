@@ -1,0 +1,29 @@
+---
+layout: post
+title: 'Columnar Databases: skip the marketing "index-free" and get the real facts'
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Excerpt from <a href="http://www.vertica.com/tag/database-architecture/">Vertica marketing</a> (<strong>bold</strong> markers are my own):</p>
+<blockquote><p>Unlike traditional DBMS solutions, Vertica has no user-defined indexes. Indexes in an analytic database <strong>take up DBA time</strong> (<strong>figuring out which indexes to make</strong>), <strong>storage capacity</strong>, and <strong>load time</strong> (to keep them up to date). Even if an index consumes only 10% of the size of the original data and takes 10% more time during load, storing even a few indexes on terabytes of data is <strong>costly</strong>.  As we have mentioned before, a true column store isn’t just a vertically-partitioned row store.</p></blockquote>
+<p>The above is true, marketing-wise. Vertica does not have indexes, and so you don't need to take up your DBA time by figuring out which indexes to make, worry about index storage capacity, load time. You don't need to worry that even a few indexes on terabytes of data is costly.</p>
+<p>Instead, you get <em>projections</em>. A Vertica table is nothing but a declaration. A table's data resides within the table's projections. A table must have at least one projection that covers all of its columns (ahem, "covering projection" sounds almost like a "covering index"). And you can have as many projections as you like; typically just a couple or very few.</p>
+<p>Of course, your need to <strong>take up your DBA time</strong> to <strong>figure out which projections to make</strong>. You need to <strong>consider projections storage capacity</strong> (since each projection is a re-manifestation of the data) and <strong>load time</strong> (to keep them up to date). And of course, storing multiple projections on terabytes of data is <strong>costly</strong> (you don't pay with additional license fees for extra projections; just hardware fees).</p>
+<p>I openly admit that Vertica's projections are way superior to your common BTree. There are great compression algorithms; projections are utilized well on many types of queries and do not require queries running on a prefix-list of the projected columns. I'm just saying. There is a lot of wisdom in designing projections -- even more so than designing indexes.</p>
+<p>&nbsp;</p>
+<p>Infobright:</p>
+<blockquote><p>unlike other databases that require pre-work such as indexes, projections, partitioning or aggregate tables in order to deliver fast query performance.</p></blockquote>
+<p>True. No indexes, no projections, no partitioning. But then there's also the order of rows by which you load your data. It had better fit the type of queries you're going to issue. In fact, this issue is very similar to that of defining a proper PRIMARY KEY on your table. I would go further and define Infobright tables not as index-free, but as single-covering-primary-key tables.</p>

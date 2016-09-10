@@ -1,0 +1,66 @@
+---
+title: 'Converting an OLAP database to TokuDB, part 3: operational stuff'
+date: 2013-10-14 12:03:43.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- InnoDB
+- TokuDB
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This is the third post in a series of posts describing our experience in migrating a large DWH server to TokuDB (see <a href="http://code.openark.org/blog/mysql/converting-an-olap-database-to-tokudb-part-1">1st</a> and <a href="http://code.openark.org/blog/mysql/converting-an-olap-database-to-tokudb-part-2-the-process-of-migration">2nd</a> parts). This post discusses operations; namely ALTER TABLE operations in TokuDB. We ran into quite a few use cases by this time that we can shed light on.</p>
+<p>Quick recap: we've altered one of out DWH slaves to TokuDB, with the goal of migrating most of out servers, including the master, to TokuDB.</p>
+<h4>Adding an index</h4>
+<p>Shortly after migrating our server to TokuDB we noticed an unreasonably disproportionate slave lag on our TokuDB slave (red line in chart below) as compared to other slaves.</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2013/09/tokudb-slave-lag.png"><img alt="tokudb-slave-lag" src="{{ site.baseurl }}/assets/tokudb-slave-lag.png" width="700" height="329" /></a></p></blockquote>
+<p>Quick investigation led to the fact that, coincidentally, a manual heavy-duty operation was just taking place, which updated some year's worth of data retroactively. OK, but why so slow on TokuDB? Another quick investigation led to an apples vs. oranges problem: as depicted in <a href="http://code.openark.org/blog/mysql/converting-an-olap-database-to-tokudb-part-1">part 1</a>, our original setup included MONTHly partitioning on our larger tables, whereas we could not do the same in TokuDB, where we settled for YEARly partitioning.</p>
+<p>The heavy-duty operation included a query that was relying on the MONTHly partitioning to do reasonable pruning: a <strong>WHERE</strong> condition on a date column did the right partition pruning; but where on InnoDB that would filter <strong>1</strong> month's worth of data, on TokuDB it would filter <strong>1</strong> <em>year</em>.</p>
+<p>Wasn't it suggested that TokuDB has online table operations? I decided to give it a shot, and add a proper index on our date column (I actually created a compound index, but irrelevant).</p>
+<p>It took <strong>13</strong> minutes to add an index on a <strong>1GB</strong> TokuDB table (approx. <strong>20GB</strong> InnoDB uncompressed equivalent):</p>
+<ul>
+<li>The <strong>ALTER</strong> was non blocking: table was unlocked at that duration</li>
+<li>The client issuing the <strong>ALTER</strong> <em>was</em> blocked (I thought it would happen completely in the background) -- but who cares?</li>
+<li>I would say <strong>13</strong> minutes is fast</li>
+</ul>
+<p>Not surprisingly adding the index eliminated the problem altogether.</p>
+<h4>Modifying a PRIMARY KEY</h4>
+<p>It was suggested by our DBA that there was a long time standing need to modify our <strong>PRIMARY KEY</strong>. It was impossible to achieve with our InnoDB setup (not enough disk space for the operation, would take weeks to complete if we did have the disk space). Would it be possible to modify our TokuDB tables? On some of our medium-sized tables we issued an <strong>ALTER</strong> of the form:<!--more--></p>
+<blockquote>
+<pre>ALTER TABLE my_table DROP PRIMARY KEY, ADD PRIMARY KEY (c1, c2, c3, ...);</pre>
+</blockquote>
+<p>Time-wise the operation completed in good time. We did note, however, that the <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/tokudb_file_map.html">disk space consumed by the new table</a> was <em>doubled</em>. Was it due to the fact we added two columns to our PK? Did that account for the bloated space? I did not believe so, and decided to rebuild the table:</p>
+<blockquote>
+<pre>OPTIMIZE TABLE my_table</pre>
+</blockquote>
+<p>Nope. Space not reduced. However we were unconvinced and <a href="https://groups.google.com/forum/#!topic/tokudb-user/ow47QY2pcgU">asked</a>. As usual, we got quick response from the Tokutek team; this was a bug: while our original table used the TOKUDB_SMALL row format (high compression), the table rebuild reset it to TOKUDB_FAST (normal compression), which makes for roughly twice the file size. The bug was filed as: <a href="https://github.com/Tokutek/ft-engine/issues/107">alter table operations that rebuild the table lose the original tokudb compression</a>.</p>
+<p>Now, we <em>were</em> altering the <strong>PRIMARY KEY</strong>. We were not expecting an online operation anyhow, and didn't mind blocking the table; hence the solution was simple: make sure to spceify the row format:</p>
+<blockquote>
+<pre>ALTER TABLE my_table DROP PRIMARY KEY, ADD PRIMARY KEY (c1, c2, c3, ...) ENGINE=TokuDB ROW_FORMAT=TOKUDB_SMALL;</pre>
+</blockquote>
+<p>This worked in terms of disk space -- but we only later realized it would still make us trouble.</p>
+<h4>Modifying a PRIMARY KEY on our largest table</h4>
+<p>We moved on to our largest table: originally <strong>1TB</strong> InnoDB <strong>COMPRESSED</strong>, worth of <strong>2TB</strong> uncompressed. With TokuDB it went down to <strong>100GB</strong>. Converting this table to TokuDB took about <strong>40</strong> hours, which is just fast. We issued an ALTAR TABLE modifying the PRIMARY KEY as above and waited.</p>
+<p>The operation did not complete after <strong>40</strong> hours. Nor after <strong>3</strong> days. By day <strong>4</strong> we thought we might look into this. Fortunately, TokuDB is friendly on <strong>SHOW PROCESSLIST</strong> and provides you with useful information, such as "<strong>Fetched about 1234567890 rows, loading data still remains</strong>". Yikes! We extrapolated the values to realize it would take <strong>2</strong> <em>weeks</em> to complete! Weekend went by and we decided to find a better way. Again, posting on the tokudb-user group, we got a definitive answer: a table rebuild does not utilize the <em>bulk loader</em> (you really want to be friends with the bulk loader, it's the process that loads your data quickly).</p>
+<p>And so we chose to <strong>KILL</strong> the <strong>ALTER</strong> process and go another way; again, <strong>KILL</strong>s are very easy with TokuDB <strong>ALTER</strong> operations: took <strong>3</strong> minutes to abort this week old operation. The alternative operation was:</p>
+<blockquote>
+<pre>CREATE TABLE my_table_New LIKE my_table;
+ALTER TABLE my_table_New DROP PRIMARY KEY, ADD PRIMARY KEY (c1, c2, c3, ...) ENGINE=TokuDB ROW_FORMAT=TOKUDB_SMALL;
+INSERT INTO my_table_New SELECT * FROM my_table;
+RENAME TABLE my_table TO my_table_Old, my_table_New TO my_table;
+DROP TABLE my_table_Old;</pre>
+</blockquote>
+<p>The <strong>INSERT INTO ... SELECT</strong> operation does use the bulk loader when you do it on an empty table. It completed within merely <strong>30</strong> hours. Hurrah!</p>
+<h4>DROPping a TABLE</h4>
+<p>It was an immediate operation to drop our "Old" table -- subsecond. Nothing like your InnoDB DROP.</p>

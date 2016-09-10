@@ -1,0 +1,42 @@
+---
+title: Variables ambiguities in names and values
+date: 2009-04-28 09:02:37.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Configuration
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: rjames@yahoo-inc.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Writing up some scripts, I see more and more ambiguities with regard to global variables.</p>
+<p>For one thing, the <em>names</em> ambiguity between the hyphen ('-') and the underscore ('_'). So <strong>wait_timeout</strong> and <strong>wait-timeout</strong> are the same variable.</p>
+<p>But just check out the many levels of inconsistency:</p>
+<ul>
+<li>Command line arguments (e.g. run <strong>mysqld</strong> with option variables) use the hyphen convention</li>
+<li><strong>mysql --verbose --help</strong> shows the hyphen convention</li>
+<li><strong>SHOW GLOBAL VARIABLES</strong> uses the underscore convention</li>
+<li>The MySQL supplied sample configuration files use both conventions interchangeably</li>
+</ul>
+<p>Enough? Not quite: there are ambiguities in <em>values</em>, as well. For example, you may set <strong>query_cache_type</strong> to <strong>1</strong> or <strong>ON</strong>. These are equivalent. That's very friendly. However:<!--more--></p>
+<ul>
+<li><strong>mysql --verbose --help</strong> will show "<strong>query_cache_type 1</strong>"</li>
+<li><strong>SHOW GLOBAL VARIABLES</strong> will show "<strong>query_cache_type ON</strong>"</li>
+</ul>
+<p>We also have:</p>
+<ul>
+<li> <strong>1</strong> &lt;==&gt; <strong>YES</strong></li>
+<li><strong>OFF</strong> &lt;==&gt; <strong>FALSE</strong></li>
+<li><strong>ON</strong> &lt;==&gt; <strong>TRUE</strong></li>
+</ul>
+<p>Time to decide. Ambiguities are evil. They make for a difficult parsing/analysis/comparison/validation work. Will anyone pick the glove?</p>
+<p>PS - Drizzle falk - isn't this the kind of stuff you're happy to drop?</p>

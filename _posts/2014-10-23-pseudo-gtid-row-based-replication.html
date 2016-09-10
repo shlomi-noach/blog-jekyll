@@ -1,0 +1,274 @@
+---
+title: Pseudo GTID, Row Based Replication
+date: 2014-10-23 06:18:52.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- GTID
+- orchestrator
+- Replication
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This post continues <a href="http://code.openark.org/blog/mysql/pseudo-gtid">Pseudo GTID</a>, in a series of posts describing an alternative to using MySQL GTIDs.</p>
+<p>The solution offered in the last post does not work too well for row based replication. The binary log entries for the INSERT statement look like this:</p>
+<blockquote>
+<pre># at 1020
+# at 1074
+#141020 12:36:21 server id 1  end_log_pos 1074  Table_map: `test`.`pseudo_gtid` mapped to number 33
+#141020 12:36:21 server id 1  end_log_pos 1196  Update_rows: table id 33 flags: STMT_END_F
+
+BINLOG '
+lddEVBMBAAAANgAAADIEAAAAACEAAAAAAAEABHRlc3QAC3BzZXVkb19ndGlkAAMDBw8CQAAE
+lddEVBgBAAAAegAAAKwEAAAAACEAAAAAAAEAA///+AEAAACL10RUJDg2ZmRhMDk1LTU4M2MtMTFl
+NC05NzYyLTNjOTcwZWEzMWVhOPgBAAAAlddEVCQ4Y2YzOWMyYy01ODNjLTExZTQtOTc2Mi0zYzk3
+MGVhMzFlYTg=
+'/*!*/;
+</pre>
+</blockquote>
+<p>Where's our unique value? Encoded within something that cannot be trusted to be unique. Issuing <strong>mysqlbinlog --verbose</strong> helps out:</p>
+<blockquote>
+<pre>BEGIN
+/*!*/;
+# at 183
+# at 237
+#141020 12:35:51 server id 1  end_log_pos 237   Table_map: `test`.`pseudo_gtid` mapped to number 33
+#141020 12:35:51 server id 1  end_log_pos 359   Update_rows: table id 33 flags: STMT_END_F
+
+BINLOG '
+d9dEVBMBAAAANgAAAO0AAAAAACEAAAAAAAEABHRlc3QAC3BzZXVkb19ndGlkAAMDBw8CQAAE
+d9dEVBgBAAAAegAAAGcBAAAAACEAAAAAAAEAA///+AEAAABt10RUJDc1MWJkYzEwLTU4M2MtMTFl
+NC05NzYyLTNjOTcwZWEzMWVhOPgBAAAAd9dEVCQ3YjExZDQzYy01ODNjLTExZTQtOTc2Mi0zYzk3
+MGVhMzFlYTg=
+'/*!*/;
+### UPDATE `test`.`pseudo_gtid`
+### WHERE
+###   @1=1
+###   @2=1413797741
+###   <strong>@3='751bdc10-583c-11e4-9762-3c970ea31ea8'</strong>
+### SET
+###   @1=1
+###   @2=1413797751
+###   @3='7b11d43c-583c-11e4-9762-3c970ea31ea8'</pre>
+</blockquote>
+<p>and that's something we can work with. However, I like to do stuff from within MySQL, and rely as little as possible on external tools. How do the binary log entries look via <strong>SHOW BINLOG EVENTS</strong>? Not good.</p>
+<blockquote>
+<pre>master [localhost] {msandbox} (test) &gt; show binlog events in 'mysql-bin.000058' limit 20;
++------------------+------+-------------+-----------+-------------+---------------------------------------+
+| Log_name         | Pos  | Event_type  | Server_id | End_log_pos | Info                                  |
++------------------+------+-------------+-----------+-------------+---------------------------------------+
+| mysql-bin.000058 |    4 | Format_desc |         1 |         107 | Server ver: 5.5.32-log, Binlog ver: 4 |
+| mysql-bin.000058 |  107 | Query       |         1 |         183 | BEGIN                                 |
+| mysql-bin.000058 |  183 | Table_map   |         1 |         237 | table_id: 33 (test.pseudo_gtid)       |
+| mysql-bin.000058 |  237 | Update_rows |         1 |         359 | table_id: 33 flags: STMT_END_F        |
+| mysql-bin.000058 |  359 | Xid         |         1 |         386 | COMMIT /* xid=5460 */                 |
+| mysql-bin.000058 |  386 | Query       |         1 |         462 | BEGIN                                 |
+| mysql-bin.000058 |  462 | Table_map   |         1 |         516 | table_id: 33 (test.pseudo_gtid)       |
+| mysql-bin.000058 |  516 | Update_rows |         1 |         638 | table_id: 33 flags: STMT_END_F        |
+| mysql-bin.000058 |  638 | Xid         |         1 |         665 | COMMIT /* xid=5471 */                 |
+| mysql-bin.000058 |  665 | Query       |         1 |         741 | BEGIN                                 |
+| mysql-bin.000058 |  741 | Table_map   |         1 |         795 | table_id: 33 (test.pseudo_gtid)       |
+| mysql-bin.000058 |  795 | Update_rows |         1 |         917 | table_id: 33 flags: STMT_END_F        |
+| mysql-bin.000058 |  917 | Xid         |         1 |         944 | COMMIT /* xid=5474 */                 |
+| mysql-bin.000058 |  944 | Query       |         1 |        1020 | BEGIN                                 |
+| mysql-bin.000058 | 1020 | Table_map   |         1 |        1074 | table_id: 33 (test.pseudo_gtid)       |
+| mysql-bin.000058 | 1074 | Update_rows |         1 |        1196 | table_id: 33 flags: STMT_END_F        |
+| mysql-bin.000058 | 1196 | Xid         |         1 |        1223 | COMMIT /* xid=5476 */                 |
+| mysql-bin.000058 | 1223 | Query       |         1 |        1299 | BEGIN                                 |
+| mysql-bin.000058 | 1299 | Table_map   |         1 |        1353 | table_id: 33 (test.pseudo_gtid)       |
+| mysql-bin.000058 | 1353 | Update_rows |         1 |        1475 | table_id: 33 flags: STMT_END_F        |
++------------------+------+-------------+-----------+-------------+---------------------------------------+</pre>
+</blockquote>
+<p>The representation of row-format entries in the <strong>SHOW BINLOG EVENTS</strong> output is really poor. Why, there's nothing to tell me at all about what's been done, except that this is some operation on <strong>test.pseudo_gtid</strong>. Obviously I cannot find anything unique over here.</p>
+<p>Not all is lost. How about DDL statements? Those are still written in SBR format (there's no <em>rows</em> to log upon creating a table). A solution could be somehow manipulating a unique value in a DDL statement. There could be various such solutions, and I chose to use a <strong>CREATE VIEW</strong> statement, dynamically composed of a <strong>UUID()</strong>:<!--more--></p>
+<blockquote>
+<pre>drop event if exists test.update_pseudo_gtid_rbr_event;
+
+delimiter ;;
+create event if not exists
+  test.update_pseudo_gtid_rbr_event
+  on schedule every 10 second starts current_timestamp
+  on completion preserve
+  enable
+  do
+    begin
+      set @pseudo_gtid := uuid();
+      set @_create_statement := concat('create or replace view test.pseudo_gtid_v as select 
+</blockquote>
+<p>And this is how it looks on runtime (running this new event along with the old one):</p>
+<blockquote>
+<pre>master [localhost] {msandbox} (test) &gt; show binlog events in 'mysql-bin.000060' limit 20;
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Log_name         | Pos  | Event_type  | Server_id | End_log_pos | Info                                                                                                                                                                                  |
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| mysql-bin.000060 |    4 | Format_desc |         1 |         107 | Server ver: 5.5.32-log, Binlog ver: 4                                                                                                                                                 |
+| mysql-bin.000060 |  107 | Query       |         1 |         183 | BEGIN                                                                                                                                                                                 |
+| mysql-bin.000060 |  183 | Table_map   |         1 |         237 | table_id: 33 (test.pseudo_gtid)                                                                                                                                                       |
+| mysql-bin.000060 |  237 | Update_rows |         1 |         359 | table_id: 33 flags: STMT_END_F                                                                                                                                                        |
+| mysql-bin.000060 |  359 | Xid         |         1 |         386 | COMMIT /* xid=5802 */                                                                                                                                                                 |
+| mysql-bin.000060 |  386 | Query       |         1 |         638 | <strong>use `test`; CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`msandbox`@`localhost` SQL SECURITY DEFINER VIEW `pseudo_gtid_v` AS select '7d2d44ca-583e-11e4-9762-3c970ea31ea8' from dual</strong> |
+| mysql-bin.000060 |  638 | Query       |         1 |         714 | BEGIN                                                                                                                                                                                 |
+| mysql-bin.000060 |  714 | Table_map   |         1 |         768 | table_id: 33 (test.pseudo_gtid)                                                                                                                                                       |
+| mysql-bin.000060 |  768 | Update_rows |         1 |         890 | table_id: 33 flags: STMT_END_F                                                                                                                                                        |
+| mysql-bin.000060 |  890 | Xid         |         1 |         917 | COMMIT /* xid=5811 */                                                                                                                                                                 |
+| mysql-bin.000060 |  917 | Query       |         1 |        1169 | <strong>use `test`; CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`msandbox`@`localhost` SQL SECURITY DEFINER VIEW `pseudo_gtid_v` AS select '83234b13-583e-11e4-9762-3c970ea31ea8' from dual</strong> |
+| mysql-bin.000060 | 1169 | Query       |         1 |        1245 | BEGIN                                                                                                                                                                                 |
+| mysql-bin.000060 | 1245 | Table_map   |         1 |        1299 | table_id: 33 (test.pseudo_gtid)                                                                                                                                                       |
+| mysql-bin.000060 | 1299 | Update_rows |         1 |        1421 | table_id: 33 flags: STMT_END_F                                                                                                                                                        |
+| mysql-bin.000060 | 1421 | Xid         |         1 |        1448 | COMMIT /* xid=5819 */                                                                                                                                                                 |
+| mysql-bin.000060 | 1448 | Query       |         1 |        1700 | <strong>use `test`; CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`msandbox`@`localhost` SQL SECURITY DEFINER VIEW `pseudo_gtid_v` AS select '89193a09-583e-11e4-9762-3c970ea31ea8' from dual</strong> |
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>Scroll to the right to find the unique value injected into the view's creation statement.</p>
+<p>Does it replicate well? Looking at a slave's binary logs:</p>
+<blockquote>
+<pre>slave3 [localhost] {msandbox} ((none)) &gt; show binlog events in 'mysql-bin.000064';
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Log_name         | Pos  | Event_type  | Server_id | End_log_pos | Info                                                                                                                                                                                  |
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| mysql-bin.000064 |    4 | Format_desc |       103 |         107 | Server ver: 5.5.32-log, Binlog ver: 4                                                                                                                                                 |
+| mysql-bin.000064 |  107 | Query       |         1 |         166 | BEGIN                                                                                                                                                                                 |
+| mysql-bin.000064 |  166 | Table_map   |         1 |         220 | table_id: 33 (test.pseudo_gtid)                                                                                                                                                       |
+| mysql-bin.000064 |  220 | Update_rows |         1 |         342 | table_id: 33 flags: STMT_END_F                                                                                                                                                        |
+| mysql-bin.000064 |  342 | Xid         |         1 |         369 | COMMIT /* xid=3184 */                                                                                                                                                                 |
+| mysql-bin.000064 |  369 | Query       |         1 |         601 | <strong>use `test`; CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`msandbox`@`localhost` SQL SECURITY DEFINER VIEW `pseudo_gtid_v` AS select '7d2d44ca-583e-11e4-9762-3c970ea31ea8' from dual</strong> |
+| mysql-bin.000064 |  601 | Query       |         1 |         660 | BEGIN                                                                                                                                                                                 |
+| mysql-bin.000064 |  660 | Table_map   |         1 |         714 | table_id: 33 (test.pseudo_gtid)                                                                                                                                                       |
+| mysql-bin.000064 |  714 | Update_rows |         1 |         836 | table_id: 33 flags: STMT_END_F                                                                                                                                                        |
+| mysql-bin.000064 |  836 | Xid         |         1 |         863 | COMMIT /* xid=3194 */                                                                                                                                                                 |
+| mysql-bin.000064 |  863 | Query       |         1 |        1095 | <strong>use `test`; CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`msandbox`@`localhost` SQL SECURITY DEFINER VIEW `pseudo_gtid_v` AS select '83234b13-583e-11e4-9762-3c970ea31ea8' from dual</strong> |
+| mysql-bin.000064 | 1095 | Query       |         1 |        1154 | BEGIN                                                                                                                                                                                 |
+| mysql-bin.000064 | 1154 | Table_map   |         1 |        1208 | table_id: 33 (test.pseudo_gtid)                                                                                                                                                       |
+| mysql-bin.000064 | 1208 | Update_rows |         1 |        1330 | table_id: 33 flags: STMT_END_F                                                                                                                                                        |
+| mysql-bin.000064 | 1330 | Xid         |         1 |        1357 | COMMIT /* xid=3198 */                                                                                                                                                                 |
+| mysql-bin.000064 | 1357 | Query       |         1 |        1589 | <strong>use `test`; CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`msandbox`@`localhost` SQL SECURITY DEFINER VIEW `pseudo_gtid_v` AS select '89193a09-583e-11e4-9762-3c970ea31ea8' from dual</strong> |
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>Not as pretty; I hate DDL operations that are not strictly required; but this solves the problem, plus rewriting the view means we're not littering the tablespace.</p>
+<p>Next post will describe the steps towards achieving GTID-like behaviour based on the above.</p>
+<p>&nbsp;</p>
+', @pseudo_gtid, '
+</blockquote>
+<p>And this is how it looks on runtime (running this new event along with the old one):</p>
+<blockquote>
+<pre>master [localhost] {msandbox} (test) &gt; show binlog events in 'mysql-bin.000060' limit 20;
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Log_name         | Pos  | Event_type  | Server_id | End_log_pos | Info                                                                                                                                                                                  |
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| mysql-bin.000060 |    4 | Format_desc |         1 |         107 | Server ver: 5.5.32-log, Binlog ver: 4                                                                                                                                                 |
+| mysql-bin.000060 |  107 | Query       |         1 |         183 | BEGIN                                                                                                                                                                                 |
+| mysql-bin.000060 |  183 | Table_map   |         1 |         237 | table_id: 33 (test.pseudo_gtid)                                                                                                                                                       |
+| mysql-bin.000060 |  237 | Update_rows |         1 |         359 | table_id: 33 flags: STMT_END_F                                                                                                                                                        |
+| mysql-bin.000060 |  359 | Xid         |         1 |         386 | COMMIT /* xid=5802 */                                                                                                                                                                 |
+| mysql-bin.000060 |  386 | Query       |         1 |         638 | <strong>use `test`; CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`msandbox`@`localhost` SQL SECURITY DEFINER VIEW `pseudo_gtid_v` AS select '7d2d44ca-583e-11e4-9762-3c970ea31ea8' from dual</strong> |
+| mysql-bin.000060 |  638 | Query       |         1 |         714 | BEGIN                                                                                                                                                                                 |
+| mysql-bin.000060 |  714 | Table_map   |         1 |         768 | table_id: 33 (test.pseudo_gtid)                                                                                                                                                       |
+| mysql-bin.000060 |  768 | Update_rows |         1 |         890 | table_id: 33 flags: STMT_END_F                                                                                                                                                        |
+| mysql-bin.000060 |  890 | Xid         |         1 |         917 | COMMIT /* xid=5811 */                                                                                                                                                                 |
+| mysql-bin.000060 |  917 | Query       |         1 |        1169 | <strong>use `test`; CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`msandbox`@`localhost` SQL SECURITY DEFINER VIEW `pseudo_gtid_v` AS select '83234b13-583e-11e4-9762-3c970ea31ea8' from dual</strong> |
+| mysql-bin.000060 | 1169 | Query       |         1 |        1245 | BEGIN                                                                                                                                                                                 |
+| mysql-bin.000060 | 1245 | Table_map   |         1 |        1299 | table_id: 33 (test.pseudo_gtid)                                                                                                                                                       |
+| mysql-bin.000060 | 1299 | Update_rows |         1 |        1421 | table_id: 33 flags: STMT_END_F                                                                                                                                                        |
+| mysql-bin.000060 | 1421 | Xid         |         1 |        1448 | COMMIT /* xid=5819 */                                                                                                                                                                 |
+| mysql-bin.000060 | 1448 | Query       |         1 |        1700 | <strong>use `test`; CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`msandbox`@`localhost` SQL SECURITY DEFINER VIEW `pseudo_gtid_v` AS select '89193a09-583e-11e4-9762-3c970ea31ea8' from dual</strong> |
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>Scroll to the right to find the unique value injected into the view's creation statement.</p>
+<p>Does it replicate well? Looking at a slave's binary logs:</p>
+<blockquote>
+<pre>slave3 [localhost] {msandbox} ((none)) &gt; show binlog events in 'mysql-bin.000064';
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Log_name         | Pos  | Event_type  | Server_id | End_log_pos | Info                                                                                                                                                                                  |
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| mysql-bin.000064 |    4 | Format_desc |       103 |         107 | Server ver: 5.5.32-log, Binlog ver: 4                                                                                                                                                 |
+| mysql-bin.000064 |  107 | Query       |         1 |         166 | BEGIN                                                                                                                                                                                 |
+| mysql-bin.000064 |  166 | Table_map   |         1 |         220 | table_id: 33 (test.pseudo_gtid)                                                                                                                                                       |
+| mysql-bin.000064 |  220 | Update_rows |         1 |         342 | table_id: 33 flags: STMT_END_F                                                                                                                                                        |
+| mysql-bin.000064 |  342 | Xid         |         1 |         369 | COMMIT /* xid=3184 */                                                                                                                                                                 |
+| mysql-bin.000064 |  369 | Query       |         1 |         601 | <strong>use `test`; CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`msandbox`@`localhost` SQL SECURITY DEFINER VIEW `pseudo_gtid_v` AS select '7d2d44ca-583e-11e4-9762-3c970ea31ea8' from dual</strong> |
+| mysql-bin.000064 |  601 | Query       |         1 |         660 | BEGIN                                                                                                                                                                                 |
+| mysql-bin.000064 |  660 | Table_map   |         1 |         714 | table_id: 33 (test.pseudo_gtid)                                                                                                                                                       |
+| mysql-bin.000064 |  714 | Update_rows |         1 |         836 | table_id: 33 flags: STMT_END_F                                                                                                                                                        |
+| mysql-bin.000064 |  836 | Xid         |         1 |         863 | COMMIT /* xid=3194 */                                                                                                                                                                 |
+| mysql-bin.000064 |  863 | Query       |         1 |        1095 | <strong>use `test`; CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`msandbox`@`localhost` SQL SECURITY DEFINER VIEW `pseudo_gtid_v` AS select '83234b13-583e-11e4-9762-3c970ea31ea8' from dual</strong> |
+| mysql-bin.000064 | 1095 | Query       |         1 |        1154 | BEGIN                                                                                                                                                                                 |
+| mysql-bin.000064 | 1154 | Table_map   |         1 |        1208 | table_id: 33 (test.pseudo_gtid)                                                                                                                                                       |
+| mysql-bin.000064 | 1208 | Update_rows |         1 |        1330 | table_id: 33 flags: STMT_END_F                                                                                                                                                        |
+| mysql-bin.000064 | 1330 | Xid         |         1 |        1357 | COMMIT /* xid=3198 */                                                                                                                                                                 |
+| mysql-bin.000064 | 1357 | Query       |         1 |        1589 | <strong>use `test`; CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`msandbox`@`localhost` SQL SECURITY DEFINER VIEW `pseudo_gtid_v` AS select '89193a09-583e-11e4-9762-3c970ea31ea8' from dual</strong> |
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>Not as pretty; I hate DDL operations that are not strictly required; but this solves the problem, plus rewriting the view means we're not littering the tablespace.</p>
+<p>Next post will describe the steps towards achieving GTID-like behaviour based on the above.</p>
+<p>&nbsp;</p>
+ from dual');
+      PREPARE st FROM @_create_statement;
+      EXECUTE st;
+      DEALLOCATE PREPARE st;    
+    end
+;;
+
+delimiter ;</pre>
+</blockquote>
+<p>And this is how it looks on runtime (running this new event along with the old one):</p>
+<blockquote>
+<pre>master [localhost] {msandbox} (test) &gt; show binlog events in 'mysql-bin.000060' limit 20;
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Log_name         | Pos  | Event_type  | Server_id | End_log_pos | Info                                                                                                                                                                                  |
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| mysql-bin.000060 |    4 | Format_desc |         1 |         107 | Server ver: 5.5.32-log, Binlog ver: 4                                                                                                                                                 |
+| mysql-bin.000060 |  107 | Query       |         1 |         183 | BEGIN                                                                                                                                                                                 |
+| mysql-bin.000060 |  183 | Table_map   |         1 |         237 | table_id: 33 (test.pseudo_gtid)                                                                                                                                                       |
+| mysql-bin.000060 |  237 | Update_rows |         1 |         359 | table_id: 33 flags: STMT_END_F                                                                                                                                                        |
+| mysql-bin.000060 |  359 | Xid         |         1 |         386 | COMMIT /* xid=5802 */                                                                                                                                                                 |
+| mysql-bin.000060 |  386 | Query       |         1 |         638 | <strong>use `test`; CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`msandbox`@`localhost` SQL SECURITY DEFINER VIEW `pseudo_gtid_v` AS select '7d2d44ca-583e-11e4-9762-3c970ea31ea8' from dual</strong> |
+| mysql-bin.000060 |  638 | Query       |         1 |         714 | BEGIN                                                                                                                                                                                 |
+| mysql-bin.000060 |  714 | Table_map   |         1 |         768 | table_id: 33 (test.pseudo_gtid)                                                                                                                                                       |
+| mysql-bin.000060 |  768 | Update_rows |         1 |         890 | table_id: 33 flags: STMT_END_F                                                                                                                                                        |
+| mysql-bin.000060 |  890 | Xid         |         1 |         917 | COMMIT /* xid=5811 */                                                                                                                                                                 |
+| mysql-bin.000060 |  917 | Query       |         1 |        1169 | <strong>use `test`; CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`msandbox`@`localhost` SQL SECURITY DEFINER VIEW `pseudo_gtid_v` AS select '83234b13-583e-11e4-9762-3c970ea31ea8' from dual</strong> |
+| mysql-bin.000060 | 1169 | Query       |         1 |        1245 | BEGIN                                                                                                                                                                                 |
+| mysql-bin.000060 | 1245 | Table_map   |         1 |        1299 | table_id: 33 (test.pseudo_gtid)                                                                                                                                                       |
+| mysql-bin.000060 | 1299 | Update_rows |         1 |        1421 | table_id: 33 flags: STMT_END_F                                                                                                                                                        |
+| mysql-bin.000060 | 1421 | Xid         |         1 |        1448 | COMMIT /* xid=5819 */                                                                                                                                                                 |
+| mysql-bin.000060 | 1448 | Query       |         1 |        1700 | <strong>use `test`; CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`msandbox`@`localhost` SQL SECURITY DEFINER VIEW `pseudo_gtid_v` AS select '89193a09-583e-11e4-9762-3c970ea31ea8' from dual</strong> |
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>Scroll to the right to find the unique value injected into the view's creation statement.</p>
+<p>Does it replicate well? Looking at a slave's binary logs:</p>
+<blockquote>
+<pre>slave3 [localhost] {msandbox} ((none)) &gt; show binlog events in 'mysql-bin.000064';
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Log_name         | Pos  | Event_type  | Server_id | End_log_pos | Info                                                                                                                                                                                  |
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| mysql-bin.000064 |    4 | Format_desc |       103 |         107 | Server ver: 5.5.32-log, Binlog ver: 4                                                                                                                                                 |
+| mysql-bin.000064 |  107 | Query       |         1 |         166 | BEGIN                                                                                                                                                                                 |
+| mysql-bin.000064 |  166 | Table_map   |         1 |         220 | table_id: 33 (test.pseudo_gtid)                                                                                                                                                       |
+| mysql-bin.000064 |  220 | Update_rows |         1 |         342 | table_id: 33 flags: STMT_END_F                                                                                                                                                        |
+| mysql-bin.000064 |  342 | Xid         |         1 |         369 | COMMIT /* xid=3184 */                                                                                                                                                                 |
+| mysql-bin.000064 |  369 | Query       |         1 |         601 | <strong>use `test`; CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`msandbox`@`localhost` SQL SECURITY DEFINER VIEW `pseudo_gtid_v` AS select '7d2d44ca-583e-11e4-9762-3c970ea31ea8' from dual</strong> |
+| mysql-bin.000064 |  601 | Query       |         1 |         660 | BEGIN                                                                                                                                                                                 |
+| mysql-bin.000064 |  660 | Table_map   |         1 |         714 | table_id: 33 (test.pseudo_gtid)                                                                                                                                                       |
+| mysql-bin.000064 |  714 | Update_rows |         1 |         836 | table_id: 33 flags: STMT_END_F                                                                                                                                                        |
+| mysql-bin.000064 |  836 | Xid         |         1 |         863 | COMMIT /* xid=3194 */                                                                                                                                                                 |
+| mysql-bin.000064 |  863 | Query       |         1 |        1095 | <strong>use `test`; CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`msandbox`@`localhost` SQL SECURITY DEFINER VIEW `pseudo_gtid_v` AS select '83234b13-583e-11e4-9762-3c970ea31ea8' from dual</strong> |
+| mysql-bin.000064 | 1095 | Query       |         1 |        1154 | BEGIN                                                                                                                                                                                 |
+| mysql-bin.000064 | 1154 | Table_map   |         1 |        1208 | table_id: 33 (test.pseudo_gtid)                                                                                                                                                       |
+| mysql-bin.000064 | 1208 | Update_rows |         1 |        1330 | table_id: 33 flags: STMT_END_F                                                                                                                                                        |
+| mysql-bin.000064 | 1330 | Xid         |         1 |        1357 | COMMIT /* xid=3198 */                                                                                                                                                                 |
+| mysql-bin.000064 | 1357 | Query       |         1 |        1589 | <strong>use `test`; CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`msandbox`@`localhost` SQL SECURITY DEFINER VIEW `pseudo_gtid_v` AS select '89193a09-583e-11e4-9762-3c970ea31ea8' from dual</strong> |
++------------------+------+-------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>Not as pretty; I hate DDL operations that are not strictly required; but this solves the problem, plus rewriting the view means we're not littering the tablespace.</p>
+<p>Next post will describe the steps towards achieving GTID-like behaviour based on the above.</p>
+<p>&nbsp;</p>

@@ -1,0 +1,56 @@
+---
+title: Who is hogging my MySQL connections?
+date: 2012-06-21 08:38:54.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+meta:
+  _edit_last: '2'
+  _oembed_55835302a9154b1a33fa9bef669291f7: '<iframe src="http://www.slideshare.net/slideshow/embed_code/28163348"
+    width="427" height="356" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"
+    style="border:1px solid #CCC; border-width:1px 1px 0; margin-bottom:5px; max-width:
+    100%;" allowfullscreen> </iframe> <div style="margin-bottom:5px"> <strong> <a
+    href="https://www.slideshare.net/shlominoach/commonschema-22" title="common_schema
+    2.2 DBA&#x27;s framework for MySQL" target="_blank">common_schema 2.2 DBA&#x27;s
+    framework for MySQL</a> </strong> from <strong><a href="http://www.slideshare.net/shlominoach"
+    target="_blank">Shlomi Noach</a></strong> </div>'
+  _sg_subscribe-to-comments: rjames@yahoo-inc.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Got <em>"too many connections"</em> this morning. New attempts continuously abort. Every once in a while some slipped through, but overall behavior was unacceptable.</p>
+<p><strong>max_connections</strong> is set to <strong>500</strong>, well above normal requirements.</p>
+<p>Immediate move: raise <strong>max_connections</strong> to <strong>600</strong>, some urgent connections must take place. But, this is no solution: if <strong>500</strong> got hogged, so will the extra <strong>100</strong> I've just made available.</p>
+<p>So, who's to blame? <strong>SHOW PROCESSLIST</strong> is so unfriendly at that. Wait. Didn't I create that view in <em>common_schema</em>, called <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/processlist_per_userhost.html">processlist_per_userhost</a>? I wonder what it says...</p>
+<blockquote>
+<pre>SELECT * FROM <strong>common_schema.processlist_per_userhost</strong>;
++-------------+------------------+-----------------+------------------+---------------------+
+| user        | host             | count_processes | active_processes | average_active_time |
++-------------+------------------+-----------------+------------------+---------------------+
+| maatkit     | sqlhost02.myweb  |               1 |                0 |                NULL |
+| rango       | webhost04.myweb  |               2 |                0 |                NULL |
+| rango       | webhost07.myweb  |               8 |                0 |                NULL |
+| rango       | sqlhost02.myweb  |              38 |                0 |                NULL |
+| rango       | management.myweb |              35 |                0 |                NULL |
+| rango       | webhost03.myweb  |              10 |                0 |                NULL |
+| rango       | local01.myweb    |               8 |                0 |                NULL |
+| rango       | analytic02.myweb |              11 |                0 |                NULL |
+| mytop       | localhost        |               2 |                0 |                NULL |
+| buttercup   | sqlhost02.myweb  |             451 |                5 |              0.0000 |
+| replc_user  | sqlhost00.myweb  |               1 |                1 |         392713.0000 |
+| replc_user  | sqlhost02.myweb  |               1 |                1 |          38028.0000 |
+| root        | localhost        |               2 |                0 |                NULL |
+| system user |                  |               2 |                2 |         196311.5000 |
++-------------+------------------+-----------------+------------------+---------------------+</pre>
+</blockquote>
+<p>Ah! It's <strong>buttercup</strong> connecting from <strong>sqlhost02.myweb</strong> who is making a fuss. I knew that view was created for a reason.</p>
+<p><!--more-->The is easy enough to solve, some iterative process got hanged, so I just killed it.</p>
+<p>But - additional mental note for <em>common_schema</em>: allow killing of processes using user name / host name / combination / regex, instead of gathering the process IDs then killing them one by one.</p>

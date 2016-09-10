@@ -1,0 +1,243 @@
+---
+title: Generating Google line charts with SQL, part I
+date: 2011-02-01 10:29:31.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Graphs
+- mycheckpoint
+- SQL
+meta:
+  _edit_last: '2'
+  _oembed_b52ec3caa2d375b7c0c34856caba80e0: '{{unknown}}'
+  _oembed_ee735260c04a666449c9010dd132de5b: '{{unknown}}'
+  _oembed_b9fe13d917628298d5a25b5d757907ff: '{{unknown}}'
+  _oembed_a821c3838ff50b4ec760029d4a4bcecb: '{{unknown}}'
+  _oembed_0429ef5fb24116d88f4c7cee16e30f9b: '{{unknown}}'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>In this series of posts I wish to show how <a href="http://code.google.com/apis/chart/image_charts.html">Google Charts</a> can be generated via SQL. We discuss the Google Charts limitations which must be challenged, and work towards a simple chart.</p>
+<p>I'm going to present the algorithm I use in <a href="http://code.openark.org/forge/mycheckpoint">mycheckpoint</a>, a MySQL monitoring utility, which generates Google charts by raw data using views. An example of such chart follows:</p>
+<blockquote>
+<pre /><img class="alignnone" title="Sample Google Chart" src="{{ site.baseurl }}/assets/chart?cht=lc&amp;chs=370x180&amp;chts=303030,12&amp;chtt=Latest+24+hours:+Nov+9,+05:50++-++Nov+10,+05:50&amp;chf=c,s,ffffff&amp;chdl=Rentals+rate:+custom_1_psec&amp;chdlp=b&amp;chco=ff8c00&amp;chd=s:GDGKGFLFGMJHRLMPPNULJRPLTOPRUMYPPVRNbQUSUSbSNWUOfSWTObVSUVWSVYVPbTPjfTbRTdXReUWhcTQRQZbTWYVYPaVZXdYYWPTabYUTbW99QLgLNIOIRNNMIKRJEHGFHGJGGFIFDFGDK&amp;chxt=x,y&amp;chxr=1,0,8.720000&amp;chxl=0:|+||08:00||+||12:00||+||16:00||+||20:00||+||00:00||+||04:00||&amp;chxs=0,505050,10,0,lt&amp;chg=4.17,25,1,2,0.69,0&amp;chxp=0,0.69,4.86,9.03,13.20,17.37,21.54,25.71,29.88,34.05,38.22,42.39,46.56,50.73,54.90,59.07,63.24,67.41,71.58,75.75,79.92,84.09,88.26,92.43,96.60&amp;tsstart=2010-11-09+05:50:00&amp;tsstep=600" alt="" width="370" height="180" />
+http://chart.apis.google.com/chart?cht=lc&amp;chs=370x180&amp;chts=303030,12&amp;chtt=Latest+24+hours:+Nov+9,+05:50++-++Nov+10,+05:50&amp;chf=c,s,ffffff&amp;chdl=Rentals+rate:+custom_1_psec&amp;chdlp=b&amp;chco=ff8c00&amp;chd=s:GDGKGFLFGMJHRLMPPNULJRPLTOPRUMYPPVRNbQUSUSbSNWUOfSWTObVSUVWSVYVPbTPjfTbRTdXReUWhcTQRQZbTWYVYPaVZXdYYWPTabYUTbW99QLgLNIOIRNNMIKRJEHGFHGJGGFIFDFGDK&amp;chxt=x,y&amp;chxr=1,0,8.720000&amp;chxl=0:|+||08:00||+||12:00||+||16:00||+||20:00||+||00:00||+||04:00||&amp;chxs=0,505050,10,0,lt&amp;chg=4.17,25,1,2,0.69,0&amp;chxp=0,0.69,4.86,9.03,13.20,17.37,21.54,25.71,29.88,34.05,38.22,42.39,46.56,50.73,54.90,59.07,63.24,67.41,71.58,75.75,79.92,84.09,88.26,92.43,96.60&amp;tsstart=2010-11-09+05:50:00&amp;tsstep=600
+</blockquote>
+<em>mycheckpoint</em> does not actually call on Google to do the chart rendering, but invokes its own JavaScript code to visualize the URL locally.
+
+Here are some downsides for using Google charts:
+<ul>
+	<li>The URL cannot be as long as you like. 2048 characters is an upper bound you'll want to keep behind. <em>[Google charts POST method calls are available, which leads to 16K equivalent of URL length -- this is still not too helpful due to the nature of POST calls]</em></li>
+	<li>Features are inconsistent. To specify label or tick positions, one must specify exact positions. To specify grid positions, one must supply with step, offset, etc. There are more such inconsistencies.</li>
+	<li>Google charts are not too friendly. Taking the ticks and grids example from above, there really shouldn't be a reason why grids would not be automatically generated according to ticks definitions. But we are required to specify positions for the ticks as well as for the grids.</li>
+	<li>There is no support for time-series. One must translate time as x-axis values.</li>
+	<li>Perhaps most intimidating to many people: to generate a Google chart, once must send data to Google. Which is the main reason I used local JavaScript rendering.</li>
+</ul>
+Anyway, let's build a very simple chart. Since I will not cover everything in this post, we make for some relaxed conditions.<!--more-->
+<h4>Sample data</h4>
+Consider the chart_data table, below:
+<blockquote>
+<pre>SELECT * FROM chart_data;
++-----+---------------------+-------------------+
+| id  | ts                  | data              |
++-----+---------------------+-------------------+
+|   1 | 2011-02-01 09:59:15 |  1.99666833293656 |
+|   2 | 2011-02-01 09:59:15 |  7.94677323180245 |
+|   3 | 2011-02-01 09:59:15 |  17.7312123996804 |
+|   4 | 2011-02-01 09:59:15 |   31.153467384692 |
+|   5 | 2011-02-01 09:59:15 |  47.9425538604203 |
+|   6 | 2011-02-01 09:59:15 |  67.7570968074042 |
+|   7 | 2011-02-01 09:59:15 |  90.1904762132767 |
+|   8 | 2011-02-01 09:59:15 |  114.776974543924 |
+|   9 | 2011-02-01 09:59:15 |  140.998843732947 |
+|  10 | 2011-02-01 09:59:15 |  168.294196961579 |
+|  11 | 2011-02-01 09:59:15 |  196.065619213516 |
+|  12 | 2011-02-01 09:59:15 |  223.689380632134 |
+|  13 | 2011-02-01 09:59:15 |   250.52512820847 |
+...</pre>
+</blockquote>
+<p>Find complete SQL script in <a href="http://code.openark.org/blog/wp-content/uploads/2011/02/google_charts.sql_.txt">google_charts.sql</a></p>
+<p>In the above table we assume the timestamp values are evenly distributed. This is because of the aforementioned fact that Google Charts do not support time-series. So, if the given timnestamps are not evenly distributed, or maybe some values are skipped, we must manually compensate for that. In <em>mycheckpoint</em> I do that. In this blog post, we skip it.</p>
+<h4>Axis boundaries</h4>
+<p>By default, Google Charts expect data to lie within the range 0..100. We need to reset the scale to match our minimum/maximum values, and lay out our values within that range.</p>
+<p>We will be using views in this solution, and here is the first view:</p>
+<blockquote>
+<pre>CREATE OR REPLACE VIEW
+ chart_data_minmax
+AS
+ SELECT MIN(data) AS min_value, MAX(data) AS max_value
+FROM
+ chart_data
+;</pre>
+</blockquote>
+<p>In our example we will just settle with the min/max values. In real worlds we may:</p>
+<ul>
+<li>Choose <strong>0</strong> to be the lower value, even if the minimal value is positive</li>
+<li>Choose to round min-max values to a nearest power of <strong>10</strong>.</li>
+</ul>
+<p>The axis boundaries go under the following parameters:</p>
+<ul>
+<li><strong>chxt=x,y</strong> (we hard code bottom axis, left axis)</li>
+<li><strong>chxr=1,<em>min</em>,<em>max</em></strong> (with min, max as computed by the above)</li>
+</ul>
+<p>The following query produces these params:</p>
+<blockquote>
+<pre>SELECT CONCAT('&amp;chxt=x,y&amp;chxr=1,', ROUND(min_value, 1), ',', ROUND(max_value, 1)) AS minmax FROM chart_data_minmax;
++---------------------------------+
+| minmax                          |
++---------------------------------+
+| &amp;chxt=x,y&amp;chxr=1,-4716.6,5340.0 |
++---------------------------------+
+</pre>
+</blockquote>
+<h3>Data values</h3>
+<p>Next, we have some <strong>244</strong> rows of data. Data is double. Can we be certain this all fits within <strong>2048</strong> characters? What if we had more rows?</p>
+<p>Alas, we must make a trade-off. We will sacrifice accuracy in favor of a short URL. We will use <a href="http://code.google.com/apis/chart/docs/data_formats.html#simple">simple encoding</a> for our data. This means just one character per value, encoded <strong>A-Za-z0-9</strong>. This means just <strong>62</strong> distinct values.</p>
+<p>So we must translate each data value into the range 0..61, and then into a character. First step is:</p>
+<blockquote>
+<pre>SELECT (data - min_value)/(max_value - min_value) AS range_01 FROM chart_data, chart_data_minmax;
++---------------------+
+| range_01            |
++---------------------+
+|   0.469204617275163 |
+|   0.469796281944551 |
+|   0.470769223945374 |
+|   0.472103901937297 |
+|   0.473773369865649 |
+|   0.475743682188048 |
+|   0.477974405550919 |
+...
+</pre>
+</blockquote>
+<p>The above translates the data into the 0..1 range. Next is to simply multiply by 61:</p>
+<blockquote>
+<pre>SELECT 61*(data - min_value)/(max_value - min_value) AS range_0_61 FROM chart_data, chart_data_minmax;
++-------------------+
+| range_0_61        |
++-------------------+
+|  28.6214816537849 |
+|  28.6575731986176 |
+|  28.7169226606678 |
+|  28.7983380181751 |
+|  28.9001755618046 |
+|  29.0203646134709 |
+|  29.1564387386061 |
+|  29.3055730348683 |
+|  29.4646269983728 |
+|  29.6301923928522 |
+...</pre>
+</blockquote>
+<p>To translate into a <em>simple format</em> character we parse a constant string:</p>
+<blockquote>
+<pre>SELECT
+  SUBSTRING(
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
+    1+61*(data - min_value)/(max_value - min_value),
+    1
+  ) AS c FROM chart_data, chart_data_minmax;
++------+
+| c    |
++------+
+| d    |
+| d    |
+| d    |
+| d    |
+| d    |
+| d    |
+| d    |
+| d    |
+| d    |
+| e    |
+| e    |
+...</pre>
+</blockquote>
+<p>Oh, and we should handle NULLs, as well, so:</p>
+<blockquote>
+<pre>SELECT
+  IF(
+    data IS NULL,
+    '_',
+    SUBSTRING(
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
+      1+61*(data - min_value)/(max_value - min_value),
+      1
+    )
+  ) AS c FROM chart_data, chart_data_minmax;
+</pre>
+<pre>+------+
+| c    |
++------+
+| d    |
+| d    |
+| d    |
+| d    |
+| d    |
+| d    |
+| d    |
+| d    |
+| d    |
+| e    |
+| e    |
+...</pre>
+</blockquote>
+<p>And, to present it as a char sequence, we use the <strong>chd</strong> parameter and call <strong>GROUP_CONCAT</strong> to the rescue:</p>
+<blockquote>
+<pre>SELECT
+  CONCAT('&amp;chd=s:',
+    GROUP_CONCAT(
+      IF(
+        data IS NULL,
+        '_',
+        SUBSTRING(
+          'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
+          1+61*(data - min_value)/(max_value - min_value),
+          1
+        )
+      )
+      SEPARATOR ''
+    )
+  ) AS c FROM chart_data, chart_data_minmax
+\G
+*************************** 1. row ***************************
+c: &amp;chd=s:dddddddddeeeeeefffffffffeeeedddcccbbaaZZZYYYXXXXXXXXXYYYZZabbcdeefghhijkkllmmmmmmmmllkkjihgfedcbZYXWVUTSRRQQPPPPQQQRSTUVWXZacdfgijlmnpqrssttuuuttssrqonmkigfdbZXVTSQONMLKJIIIIIIJKLMOPRTVXZbegilnprtvwyz01111110zyxvtrpnkifcaXUSPNLJHFECBBAAABBCEFHJLNQTWZcfilortwy1346789999876420yvspmjfcYVSOL</pre>
+</blockquote>
+<h4>Wrap up</h4>
+<p>Combining the above two queries, with some URL necessities, we get:</p>
+<blockquote>
+<pre>SELECT
+  CONCAT(
+    'http://chart.apis.google.com/chart?cht=lc&amp;chs=400x200&amp;chtt=SQL%20chart&amp;chxt=x,y&amp;chxr=1,',
+    ROUND(min_value, 1), ',',
+    ROUND(max_value, 1),
+    '&amp;chd=s:',
+    GROUP_CONCAT(
+      IF(
+        data IS NULL,
+        '_',
+        SUBSTRING(
+          'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
+          1+61*(data - min_value)/(max_value - min_value),
+          1
+        )
+      )
+      SEPARATOR ''
+    )
+  ) FROM chart_data, chart_data_minmax
+;
+</pre>
+</blockquote>
+<p>And get:</p>
+<blockquote>
+<pre /><img class="alignnone" title="Sample SQL Google Chart" src="{{ site.baseurl }}/assets/chart?cht=lc&amp;chs=400x200&amp;chtt=SQL%20chart&amp;chxt=x,y&amp;chxr=1,-4716.6,5340.0&amp;chd=s:dddddddddeeeeeefffffffffeeeedddcccbbaaZZZYYYXXXXXXXXXYYYZZabbcdeefghhijkkllmmmmmmmmllkkjihgfedcbZYXWVUTSRRQQPPPPQQQRSTUVWXZacdfgijlmnpqrssttuuuttssrqonmkigfdbZXVTSQONMLKJIIIIIIJKLMOPRTVXZbegilnprtvwyz01111110zyxvtrpnkifcaXUSPNLJHFECBBAAABBCEFHJLNQTWZcfilortwy1346789999876420yvspmjfcYVSOL" alt="" width="400" height="200" /><br />
+http://chart.apis.google.com/chart?cht=lc&amp;chs=400x200&amp;chtt=SQL%20chart&amp;chxt=x,y&amp;chxr=1,-4716.6,5340.0&amp;chd=s:dddddddddeeeeeefffffffffeeeedddcccbbaaZZZYYYXXXXXXXXXYYYZZabbcdeefghhijkkllmmmmmmmmllkkjihgfedcbZYXWVUTSRRQQPPPPQQQRSTUVWXZacdfgijlmnpqrssttuuuttssrqonmkigfdbZXVTSQONMLKJIIIIIIJKLMOPRTVXZbegilnprtvwyz01111110zyxvtrpnkifcaXUSPNLJHFECBBAAABBCEFHJLNQTWZcfilortwy1346789999876420yvspmjfcYVSOL</p>
+</blockquote>
+<p>The above chart depicts our visualized data. Alas, x-axis ranges are wrong; no ticks nor grids are yet presented.</p>
+<p>Granularity is not the best, either: the different <strong>62</strong> values are spread across a <strong>200</strong> pixel high chart, making for a <strong>3</strong> pixel distinction between two values, evident on the left area of the chart.</p>
+<p>Continues on <a href="http://code.openark.org/blog/mysql/generating-google-line-charts-with-sql-part-ii">Generating Google line charts with SQL, part II</a>.</p>

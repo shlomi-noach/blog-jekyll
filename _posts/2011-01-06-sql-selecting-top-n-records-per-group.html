@@ -1,0 +1,216 @@
+---
+title: 'SQL: selecting top N records per group'
+date: 2011-01-06 12:49:05.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- SQL
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>A while back I <a href="http://code.openark.org/blog/mysql/selecting-a-specific-non-aggregated-column-data-in-group-by">presented</a>(*) an SQL trick to present with non-aggregated column on a GROUP BY query, without use of subquery or derived tables.</p>
+<p>Based on a similar concept, combined with string walking, I now present a query which selects top-n records for each group, ordered by <em>some condition</em>. It will require no subqueries. It executes faster than its more conventional alternatives.</p>
+<p>[UPDATE: this is MySQL only. Others can use Window Functions where available]</p>
+<p>Using the simple <a href="http://dev.mysql.com/doc/index-other.html">world database</a>, we answer the following question:</p>
+<blockquote><p>What are the top 5 largest (by area) countries for each continent? What are their names, surface area and population?</p></blockquote>
+<p>Similar questions would be:</p>
+<blockquote><p>What were the latest 5 films rented by each customer?</p>
+<p>What were the most presented advertisements for each user?</p></blockquote>
+<p>etc.</p>
+<h4>Step 1: getting the top</h4>
+<p>We already know how to get a single column's value for the top country, as presented in the aforementioned post:<!--more--></p>
+<blockquote>
+<pre>SELECT
+ Continent,
+ SUBSTRING_INDEX(
+   GROUP_CONCAT(Name ORDER BY SurfaceArea DESC),
+   ',', 1) AS Name
+FROM
+ Country
+GROUP BY
+ Continent
+;
++---------------+--------------------+
+| Continent     | Name               |
++---------------+--------------------+
+| Asia          | China              |
+| Europe        | Russian Federation |
+| North America | Canada             |
+| Africa        | Sudan              |
+| Oceania       | Australia          |
+| Antarctica    | Antarctica         |
+| South America | Brazil             |
++---------------+--------------------+</pre>
+</blockquote>
+<h4>Step 2: adding columns</h4>
+<p>This part is easy: just throw in the rest of the columns (again, only indicating the top country in each continent)</p>
+<blockquote>
+<pre>SELECT
+ Continent,
+ SUBSTRING_INDEX(
+   GROUP_CONCAT(Name ORDER BY SurfaceArea DESC),
+   ',', 1) AS Name,
+ SUBSTRING_INDEX(
+   GROUP_CONCAT(SurfaceArea ORDER BY SurfaceArea DESC),
+   ',', 1) AS SurfaceArea,
+ SUBSTRING_INDEX(
+   GROUP_CONCAT(Population ORDER BY SurfaceArea DESC),
+   ',', 1) AS Population
+FROM
+ Country
+GROUP BY
+ Continent
+;
+
++---------------+--------------------+-------------+------------+
+| Continent     | Name               | SurfaceArea | Population |
++---------------+--------------------+-------------+------------+
+| Asia          | China              | 9572900.00  | 1277558000 |
+| Europe        | Russian Federation | 17075400.00 | 146934000  |
+| North America | Canada             | 9970610.00  | 31147000   |
+| Africa        | Sudan              | 2505813.00  | 29490000   |
+| Oceania       | Australia          | 7741220.00  | 18886000   |
+| Antarctica    | Antarctica         | 13120000.00 | 0          |
+| South America | Brazil             | 8547403.00  | 170115000  |
++---------------+--------------------+-------------+------------+</pre>
+</blockquote>
+<h4>Step 3: casting</h4>
+<p>You'll notice that the <strong>Population</strong> column from this last execution is aligned to the left. This is because it is believed to be a string. The <strong>GROUP_CONCAT</strong> clause concatenates values in one string, and <strong>SUBSTRING_INDEX</strong> parses a substring. The same applies to the SurfaceArea column. We'll cast <strong>Population</strong> as <strong>UNSIGNED</strong> and <strong>SurfaceArea</strong> as <strong>DECIMAL</strong>:</p>
+<blockquote>
+<pre>SELECT
+  Continent,
+  SUBSTRING_INDEX(
+    GROUP_CONCAT(Name ORDER BY SurfaceArea DESC),
+    ',', 1) AS Name,
+  CAST(
+    SUBSTRING_INDEX(
+      GROUP_CONCAT(SurfaceArea ORDER BY SurfaceArea DESC),
+      ',', 1)
+    AS DECIMAL(20,2)
+    ) AS SurfaceArea,
+  CAST(
+    SUBSTRING_INDEX(
+      GROUP_CONCAT(Population ORDER BY SurfaceArea DESC),
+      ',', 1)
+    AS UNSIGNED
+    ) AS Population
+FROM
+ Country
+GROUP BY
+ Continent
+;
++---------------+--------------------+-------------+------------+
+| Continent     | Name               | SurfaceArea | Population |
++---------------+--------------------+-------------+------------+
+| Asia          | China              |  9572900.00 | 1277558000 |
+| Europe        | Russian Federation | 17075400.00 |  146934000 |
+| North America | Canada             |  9970610.00 |   31147000 |
+| Africa        | Sudan              |  2505813.00 |   29490000 |
+| Oceania       | Australia          |  7741220.00 |   18886000 |
+| Antarctica    | Antarctica         | 13120000.00 |          0 |
+| South America | Brazil             |  8547403.00 |  170115000 |
++---------------+--------------------+-------------+------------+</pre>
+</blockquote>
+<h4>Step 4: top n records</h4>
+<p>It's time to use string walking. Examples for string walking (described in the excellent <a href="http://www.amazon.com/Cookbook-Cookbooks-OReilly-Anthony-Molinaro/dp/0596009763">SQL Cookbook</a>) can be found <a href="http://code.openark.org/blog/mysql/unwalking-a-string-with-group_concat">here</a>, <a href="http://code.openark.org/blog/mysql/checking-for-string-permutation">here</a> and <a href="http://code.openark.org/blog/mysql/rotating-sql-graphs-horizontally">here</a>. We'll be using a numbers table: a simple table which lists ascending integer numbers. For example, you can use the following:</p>
+<blockquote>
+<pre>DROP TABLE IF EXISTS `tinyint_asc`;
+
+CREATE TABLE `tinyint_asc` (
+ `value` tinyint(3) unsigned NOT NULL default '0',
+ PRIMARY KEY (value)
+) ;
+
+INSERT INTO `tinyint_asc` VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11),(12),(13),(14),(15),(16),(17),(18),(19),(20),(21),(22),(23),(24),(25),(26),(27),(28),(29),(30),(31),(32),(33),(34),(35),(36),(37),(38),(39),(40),(41),(42),(43),(44),(45),(46),(47),(48),(49),(50),(51),(52),(53),(54),(55),(56),(57),(58),(59),(60),(61),(62),(63),(64),(65),(66),(67),(68),(69),(70),(71),(72),(73),(74),(75),(76),(77),(78),(79),(80),(81),(82),(83),(84),(85),(86),(87),(88),(89),(90),(91),(92),(93),(94),(95),(96),(97),(98),(99),(100),(101),(102),(103),(104),(105),(106),(107),(108),(109),(110),(111),(112),(113),(114),(115),(116),(117),(118),(119),(120),(121),(122),(123),(124),(125),(126),(127),(128),(129),(130),(131),(132),(133),(134),(135),(136),(137),(138),(139),(140),(141),(142),(143),(144),(145),(146),(147),(148),(149),(150),(151),(152),(153),(154),(155),(156),(157),(158),(159),(160),(161),(162),(163),(164),(165),(166),(167),(168),(169),(170),(171),(172),(173),(174),(175),(176),(177),(178),(179),(180),(181),(182),(183),(184),(185),(186),(187),(188),(189),(190),(191),(192),(193),(194),(195),(196),(197),(198),(199),(200),(201),(202),(203),(204),(205),(206),(207),(208),(209),(210),(211),(212),(213),(214),(215),(216),(217),(218),(219),(220),(221),(222),(223),(224),(225),(226),(227),(228),(229),(230),(231),(232),(233),(234),(235),(236),(237),(238),(239),(240),(241),(242),(243),(244),(245),(246),(247),(248),(249),(250),(251),(252),(253),(254),(255);</pre>
+</blockquote>
+<p>The trick is to apply the same technique as used above, not for a single row, but for several rows. Here's how to present the top <strong>5</strong> countries:</p>
+<blockquote>
+<pre>SELECT
+  Continent,
+  SUBSTRING_INDEX(
+    SUBSTRING_INDEX(
+      GROUP_CONCAT(Name ORDER BY SurfaceArea DESC),
+      ',', value),
+    ',', -1)
+    AS Name,
+  CAST(
+    SUBSTRING_INDEX(
+      SUBSTRING_INDEX(
+        GROUP_CONCAT(SurfaceArea ORDER BY SurfaceArea DESC),
+        ',', value),
+      ',', -1)
+    AS DECIMAL(20,2)
+    ) AS SurfaceArea,
+  CAST(
+    SUBSTRING_INDEX(
+      SUBSTRING_INDEX(
+        GROUP_CONCAT(Population ORDER BY SurfaceArea DESC),
+        ',', value),
+      ',', -1)
+    AS UNSIGNED
+    ) AS Population
+FROM
+  Country, tinyint_asc
+WHERE
+  tinyint_asc.value &gt;= 1 AND tinyint_asc.value &lt;= 5
+GROUP BY
+  Continent, value
+;
++---------------+----------------------------------------------+-------------+------------+
+| Continent     | Name                                         | SurfaceArea | Population |
++---------------+----------------------------------------------+-------------+------------+
+| Asia          | China                                        |  9572900.00 | 1277558000 |
+| Asia          | India                                        |  3287263.00 | 1013662000 |
+| Asia          | Kazakstan                                    |  2724900.00 |   16223000 |
+| Asia          | Saudi Arabia                                 |  2149690.00 |   21607000 |
+| Asia          | Indonesia                                    |  1904569.00 |  212107000 |
+| Europe        | Russian Federation                           | 17075400.00 |  146934000 |
+| Europe        | Ukraine                                      |   603700.00 |   50456000 |
+| Europe        | France                                       |   551500.00 |   59225700 |
+| Europe        | Spain                                        |   505992.00 |   39441700 |
+| Europe        | Sweden                                       |   449964.00 |    8861400 |
+| North America | Canada                                       |  9970610.00 |   31147000 |
+| North America | United States                                |  9363520.00 |  278357000 |
+| North America | Greenland                                    |  2166090.00 |      56000 |
+| North America | Mexico                                       |  1958201.00 |   98881000 |
+| North America | Nicaragua                                    |   130000.00 |    5074000 |
+| Africa        | Sudan                                        |  2505813.00 |   29490000 |
+| Africa        | Algeria                                      |  2381741.00 |   31471000 |
+| Africa        | Congo                                        |  2344858.00 |   51654000 |
+| Africa        |  The Democratic Republic of the              |  1759540.00 |    5605000 |
+| Africa        | Libyan Arab Jamahiriya                       |  1284000.00 |    7651000 |
+| Oceania       | Australia                                    |  7741220.00 |   18886000 |
+| Oceania       | Papua New Guinea                             |   462840.00 |    4807000 |
+| Oceania       | New Zealand                                  |   270534.00 |    3862000 |
+| Oceania       | Solomon Islands                              |    28896.00 |     444000 |
+| Oceania       | New Caledonia                                |    18575.00 |     214000 |
+| Antarctica    | Antarctica                                   | 13120000.00 |          0 |
+| Antarctica    | French Southern territories                  |     7780.00 |          0 |
+| Antarctica    | South Georgia and the South Sandwich Islands |     3903.00 |          0 |
+| Antarctica    | Heard Island and McDonald Islands            |      359.00 |          0 |
+| Antarctica    | Bouvet Island                                |       59.00 |          0 |
+| South America | Brazil                                       |  8547403.00 |  170115000 |
+| South America | Argentina                                    |  2780400.00 |   37032000 |
+| South America | Peru                                         |  1285216.00 |   25662000 |
+| South America | Colombia                                     |  1138914.00 |   42321000 |
+| South America | Bolivia                                      |  1098581.00 |    8329000 |
++---------------+----------------------------------------------+-------------+------------+</pre>
+</blockquote>
+<h4>Limitations</h4>
+<p>You should have:</p>
+<ul>
+<li>Enough numbers in the numbers table (I've used 5 out of 255)</li>
+<li>Reasonable setting for <strong>group_concat_max_len</strong> (see <a title="Those oversized, undersized variables defaults" href="http://code.openark.org/blog/mysql/those-oversized-undersized-variables-defaults">this post</a>). Actually it would be better to have a smaller value here, while you make sure it's large enough; this way you do not waste memory for large groups.</li>
+</ul>
+<p>(*) This was two years ago! I'm getting old</p>
+<h4>Update: see also</h4>
+<p>Another hack at same problem: <a title="Link to SQL: selecting top N records per group, another solution" href="http://code.openark.org/blog/mysql/sql-selecting-top-n-records-per-group-another-solution" rel="bookmark">SQL: selecting top N records per group, another solution</a></p>

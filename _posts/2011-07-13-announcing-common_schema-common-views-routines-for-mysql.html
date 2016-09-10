@@ -1,0 +1,64 @@
+---
+title: 'Announcing common_schema: common views & routines for MySQL'
+date: 2011-07-13 06:25:24.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Analysis
+- common_schema
+- Data Types
+- Development
+- Indexing
+- INFORMATION_SCHEMA
+- InnoDB
+- Monitoring
+- Open Source
+- Schema
+- Security
+- SQL
+- Stored routines
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: roland.bouman@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Today I have released <a title="common_schema" href="http://code.openark.org/forge/common_schema">common_schema</a>, a utility schema for MySQL which includes many views and functions, and is aimed to be installed on any MySQL server.</p>
+<h4>What does it do?</h4>
+<p>There are views answering for all sorts of useful information: stuff related to schema analysis, data dimensions, monitoring, processes &amp; transactions, security, internals... There are basic functions answering for common needs.</p>
+<p>Some of the views/routines simply formalize those queries we tend to write over and over again. Others take the place of external tools, answering complex questions via SQL and metadata. Still others help out with SQL generation.</p>
+<p>Here are a few highlights:</p>
+<ul>
+<li>Did you know you can work out <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/global_status_diff_nonzero.html">simple monitoring</a> of your server with a <em>query</em>?  There's a view to do that for you.</li>
+<li>How about showing just <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/processlist_top.html">the good parts of the processlist</a>?</li>
+<li>Does your schema have <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/redundant_keys.html">redundant keys</a>?</li>
+<li>Or InnoDB tables with <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/no_pk_innodb_tables.html">no PRIMARY KEY</a>?</li>
+<li>Is AUTO_INCREMENT <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/auto_increment_columns.html">running out of space</a>?</li>
+<li>Can I get the SQL statements to <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/sql_foreign_keys.html">generate my FOREIGN KEYs</a>? To drop them?</li>
+<li>And can we finally get <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/sql_show_grants.html">SHOW GRANTS for all accounts</a>, and as an <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/sql_grants.html">SQL query</a>?</li>
+<li>Ever needed a <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/general_functions.html#crc64">64 bit CRC function</a>?</li>
+<li>And aren't you tired of writing the cumbersome SUBSTRING_INDEX(SUBSTRING_INDEX(str, ',', 3), ',', -1)? <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/string_functions.html#split_token">There's an alternative</a>.</li>
+</ul>
+<p>There's more. Take a look at the <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/introduction.html">common_schema documentation</a> for full listing. And it's evolving: I've got quite a few ideas already for future components.</p>
+<p>Some of these views rely on heavyweight INFORMATION_SCHEMA tables. You should be aware of the impact and <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/risks.html">risks</a>.</p>
+<h4>What do I need to install?</h4>
+<p>There's no script or executable file. It's just a schema. The distribution in an SQL file which generates <em>common_schema</em>. Much like a dump file.</p>
+<h4><!--more-->What are the system requirements?</h4>
+<p>It's just between you and your MySQL. There are currently three distribution files, dedicated for different versions of MySQL (and allowing for increased functionality):</p>
+<ul>
+<li><strong>common_schema_mysql_51</strong>: fits all MySQL &gt;= 5.1 distributions</li>
+<li><strong>common_schema_innodb_plugin</strong>: fits MySQL &gt;= 5.1, with InnoDB plugin + INFORMATION_SCHEMA tables enabled</li>
+<li><strong>common_schema_percona_server</strong>: fits Percona Server &gt;= 5.1</li>
+</ul>
+<p>Refer to the <a rel="nofollow" href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/download.html">documentation</a> for more details.</p>
+<h4>What are the terms of use?</h4>
+<p><em>common_schema</em> is released under the <a href="http://www.opensource.org/licenses/bsd-license.php">BSD license</a>.</p>
+<h4>Where can I download it?</h4>
+<p>On the <a href="http://code.google.com/p/common-schema/">common_schema project page</a>. Enjoy it!</p>

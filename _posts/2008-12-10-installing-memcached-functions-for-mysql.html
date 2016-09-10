@@ -1,0 +1,103 @@
+---
+title: Installing memcached functions for MySQL
+date: 2008-12-10 09:56:30.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- memcached
+meta:
+  _edit_last: '2'
+  _oembed_7ef559f12fc9845897808df81b082683: '{{unknown}}'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+excerpt: "tangent.org provide a memcached client for MySQL, in the form of UDFs. The
+  provided set of functions allow for connecting to a memcached server, putting values
+  in the cache, getting values, invalidating, utilizing increments etc.\r\n\r\nThe
+  code is not (yet?) available in binary format, so the libraries need to be compiled
+  and installed manually. Following is a quick installation HOWTO for Linux users."
+---
+<p><a href="http://tangent.org/">tangent.org</a> provide a memcached client for MySQL, in the form of UDFs. The provided set of functions allow for connecting to a memcached server, putting values in the cache, getting values, invalidating, utilizing increments etc.</p>
+<p>The code is not (yet?) available in binary format, so the libraries need to be compiled and installed manually. Following is a quick installation HOWTO for Linux users.<!--more--></p>
+<p>I have installed on Ubuntu 8.04, running on an old IBM ThinkPad (600X) which has ~490MB and 10GB of disk space, with a 500MHz who-knows-which Intel processor. Well, that's the machine on which I experiment... The setup I've tested is a single machine setup, with a single memcached instance.</p>
+<h4>memcached</h4>
+<p>To start with, you need to have the <a href="http://www.danga.com/memcached/">memcached</a> daemon installed. Easy enough:</p>
+<blockquote>
+<pre>sudo apt-get install memcached</pre>
+</blockquote>
+<p>That should install memcached and start the daemon, on the default 11211 port (see /etc/memcached.conf)</p>
+<h4>libmemcached</h4>
+<p>Next, memcached functions for MySQL depend on <a href="http://tangent.org/552/libmemcached.html">libmemcached</a>. This one comes with RPM and SRPM builds, but I'm running on Ubuntu/Debian, which invites trouble: I've tried installing the RPM, but got into dependency hell. I thought I may as well just compile the sources. And so I've downloaded libmemcached-0.25.tar.gz, and went throught the usualy steps:</p>
+<blockquote>
+<pre>tar xzfv libmemcached-0.25.tar.gz
+cd libmemcached-0.25/
+./configure
+make
+sudo make install</pre>
+</blockquote>
+<p>The configure script did give me some trouble, claiming something about invalid struct padding. Running configure with</p>
+<blockquote>
+<pre>bash -x configure</pre>
+</blockquote>
+<p>has shown that I was simply missing the g++ compiler. Once installed, all went well.</p>
+<h4>MySQL</h4>
+<p>We do need to have MySQL up and running, of course. Required version is 5.0 and above. But we also need to have <strong>mysql_config</strong>. This tool does not come with the standard apt-get package for debian/ubuntu. It is available in the develop package, though:</p>
+<blockquote>
+<pre>sudo apt-get install libmysqlclient-dev</pre>
+</blockquote>
+<p>RedHat and derived users can use the <strong>mysql-devel</strong> RPM. I have MySQL installed from binary tarball, so <strong>mysql_config</strong> is already there.</p>
+<h4>More dependencies</h4>
+<p>The README states you need to have the latest <strong>autoconf</strong> tools. <strong>pkg-config</strong> was required.</p>
+<h4>memcached funtions for MySQL</h4>
+<p>Finally, we get to business. Download sources for <a href="http://tangent.org/586/Memcached_Functions_for_MySQL.html">memcached functions to MySQL</a>.</p>
+<blockquote>
+<pre>tar xzfv memcached_functions_mysql-0.7.tar.gz
+cd memcached_functions_mysql-0.7/
+./configure --with-mysql=/usr/local/mysql/bin/mysql_config --libdir=/usr/local/mysql/lib/mysql
+make
+sudo make install</pre>
+</blockquote>
+<p>The parameters to <strong>configure</strong> are the location of <strong>mysql_config</strong>, and the destination into which the libraries are written. Since I've installed my MySQL tarball on <strong>/usr/local/mysql</strong>, my destination is <strong>/usr/local/mysql/lib/mysql</strong>. You may wish to set this one up differently. Once the process is done, see that the libraries have indeed been created there. In particular, you're looking for <strong>libmemcached_functions_mysql.so</strong>.</p>
+<p>These libraries need to be found in the library search path. One way of doing so is to add the path to <strong>/etc/ld.so.conf</strong>:</p>
+<blockquote>
+<pre>sudo echo /usr/local/mysql/lib/mysql/ &gt;&gt; /etc/ld.so.conf</pre>
+</blockquote>
+<p>And then update the search path</p>
+<blockquote>
+<pre>sudo ldconfig</pre>
+</blockquote>
+<p>Once this is done, we can install the functions in MySQL. Go to the <strong>memcached_functions_mysql-0.7/</strong> path, and execute:</p>
+<blockquote>
+<pre>mysql -u root -p &lt; sql/install_functions.sql</pre>
+</blockquote>
+<p>This file simply contains the <strong>CREATE FUNCTION</strong> statements for all supplied memcached API.</p>
+<h4>Testing</h4>
+<p>To put our installation to the test, let's try setting a value to memcached, then getting it back:</p>
+<blockquote>
+<pre>mysql&gt; SELECT memc_set('mykey', 'Getting this with SELECT means all works well');
++--------------------------------------------------------------------+
+| memc_set('mykey', 'Getting this with SELECT means all works well') |
++--------------------------------------------------------------------+
+|                                                                  0 |
++--------------------------------------------------------------------+
+1 row in set (0.03 sec)
+
+mysql&gt; SELECT memc_get('mykey');
++-----------------------------------------------+
+| memc_get('mykey')                             |
++-----------------------------------------------+
+| Getting this with SELECT means all works well |
++-----------------------------------------------+
+1 row in set (0.00 sec)</pre>
+</blockquote>
+<p>The README file contains examples for all supplied functions. Take a look at the <a title="MySQL docs" href="http://dev.mysql.com/doc/refman/5.0/en/ha-memcached-interfaces-mysqludf.html">MySQL docs</a>, as well.</p>
+<h4>Conclusion</h4>
+<p>It is also nice to see that Java or Python clients are also able to read the value stored with the "mykey" key. Well, that's the nice thing about memcached: its diversity and compatibility of clients.</p>
+<p>In a future post, I will write about if, why and how I think memcahed functions for MySQL should be used.</p>
+<p>Please share below any insights about installing on other Linux flavours, BSD, Solaris or other operating systems.</p>

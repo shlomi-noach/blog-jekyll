@@ -1,0 +1,39 @@
+---
+title: An argument for using mysqldump
+date: 2010-11-09 06:29:54.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Backup
+- mysqldump
+meta:
+  _edit_last: '2'
+  _wp_old_slug: ''
+  _oembed_55835302a9154b1a33fa9bef669291f7: '<iframe src="http://www.slideshare.net/slideshow/embed_code/28163348"
+    width="427" height="356" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"
+    style="border:1px solid #CCC; border-width:1px 1px 0; margin-bottom:5px; max-width:
+    100%;" allowfullscreen> </iframe> <div style="margin-bottom:5px"> <strong> <a
+    href="https://www.slideshare.net/shlominoach/commonschema-22" title="common_schema
+    2.2 DBA&#x27;s framework for MySQL" target="_blank">common_schema 2.2 DBA&#x27;s
+    framework for MySQL</a> </strong> from <strong><a href="http://www.slideshare.net/shlominoach"
+    target="_blank">Shlomi Noach</a></strong> </div>'
+  _sg_subscribe-to-comments: mysql@myname.nl
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I fully agree with Morgan's <a href="http://www.mysqlperformanceblog.com/2010/11/08/an-argument-for-not-using-mysqldump-in-production/">An argument for not using mysqldump</a>. This post does not come to contradict it, but rather shed a positive light on <em>mysqldump</em>.</p>
+<p>I usually prefer an LVM snapshot based backup, or using XtraBackup. And, with databases as large as dozens of GB and above, I consider <em>mysqldump</em> to be a poor alternative. Poor in runtime, poor in overhead while taking the backup.</p>
+<p>However once in a while I get to be reminded that <em>mysqldump just works</em>.</p>
+<p>As a recent example, I had a server which was killed after an ALTER TABLE statement hanged forever (table already ALTERed, but old scheme never dropped). The old table data still hanged around the file system, but was not recognized by InnoDB. Trying out DISCARD TABLESPACE did not do the job, and eventually file was dropped.</p>
+<p>So far, reasonable. InnoDB would complain about some table it never recognized in the first place, but all would work. That is, until backup was concerned. With <em>innobackup</em> or XtraBackup the restore would fail on some internal problem. LVM would work, but would only copy+paste the problem: <em>innobackup</em> would never again be able to be used on this database.<!--more--></p>
+<p>It turned out a <strong>120GB</strong> InnoDB compressed data (roughly <strong>250GB</strong> uncompressed) would dump in <strong>--single-transaction</strong> in a matter of <strong>4</strong> hours and would restore in a matter of some <strong>20</strong> hours. A whole lot more than the <strong>3</strong> hours total it would take for an LVM backup for that database. But the data would load well; no missing tablespaces.</p>
+<p>I've had similar incidents in the past. Not to mention the issue of compressing shared tablespace file.</p>
+<p>There's something about being able to say "<em>I'm not sure how long this is going to take; maybe a day or two. But in the end, we will have problems P1, P2 &amp; P3 resolved</em>".</p>
+<p>I like the <em>clean state</em> you get from a <em>mysqldump</em> restore.</p>

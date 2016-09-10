@@ -1,0 +1,125 @@
+---
+title: 'SQL trick: overcoming GROUP_CONCAT limitation in special cases'
+date: 2010-07-21 15:14:30.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- SQL
+meta:
+  _edit_last: '2'
+  _syntaxhighlighter_encoded: '1'
+  _wp_old_slug: ''
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>In <a title="Link to Verifying GROUP_CONCAT limit without  using variables" rel="bookmark" href="http://code.openark.org/blog/mysql/verifying-group_concat-limit-without-using-variables">Verifying GROUP_CONCAT limit without using variables</a>, I have presented a test to verify if <strong>group_concat_max_len</strong> is sufficient for known limitations. I will follow the path where I assume I cannot control <strong>group_concat_max_len</strong>, not even in session scope, and show an SQL solution, dirty as it is, to overcome the <strong>GROUP_CONCAT</strong> limitation, under certain conditions.</p>
+<p>Sheeri rightfully <a href="http://code.openark.org/blog/mysql/verifying-group_concat-limit-without-using-variables#comment-14617">asks</a> why I wouldn't just set <strong>group_concat_max_len </strong>in session scope. The particular case I have is that I'm providing a VIEW definition. I'd like users to "install" that view, i.e. to <strong>CREATE</strong> it on their database. The VIEW does some logic, and uses <strong>GROUP_CONCAT</strong> to implement that logic.</p>
+<p>Now, I have no control on the DBA or developer who created the view. The creation of the view has nothing to do with the <strong>group_concat_max_len</strong> setting on her database instance.</p>
+<h4>An example</h4>
+<p>OK, apologies aside. Using the <a href="http://dev.mysql.com/doc/sakila/en/sakila.html">sakila</a> database, I execute:</p>
+<blockquote>
+<pre>mysql&gt; SELECT GROUP_CONCAT(last_name) FROM actor \G
+*************************** 1. row ***************************
+GROUP_CONCAT(last_name): AKROYD,AKROYD,AKROYD,ALLEN,ALLEN,ALLEN,ASTAIRE,BACALL,BAILEY,BAILEY,BALE,BALL,BARRYMORE,BASINGER,BENING,BENING,BERGEN,BERGMAN,BERRY,BERRY,BERRY,BIRCH,BLOOM,BOLGER,BOLGER,BRIDGES,BRODY,BRODY,BULLOCK,CAGE,CAGE,CARREY,CHAPLIN,CHASE,CHASE,CLOSE,COSTNER,CRAWFORD,CRAWFORD,CRONYN,CRONYN,CROWE,CRUISE,CRUZ,DAMON,DAVIS,DAVIS,DAVIS,DAY-LEWIS,DEAN,DEAN,DEE,DEE,DEGENERES,DEGENERES,DEGENERES,DENCH,DENCH,DEPP,DEPP,DERN,DREYFUSS,DUKAKIS,DUKAKIS,DUNST,FAWCETT,FAWCETT,GABLE,GARLAND,GARLAND,GARLAND,GIBSON,GOLDBERG,GOODING,GOODING,GRANT,GUINESS,GUINESS,GUINESS,HACKMAN,HACKMAN,HARRIS,HARRIS,HARRIS,HAWKE,HESTON,HOFFMAN,HOFFMAN,HOFFMAN,HOPE,HOPKINS,HOPKINS,HOPKINS,HOPPER,HOPPER,HUDSON,HUNT,HURT,JACKMAN,JACKMAN,JOHANSSON,JOHANSSON,JOHANSSON,JOLIE,JOVOVICH,KEITEL,KEITEL,KEITEL,KILMER,KILMER,KILMER,KILMER,KILMER,LEIGH,LOLLOBRIGIDA,MALDEN,MANSFIELD,MARX,MCCONAUGHEY,MCCONAUGHEY,MCDORMAND,MCKELLEN,MCKELLEN,MCQUEEN,MCQUEEN,MIRANDA,MONROE,MONROE,MOSTEL,MOSTEL,NEESON,NEESON,NICHOLSON,NOLTE,NOLTE,NOLTE,NOLTE,OLIVIER,OLIVIER,PALTROW,PALTROW,P
+1 row in set, 1 warning (0.00 sec)
+
+mysql&gt; SHOW WARNINGS;
++---------+------+--------------------------------------+
+| Level   | Code | Message                              |
++---------+------+--------------------------------------+
+| Warning | 1260 | 1 line(s) were cut by GROUP_CONCAT() |
++---------+------+--------------------------------------+
+1 row in set (0.00 sec)
+</pre>
+</blockquote>
+<p><!--more-->So, my <strong>GROUP_CONCAT</strong> has been truncated. How much did I lose?</p>
+<blockquote>
+<pre>mysql&gt; SELECT SUM(LENGTH(last_name) + 1) - 1 FROM actor;
++--------------------------------+
+| SUM(LENGTH(last_name) + 1) - 1 |
++--------------------------------+
+|                           1445 |
++--------------------------------+
+</pre>
+</blockquote>
+<p>(In the above query I counted the separating commas; they are part of the <strong>GROUP_CONCAT</strong> limit).</p>
+<h4>The special case at hand</h4>
+<p>The proposed SQL trick assumes the following:</p>
+<ul>
+<li>The length of the <strong>GROUP_CONCAT</strong> result is <em>known to be under a certain value</em>.</li>
+<li>A <strong>GROUP_CONCAT</strong> of any set of <em>n</em> rows is <em>known to be shorter than (or equal to) <strong>1024</strong> characters</em>.</li>
+</ul>
+<p>In our above example, I happen to know that the length of the <strong>GROUP_CONCAT</strong> result is below <strong>2048</strong>. I also happen to know that any <strong>100</strong> rows will yield in a <strong>GROUP_CONCAT</strong> length of less than <strong>1024</strong>.</p>
+<p>How can I know this? Well, the length of my <strong>VARCHAR</strong>, or the fact I'm handling <strong>INT</strong> values can give me upper bounds on total lengths.</p>
+<h4>Steps towards the solution</h4>
+<p>Returning to our example, my intention becomes clearer: I want to work it out in two phases (later on I'll show how this can be done in more phases). Any of the following is good:</p>
+<blockquote>
+<pre>mysql&gt; SELECT GROUP_CONCAT(last_name) FROM actor WHERE actor_id BETWEEN 1 and 100 \G
+*************************** 1. row ***************************
+GROUP_CONCAT(last_name): GUINESS,WAHLBERG,CHASE,DAVIS,LOLLOBRIGIDA,NICHOLSON,MOSTEL,JOHANSSON,SWANK,GABLE,CAGE,BERRY,WOOD,BERGEN,OLIVIER,COSTNER,VOIGHT,TORN,FAWCETT,TRACY,PALTROW,MARX,KILMER,STREEP,BLOOM,CRAWFORD,MCQUEEN,HOFFMAN,WAYNE,PECK,SOBIESKI,HACKMAN,PECK,OLIVIER,DEAN,DUKAKIS,BOLGER,MCKELLEN,BRODY,CAGE,DEGENERES,MIRANDA,JOVOVICH,STALLONE,KILMER,GOLDBERG,BARRYMORE,DAY-LEWIS,CRONYN,HOPKINS,PHOENIX,HUNT,TEMPLE,PINKETT,KILMER,HARRIS,CRUISE,AKROYD,TAUTOU,BERRY,NEESON,NEESON,WRAY,JOHANSSON,HUDSON,TANDY,BAILEY,WINSLET,PALTROW,MCCONAUGHEY,GRANT,WILLIAMS,PENN,KEITEL,POSEY,ASTAIRE,MCCONAUGHEY,SINATRA,HOFFMAN,CRUZ,DAMON,JOLIE,WILLIS,PITT,ZELLWEGER,CHAPLIN,PECK,PESCI,DENCH,GUINESS,BERRY,AKROYD,PRESLEY,TORN,WAHLBERG,WILLIS,HAWKE,BRIDGES,MOSTEL,DEPP
+1 row in set (0.00 sec)
+
+mysql&gt; SELECT GROUP_CONCAT(last_name) FROM actor WHERE actor_id BETWEEN 101 and 200 \G
+*************************** 1. row ***************************
+GROUP_CONCAT(last_name): DAVIS,TORN,LEIGH,CRONYN,CROWE,DUNST,DEGENERES,NOLTE,DERN,DAVIS,ZELLWEGER,BACALL,HOPKINS,MCDORMAND,BALE,STREEP,TRACY,ALLEN,JACKMAN,MONROE,BERGMAN,NOLTE,DENCH,BENING,NOLTE,TOMEI,GARLAND,MCQUEEN,CRAWFORD,KEITEL,JACKMAN,HOPPER,PENN,HOPKINS,REYNOLDS,MANSFIELD,WILLIAMS,DEE,GOODING,HURT,HARRIS,RYDER,DEAN,WITHERSPOON,ALLEN,JOHANSSON,WINSLET,DEE,TEMPLE,NOLTE,HESTON,HARRIS,KILMER,GIBSON,TANDY,WOOD,MALDEN,BASINGER,BRODY,DEPP,HOPE,KILMER,WEST,WILLIS,GARLAND,DEGENERES,BULLOCK,WILSON,HOFFMAN,HOPPER,PFEIFFER,WILLIAMS,DREYFUSS,BENING,HACKMAN,CHASE,MCKELLEN,MONROE,GUINESS,SILVERSTONE,CARREY,AKROYD,CLOSE,GARLAND,BOLGER,ZELLWEGER,BALL,DUKAKIS,BIRCH,BAILEY,GOODING,SUVARI,TEMPLE,ALLEN,SILVERSTONE,WALKEN,WEST,KEITEL,FAWCETT,TEMPLE
+1 row in set (0.00 sec)
+</pre>
+</blockquote>
+<p>It's somewhat tempting to try the following trick based on <strong>IF</strong>, but see what happens:</p>
+<blockquote>
+<pre>mysql&gt; SELECT GROUP_CONCAT(IF(actor_id BETWEEN 1 AND 100, last_name, '')) FROM actor\G
+*************************** 1. row ***************************
+GROUP_CONCAT(IF(actor_id BETWEEN 1 AND 100, last_name, '')): AKROYD,AKROYD,,,,,ASTAIRE,,BAILEY,,,,BARRYMORE,,,,BERGEN,,BERRY,BERRY,BERRY,,BLOOM,BOLGER,,BRIDGES,BRODY,,,CAGE,CAGE,,CHAPLIN,CHASE,,,COSTNER,CRAWFORD,,CRONYN,,,CRUISE,CRUZ,DAMON,DAVIS,,,DAY-LEWIS,DEAN,,,,DEGENERES,,,DENCH,,DEPP,,,,DUKAKIS,,,FAWCETT,,GABLE,,,,,GOLDBERG,,,GRANT,GUINESS,GUINESS,,HACKMAN,,HARRIS,,,HAWKE,,HOFFMAN,HOFFMAN,,,HOPKINS,,,,,HUDSON,HUNT,,,,JOHANSSON,JOHANSSON,,JOLIE,JOVOVICH,KEITEL,,,KILMER,KILMER,KILMER,,,,LOLLOBRIGIDA,,,MARX,MCCONAUGHEY,MCCONAUGHEY,,MCKELLEN,,MCQUEEN,,MIRANDA,,,MOSTEL,MOSTEL,NEESON,NEESON,NICHOLSON,,,,,OLIVIER,OLIVIER,PALTROW,PALTROW,PECK,PECK,PECK,PENN,,PESCI,,PHOENIX,PINKETT,PITT,POSEY,PRESLEY,,,,,SINATRA,SOBIESKI,STALLONE,STREEP,,,SWANK,TANDY,,TAUTOU,TEMPLE,,,,,TORN,TORN,,TRACY,,VOIGHT,WAHLBERG,WAHLBERG,,WAYNE,,,WILLIAMS,,,WILLIS,WILLIS,,,WINSLET,,,WOOD,,WRAY,ZELLWEGER,,
+1 row in set (0.00 sec)
+</pre>
+</blockquote>
+<p>We're getting there, though. We will mimic <strong>GROUP_CONCAT</strong>'s separator by using <strong>CONCAT</strong>, and remove the default separator:</p>
+<blockquote>
+<pre>SELECT
+ GROUP_CONCAT(
+   IF(actor_id BETWEEN 1 AND 100, CONCAT(',', last_name), '')
+   SEPARATOR ''
+ ) AS result
+FROM actor
+\G
+*************************** 1. row ***************************
+result: ,AKROYD,AKROYD,ASTAIRE,BAILEY,BARRYMORE,BERGEN,BERRY,BERRY,BERRY,BLOOM,BOLGER,BRIDGES,BRODY,CAGE,CAGE,CHAPLIN,CHASE,COSTNER,CRAWFORD,CRONYN,CRUISE,CRUZ,DAMON,DAVIS,DAY-LEWIS,DEAN,DEGENERES,DENCH,DEPP,DUKAKIS,FAWCETT,GABLE,GOLDBERG,GRANT,GUINESS,GUINESS,HACKMAN,HARRIS,HAWKE,HOFFMAN,HOFFMAN,HOPKINS,HUDSON,HUNT,JOHANSSON,JOHANSSON,JOLIE,JOVOVICH,KEITEL,KILMER,KILMER,KILMER,LOLLOBRIGIDA,MARX,MCCONAUGHEY,MCCONAUGHEY,MCKELLEN,MCQUEEN,MIRANDA,MOSTEL,MOSTEL,NEESON,NEESON,NICHOLSON,OLIVIER,OLIVIER,PALTROW,PALTROW,PECK,PECK,PECK,PENN,PESCI,PHOENIX,PINKETT,PITT,POSEY,PRESLEY,SINATRA,SOBIESKI,STALLONE,STREEP,SWANK,TANDY,TAUTOU,TEMPLE,TORN,TORN,TRACY,VOIGHT,WAHLBERG,WAHLBERG,WAYNE,WILLIAMS,WILLIS,WILLIS,WINSLET,WOOD,WRAY,ZELLWEGER
+1 row in set (0.00 sec)
+</pre>
+</blockquote>
+<h4>Solution</h4>
+<p>Let's combine all we had so far to get the final result:</p>
+<blockquote>
+<pre>SELECT
+  SUBSTRING(
+    CONCAT(
+      GROUP_CONCAT(
+        IF(actor_id BETWEEN 1 AND 100, CONCAT(',', last_name), '')
+        SEPARATOR ''
+      ),
+      GROUP_CONCAT(
+        IF(actor_id BETWEEN 101 AND 200, CONCAT(',', last_name), '')
+        SEPARATOR ''
+      )
+    ),
+    2
+  ) AS result
+FROM actor
+\G
+
+*************************** 1. row ***************************
+result: AKROYD,AKROYD,ASTAIRE,BAILEY,BARRYMORE,BERGEN,BERRY,BERRY,BERRY,BLOOM,BOLGER,BRIDGES,BRODY,CAGE,CAGE,CHAPLIN,CHASE,COSTNER,CRAWFORD,CRONYN,CRUISE,CRUZ,DAMON,DAVIS,DAY-LEWIS,DEAN,DEGENERES,DENCH,DEPP,DUKAKIS,FAWCETT,GABLE,GOLDBERG,GRANT,GUINESS,GUINESS,HACKMAN,HARRIS,HAWKE,HOFFMAN,HOFFMAN,HOPKINS,HUDSON,HUNT,JOHANSSON,JOHANSSON,JOLIE,JOVOVICH,KEITEL,KILMER,KILMER,KILMER,LOLLOBRIGIDA,MARX,MCCONAUGHEY,MCCONAUGHEY,MCKELLEN,MCQUEEN,MIRANDA,MOSTEL,MOSTEL,NEESON,NEESON,NICHOLSON,OLIVIER,OLIVIER,PALTROW,PALTROW,PECK,PECK,PECK,PENN,PESCI,PHOENIX,PINKETT,PITT,POSEY,PRESLEY,SINATRA,SOBIESKI,STALLONE,STREEP,SWANK,TANDY,TAUTOU,TEMPLE,TORN,TORN,TRACY,VOIGHT,WAHLBERG,WAHLBERG,WAYNE,WILLIAMS,WILLIS,WILLIS,WINSLET,WOOD,WRAY,ZELLWEGER,AKROYD,ALLEN,ALLEN,ALLEN,BACALL,BAILEY,BALE,BALL,BASINGER,BENING,BENING,BERGMAN,BIRCH,BOLGER,BRODY,BULLOCK,CARREY,CHASE,CLOSE,CRAWFORD,CRONYN,CROWE,DAVIS,DAVIS,DEAN,DEE,DEE,DEGENERES,DEGENERES,DENCH,DEPP,DERN,DREYFUSS,DUKAKIS,DUNST,FAWCETT,GARLAND,GARLAND,GARLAND,GIBSON,GOODING,GOODING,GUINESS,HACKMAN,HARRIS,HARRIS,HESTON,HOFFMAN,HOPE,HOPKINS,HOPKINS,HOPPER,HOPPER,HURT,JACKMAN,JACKMAN,JOHANSSON,KEITEL,KEITEL,KILMER,KILMER,LEIGH,MALDEN,MANSFIELD,MCDORMAND,MCKELLEN,MCQUEEN,MONROE,MONROE,NOLTE,NOLTE,NOLTE,NOLTE,PENN,PFEIFFER,REYNOLDS,RYDER,SILVERSTONE,SILVERSTONE,STREEP,SUVARI,TANDY,TEMPLE,TEMPLE,TEMPLE,TOMEI,TORN,TRACY,WALKEN,WEST,WEST,WILLIAMS,WILLIAMS,WILLIS,WILSON,WINSLET,WITHERSPOON,WOOD,ZELLWEGER,ZELLWEGER
+1 row in set (0.00 sec)
+</pre>
+</blockquote>
+<h4>More than 2048 characters?</h4>
+<p>As far as the upper limit is known, we can work this trick in the same manner. Assume the length is expected to be <strong>3000</strong> characters. We can then <strong>CONCAT</strong> three, or four, or five <strong>GROUP_CONCAT</strong> results, each of fewer number of rows as required. Just copy+paste the above <strong>GROUP_CONCAT(...)</strong> clause a couple more times, and edit the <strong>actor_id BETWEEN n AND m</strong> clauses.</p>
+<p>Moreover, further using <strong>MIN(actor_id)</strong>, <strong>MAX(actor_id)</strong> can minimize dependencies on specific values.</p>
+<p>Dirty? ugly? Not arguing. But it's working! In some ways it is not such a dirty solution: I'm avoiding using stored routines (easily setting the <strong>group_concat_max_len</strong> session variable from within a stored function's body, see Justin's <a href="http://code.openark.org/blog/mysql/verifying-group_concat-limit-without-using-variables#comment-14641">suggestion</a>), so I'm only relying on SQL, not on "external" technology, if I may call it that way.</p>

@@ -1,0 +1,83 @@
+---
+title: SphinxSE 0.9.9-RC2 bug workaround
+date: 2009-09-07 10:23:21.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Installation
+- Sphinx
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>There is a serious bug with the sphinx storage engine, introduced in 0.9.9-RC2 (and which has not been fixed in latest revisions, as yet - last checked with rev 2006).</p>
+<p>I would usually just revert to an older version (0.9.9-RC1 does not contain this bug), but for the reason that RC2 introduces an important feature: the <strong>sphinx_snippets()</strong> function, which allows for creation of snippets from within MySQL, and which makes the sphinx integration with MySQL complete, as far as the application is concerned.</p>
+<h4>The bug</h4>
+<p>The bug is described <a href="http://sphinxsearch.com/forum/view.html?id=3589">here</a> and <a href="http://sphinxsearch.com/forum/view.html?id=4081">here</a> (and see further discussions). Though it's claimed to have been fixed, it's been re-reported, and I've tried quite a few revisions and verified it has not been fixed (tested on Debian/Ubuntu x64).  <span>Essentially, the bug does not allow you to set filters on a query issued from within the SphinxSE. For example, the following queries fail:</span></p>
+<blockquote>
+<pre>SELECT ... FROM ... WHERE query='python;mode=any;sort=relevance;limit=200;range=myUnixTimestamp,1249506000,1252184400;'
+SELECT ... FROM ... WHERE query='python;mode=any;sort=relevance;limit=200;filter=my_field,1;'</pre>
+</blockquote>
+<p>While the following query succeeds:</p>
+<blockquote>
+<pre>SELECT ... FROM ... WHERE query='python;mode=any;sort=relevance;limit=200;'</pre>
+</blockquote>
+<p>The error message is this:</p>
+<blockquote>
+<pre><span>ERROR 1430 (HY000): There was a problem processing the query on the foreign data source. Data source error: searchd error: invalid or truncated request</span></pre>
+</blockquote>
+<p><span>I see this as a serious bug in the SphinxSE: it renders it useless; searching without the ability to filter is not something I can live with.<!--more--></span></p>
+<h4><span>The motivation</span></h4>
+<p><span>Sphinx does not store the actual text content. To get search results with snippets, you need to:</span></p>
+<ul>
+<li><span>Ask sphinx for the documents ids</span></li>
+<li><span>Get the content for those documents</span></li>
+<li><span>Ask sphinx for snippets based on the provided content and search phrase.</span></li>
+</ul>
+<p>With the introduction of the <strong>sphinx_snippets()</strong> function, this can all be done with a single query, like this:</p>
+<blockquote>
+<pre>SELECT my_docs.my_docs_id,  my_docs.publish_time,  CONVERT(sphinx_snippets(my_docs.id.content, 'my_docs_index', 'python') USING utf8) AS snippet  FROM tets.my_docs INNER JOIN test.my_docs_sphinx USING(my_docs_id) WHERE query='python;mode=any;sort=relevance;limit=200;range=publish_time_unix,1249506000,1252184400;';</pre>
+</blockquote>
+<p><span>This is really a life saver; without this function, you need to get the resutls back to your application, then send the data again to MySQL, in which case you might altogether discard the SphinxSE and talk to sphinx directly. But with a single query you get to ask the results just as if you were asking for any result set from your database (with extra syntax).</span></p>
+<h4><span>The workaround</span></h4>
+<p><span>My setup is Percona's </span><strong>mysql-5.1.34-xtradb5</strong> source, on Ubuntu server <strong>8.04 amd64</strong>. The trick is to first compile MySQL with sphinx <strong>0.9.9-RC2</strong>, in order to produce the <strong>sphinx.so</strong> file (where the <strong>sphinx_snippets()</strong> function is found), backup the <strong>sphinx.so</strong> file, then recompile everything with <strong>sphinx 0.9.9-RC1</strong>. The steps being:</p>
+<p>Compile MySQL with sphinx <strong>0.9.9-Rc2</strong> (I choose to install MySQL on <strong>/usr/local/mysql51</strong>):</p>
+<blockquote>
+<pre>tar xzfv mysql-5.1.34-xtradb5.tar.gz
+cd mysql-5.1.34-xtradb5
+cp -R /tmp/resources/sphinx-0.9.9-rc2/mysqlse storage/sphinx
+sh BUILD/autorun.sh
+./configure --with-plugins=innobase,sphinx --prefix=/usr/local/mysql51
+make</pre>
+</blockquote>
+<p>This produces the <strong>sphinx.so</strong>, <strong>sphinx.so.0</strong>, <strong>sphinx.so.0.0.0</strong> files. Back them up!</p>
+<p>Next, recompile with sphinx <strong>0.9.9-RC1</strong>. I've found that simple copying and recompiling doesn't work well. So just cleanup everything and start afresh:</p>
+<blockquote>
+<pre>cd ..
+rm -rf mysql-5.1.34-xtradb5
+tar xzfv mysql-5.1.34-xtradb5.tar.gz
+cd mysql-5.1.34-xtradb5
+cp -R /tmp/resources/sphinx-0.9.9-rc1/mysqlse storage/sphinx
+sh BUILD/autorun.sh
+./configure --with-plugins=innobase,sphinx --prefix=/usr/local/mysql51
+make
+sudo make install</pre>
+</blockquote>
+<p>Copy the <strong>sphinx.so</strong> files into the MySQL plugin directory (<strong>/usr/local/mysql51/lib/mysql/plugin</strong> in our case).</p>
+<p>Then build sphinx (you must have MySQL includes for sphinx to compile, so this must be the second step):</p>
+<blockquote>
+<pre>cd /tmp/resources/sphinx-0.9.9-rc1/
+./configure --prefix=/usr/local/sphinx --with-mysql=/usr/local/mysql51
+make
+sudo make install</pre>
+</blockquote>
+<p>Essentially, we're working now with <strong>0.9.9-RC1</strong>, but the <strong>sphinx_snippets()</strong> function is from the <strong>0.9.9-RC2</strong> version, and happily no one bothers about this mix.</p>
+<p>I hope this helps.</p>

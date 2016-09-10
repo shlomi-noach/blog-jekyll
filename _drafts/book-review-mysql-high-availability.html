@@ -1,0 +1,27 @@
+---
+layout: post
+title: 'Book review: MySQL High Availability'
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags:
+- Books
+- Monitoring
+- Opinions
+- Replication
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>The book has a disappointing side to it, though: it is MySQL oriented. Not the <em>product</em> MySQL but the <em>company/entity</em> MySQL.</p>
+<p>The book does not discuss solutions and development outside MySQL. For example, it discusses slave promotion and Master Master replication, but fails to mention Maatkit and MMM-MySQL, popular utilities which handle such scenarios. I'm not saying the book should explain these. But I feel a book on replication is incomplete if it does not note down the major replication tools around.</p>
+<p>It gives the impression that only solutions that made it into MySQL are discussed. Semi-synchronous Google Patches is mentioned, noting down that MySQL 5.5 includes a rewrite of this patch.</p>
+<p>But as another example, the book discusses slave promotion in the event of a master's crash, and notes down the difficulty in synchronizing the many slaves with the newly promoted master. It outlines the idea of having a global transaction ID, and follows to show how to programmaticly solve it, using global transaction tables, possibly wrapping up each commit with a stored routine. While the solution is algorithmically interesting, I would not dare use it on production. This is all just fine, but the book fails to note that Google Patches has <em>already implemented</em> global transaction IDs.</p>

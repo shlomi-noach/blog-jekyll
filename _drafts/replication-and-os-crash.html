@@ -1,0 +1,38 @@
+---
+layout: post
+title: Replication and OS crash
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>In the past month I've witnessed two power downs to MySQL servers.</p>
+<ul>
+<li>On the first case, it was due to a NOC team mistake: the guys turned off two machines (just to be sure?) instead of one. Reminded me of the excellent <a href="http://www.youtube.com/watch?v=W8_Kfjo3VjU">The Website is Down</a>.</li>
+<li>On the second case, I don't know yet what caused the power break. All I know is that the server was restarted.</li>
+</ul>
+<p>In both cases, the restarted machine was a MySQL master. In both cases, the slaves failed with the following:</p>
+<blockquote>
+<pre>090623  2:17:56 [ERROR] Error reading packet from server: Client requested master to start replication from impossible position ( server_errno=1236)
+090623  2:17:56 [ERROR] Got fatal error 1236: 'Client requested master to start replication from impossible position' from master when reading data from binary log</pre>
+</blockquote>
+<p>I wish to explain why this error originates.</p>
+<p>Unless <a href="http://dev.mysql.com/doc/refman/5.0/en/replication-options-binary-log.html#sysvar_sync_binlog">sync_binlog</a> is set to "1' (by default "0"), binary logs are not lfushed to disk upon write. That it, MySQL relies on the OS to flush binary logs at its convenience.</p>
+<p>Say the current binlog is log-bin.00100. The master writes to this binary log as updates to the data are performed. But the file is not flushed to disk at every commit, but at the discretion of the OS.</p>
+<p>Assume, then, that the last flush to disk was at position 5678, yet position 6000 is already written by the master. Now a power failure occurs.</p>
+<p>Let's further assume (and we cannot anticipate it will always be so), that the slave has indeed relayed the query at position 6000.</p>
+<p>When the master server restarts, the binary log file is only at 5678 (plus some bytes). The slave finds out the master is back, and says: "Welcome back. Please provide with binary log log-bin.00100, just after position 6000". But the master has no such position.</p>
+<h4>What can be done?</h4>
+<p>Well, at the worst case, make a new image from the master and start replication all over again.</p>
+<p>If we were lucky enough, and the slave did replicate the binary log just before the crash, then the solution is simple. When the master restarts, it rotates to the next binary log. Just point the slave at the head of the new log.</p>

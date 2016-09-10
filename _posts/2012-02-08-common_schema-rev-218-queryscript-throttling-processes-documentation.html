@@ -1,0 +1,61 @@
+---
+title: 'common_schema rev. 218: QueryScript, throttling, processes, documentation'
+date: 2012-02-08 11:53:30.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Administration
+- common_schema
+- Development
+- Open Source
+- QueryScript
+- scripts
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><a href="http://code.google.com/p/common-schema/">common_schema</a>, revision <strong>218</strong> is released, with major new features, top one being <em>server side scripting</em>. Here are the highlights:</p>
+<ul>
+<li><a href="http://www.queryscript.com/"><strong>QueryScript</strong></a>: server side scripting is now supported by <em>common_schema</em>, which acts as an interpreter for QueryScript code.</li>
+<li>Throttling for queries is now made available via the <strong>throttle()</strong> function.</li>
+<li>Enhancements to processlist-related views, including the new <strong>slave_hosts</strong> view.</li>
+<li>Inline documentation/help is available via the <strong>help()</strong> routine.</li>
+<li>more...</li>
+</ul>
+<h4>QueryScript</h4>
+<p><em>common_schema</em> makes for a QueryScript implementation for MySQL. You can run server side scripts, interpreted by <em>common_schema</em>, which allow for easy syntax and greater power than was otherwise previously available on the MySQL server. For example:</p>
+<blockquote>
+<pre>foreach($table, $schema, $engine: table like '%')
+  if ($engine = 'ndbcluster')
+    ALTER ONLINE TABLE :$schema.:$table REORGANIZE PARTITION;</pre>
+</blockquote>
+<p>QueryScript includes flow control, conditional branching, variables &amp; variable expansion, script throttling and more.</p>
+<p>Read more on <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script.html">common_schema's QueryScript implementation</a>.</p>
+<h4><!--more-->Query throttling</h4>
+<p><a href="http://code.openark.org/blog/mysql/self-throttling-mysql-queries">Throttling for MySQL queries</a> was suggested by means of elaborate query manipulation. It is now reduced into a single throttle function: one can now just invoke <strong>throttle(3)</strong> on one's query, so as to make the query execute for a <em>longer</em> time, while taking short sleep breaks during operation, easing up the query's demand for resources.</p>
+<p>Read more on <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/throttle.html">query throttling</a>.</p>
+<h4>Process views</h4>
+<p>The <strong>processlist_grantees</strong> view provides with more details on the running processes. <strong>slave_hosts</strong> is a new view, listing hostnames of connected slaves.</p>
+<p>Read more on <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/process_views.html">process views</a>.</p>
+<h4>help()</h4>
+<p>The <em>common_schema</em> documentation is now composed of well over <strong>100</strong> pages, including synopsis, detailed internals discussion, notes and examples. I can't exaggerate in saying that the documentation took the vast majority of time for this code to release.</p>
+<p>The documentation is now made available inline, from within you mysql client, via the <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/help.html"><strong>help()</strong></a> routine. Want to know more about redundant (duplicate) keys and how to find them? Just type:</p>
+<blockquote>
+<pre>call help('redundant');</pre>
+</blockquote>
+<p>and see what comes out!</p>
+<p>The entire <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/introduction.html">documentation</a>, which is available online as well as a downloadable bundle, is embedded into <em>common_schema</em> itself. It's rather cool.</p>
+<h4>Tests</h4>
+<p><em>common_schema</em> is tested. The number of tests in <em>common_schema</em> is rapidly growing, and new tests are introduced for new features as well as for older ones. There is not yet full coverage for all views, but I'm working hard at it. <em>common_schema</em> is a robust piece of code!</p>
+<h4>Get it!</h4>
+<p>Download <em>common_schema</em> on the <a href="http://code.google.com/p/common-schema">common_schema project page</a>.</p>
+<p>Read the documentation <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/introduction.html">online</a>, or download it as well (or call for <strong>help()</strong>)</p>
+<p><em>common_schema</em> is released under the BSD license.</p>

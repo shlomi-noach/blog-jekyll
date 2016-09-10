@@ -1,0 +1,111 @@
+---
+title: Limiting table disk quota in MySQL
+date: 2011-03-07 09:08:21.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- File System
+- InnoDB
+- MyISAM
+- Security
+- Triggers
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Question asked by a student: is there a way to limit a table's quote on disk? Say, limit a table to 2GB, after which it will refuse to grow? Note that the requirement is that rows are never DELETEd. The table must simply refuse to be updated once it reaches a certain size.</p>
+<p>There is no built-in way to limit a table's quota on disk. First thing to observe is that MySQL has nothing to do with this. It is entirely up to the storage engine to provide with such functionality. The storage engine is the one to handle data storage: how table and keys are stored on disk. Just consider the difference between MyISAM's <strong>.MYD</strong> &amp; <strong>.MYI</strong> to InnoDB's shared tablespace <strong>ibdata1</strong> to InnoDB's file-per table <strong>.ibd</strong> files.</p>
+<p>The only engine I know of that has a quota is the MEMORY engine: it accepts the <strong>max_heap_table_size</strong>, which limits the size of a single table in memory. Hrmmm... In memory...</p>
+<h4>Why limit?</h4>
+<p>I'm not as yet aware of the specific requirements of said company, but this is not the first time I heard this question.</p>
+<p>The fact is: when MySQL runs out of disk space, it goes with a BOOM. It crashed ungracefully, with binary logs being out of sync, replication being out of sync. To date, and I've seen some cases, InnoDB merely crashes and manages to recover once disk space is salvaged, but I am not certain this is guaranteed to be the case. Anyone?</p>
+<p>And, with MyISAM..., who knows?</p>
+<p>Rule #1 of MySQL disk usage: <em>don't run out of disk space.</em></p>
+<h4>Workarounds</h4>
+<p>I can think of two workarounds, none of which is pretty. The first involves triggers (actually, a few variations for this one), the second involves privileges.<!--more--></p>
+<h4>Triggers</h4>
+<p>The following code (first presented in <a title="Permanent Link to Triggers Use Case Compilation, Part II" rel="bookmark" href="http://code.openark.org/blog/mysql/triggers-use-case-compilation-part-ii">Triggers Use Case Compilation, Part II</a>) assumed the DATA_LENGTH and INDEX_LENGTH values in INFORMATION_SCHEMA to be good indicators:</p>
+<blockquote>
+<pre>DROP TABLE IF EXISTS `world`.`logs`;
+CREATE TABLE  `world`.`logs` (
+  `logs_id` int(11) NOT NULL auto_increment,
+  `ts` timestamp NOT NULL default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP,
+  `message` varchar(255) character set utf8 NOT NULL,
+  PRIMARY KEY  (`logs_id`)
+) ENGINE=MyISAM;
+
+DELIMITER $$
+
+DROP TRIGGER IF EXISTS logs_bi $$
+CREATE TRIGGER logs_bi BEFORE INSERT ON logs
+FOR EACH ROW
+BEGIN
+  SELECT DATA_LENGTH+INDEX_LENGTH FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='world' AND TABLE_NAME='LOGS' INTO @estimated_table_size;
+  IF (@estimated_table_size &gt; 25*1024) THEN
+    SELECT 0 FROM `logs table is full` INTO @error;
+  END IF;
+END $$
+
+DELIMITER ;
+</pre>
+</blockquote>
+<p>Or, you could write your own UDF, e.g. <strong>get_table_file_size(fully_qualified_table_name)</strong> and be more accurate:</p>
+<blockquote>
+<pre>DELIMITER $$
+
+DROP TRIGGER IF EXISTS logs_bi $$
+CREATE TRIGGER logs_bi BEFORE INSERT ON logs
+FOR EACH ROW
+BEGIN
+  SELECT get_table_file_size('world.logs') INTO @table_size;
+  IF (@table_size &gt; 25*1024) THEN
+    SELECT 0 FROM `logs table is full` INTO @error;
+  END IF;
+END $$
+
+DELIMITER ;
+</pre>
+</blockquote>
+<p>(Same should be done for <strong>UPDATE</strong> operations)</p>
+<p>In both workarounds above, triggers are pre-defined. But triggers are performance-killers.</p>
+<p>How about preventing writing to the table only when it's truly on the edge? A simple shell script, spawned by a cronjob, could do this well: get the file size of a specific table, and test if it's larger than <em>n</em> bytes. If not, the script exits. If the file is indeed too large, the scripts invokes the following on <em>mysql</em>:</p>
+<blockquote>
+<pre>DELIMITER $$
+
+DROP TRIGGER IF EXISTS logs_bi $$
+CREATE TRIGGER logs_bi BEFORE INSERT ON logs
+FOR EACH ROW
+BEGIN
+  SELECT 0 FROM `logs table is full` INTO @error;
+END $$
+
+DELIMITER ;
+</pre>
+</blockquote>
+<p>So, during most of the time, there is no trigger. Only when the external script detects that table is too large, does it create a trigger. The trigger has no logic: it simply raises an error (PS, use <strong>raise</strong> in MySQL <strong>5.5</strong>).</p>
+<h4>Privileges</h4>
+<p>Another way to work around the problem is to use security features. Instead of creating a trigger on the table, <strong>REVOKE</strong> the <strong>INSERT</strong> &amp; <strong>UPDATE</strong> privileges from the appropriate user on that table.</p>
+<p>This may turn out to be a difficult task, since MySQL has no notion of <em>fine grain changes</em>. That is, suppose we have:</p>
+<blockquote>
+<pre>GRANT INSERT, UPDATE, DELETE, SELECT ON mydb.* TO 'webuser'@'%.webdomain'</pre>
+</blockquote>
+<p>If we just do:</p>
+<blockquote>
+<pre>REVOKE SELECT ON mydb.logs FROM 'webuser'@'%.webdomain'</pre>
+</blockquote>
+<p>We get:</p>
+<blockquote>
+<pre>There is no such grant defined for user 'webuser' on host '%.webdomain' on table 'logs'.</pre>
+</blockquote>
+<p>So this requires setting up privileges on the table level in the first place. Plus note that as long as the grants on the database level do allow for INSERTs, you cannot override it on the table level.</p>
+<h4>Other ideas?</h4>
+<p>I never actually implemented table disk quota. I'm not sure this is a viable solution; but I haven't heard all the arguments in favor as yet, so I don't want to rule this out.</p>
+<p>Please share below if you are using other means of table size control, other than the trivial cleanup of old records.</p>

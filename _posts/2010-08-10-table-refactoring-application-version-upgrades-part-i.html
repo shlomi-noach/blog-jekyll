@@ -1,0 +1,85 @@
+---
+title: Table refactoring & application version upgrades, Part I
+date: 2010-08-10 14:36:28.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- Development
+- MySQL
+tags:
+- Development
+- Indexing
+- Replication
+meta:
+  _edit_last: '2'
+  _wp_old_slug: ''
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>A developer's major concern is: <em>How do I do application &amp; database upgrades with minimal downtime? How do I synchronize between a DB's version upgrade and an application's version upgrade?<br />
+</em></p>
+<p>I will break down the discussion into types of database refactoring operations, and I will limit to single table refactoring. The discussion will try to understand the need for refactoring and will dictate the steps towards a successful upgrade.</p>
+<h4>Reader prerequisites</h4>
+<p>I will assume MySQL to be the underlying database. To take a major component out of the equation: we may need to deal with very large tables, for which an <strong>ALTER</strong> command may take long hours. I will assume familiarity with Master-Master (Active-Passive) replication, with possible use of <a href="http://mysql-mmm.org/">MMM for MySQL</a>. When I describe "Failover from <strong>M1</strong> to <strong>M2</strong>", I mean "Make the <strong>ALTER</strong> changes on <strong>M2</strong> (passive), then switch your application from <strong>M1</strong> to <strong>M2</strong> (change of IPs, VIP, etc.), promoting <strong>M2</strong> to active position, then apply same changes on <strong>M1</strong> (now passive) or completely rebuild it".</p>
+<p>Phew, a one sentence description of M-M usage...</p>
+<p>I also assume the reader's understanding that a table's schema can be different on master &amp; slave, which is the basis for the "use replication for refactoring" trick. But it cannot be too different, or, to be precise, the two schemata must both support the ongoing queries for the table.</p>
+<p>A full discussion of the above is beyond the scope of this post.</p>
+<h4>Types of refactoring needs</h4>
+<p>As I limit this discussion to single table refactoring,we can look at major refactoring operations and their impact on application &amp; upgrades. We will discuss ADD/DROP COLUMN, ADD/DROP INDEX, ADD/DROP UNIQUE INDEX, ADD/DROP FOREIGN KEY, ADD/DROP TABLE.</p>
+<p>We will assume the database and application are both in Version #1 (<strong>V1</strong>), and need to be upgraded to <strong>V2</strong> or greater.<!--more--></p>
+<h4>ADD INDEX</h4>
+<p>Starting with the easier actions. Why would you add an index? Either:</p>
+<ol>
+<li>There is some existing query which can be optimized by the new query</li>
+<li>Or there is some new functionality which issues a query for which the new index is required.</li>
+</ol>
+<p>Adding an index is an easy action in that the table's data does not really change.</p>
+<p>In case <strong>#1</strong>, all you need to do is to add the new index (if the table is large, fail over from <strong>M1</strong> to <strong>M2</strong>). There is no application upgrade, so all that happens is that the database upgrades <strong>V1 </strong>-&gt;<strong> V2</strong>.</p>
+<p>In case <strong>#2</strong>, the database must be prepared with new schema before the new functionality/query is introduced (since it depends on the existence of the index). The steps, therefore, are:</p>
+<ol>
+<li>DB: <strong>V1</strong> -&gt; <strong>V2</strong> (possibly failover from <strong>M1</strong> to <strong>M2</strong>)</li>
+<li>(Sometime later) App: <strong>V1</strong> -&gt; <strong>V2</strong>. Application will issue queries which utilize the new index.</li>
+</ol>
+<p>The application does not have to be upgraded at the same instant the DB gets upgraded. In fact, we'll see that this is a typical scenario: we can separate upgrades into smaller steps, which allow for time lapse. One <em>could</em> work out steps <strong>1</strong> &amp; <strong>2</strong> together, but that would take an extra effort.</p>
+<h4>ADD COLUMN</h4>
+<p>This must be one of the most common table schema upgrades: a new property is needed on the application side. It must be supported by the database. Perhaps a new field in some Java Object, with Hibernate mapping that field onto a new column. Or maybe the new column is there for purpose of de-normalization.</p>
+<p>This is also a more complicated task. Let's look at the required steps:</p>
+<ol>
+<li>DB: <strong>V1</strong> -&gt; <strong>V2</strong> (possibly failover from <strong>M1</strong> to <strong>M2</strong>), change is <strong>ADD COLUMN</strong>.</li>
+<li>App: <strong>V1</strong> -&gt; <strong>V2</strong>. Change is: provide column value for newly <strong>INSERT</strong>ed rows.</li>
+<li>If needed, retroactively update column values for all pre-existing rows.</li>
+<li>App: <strong>V2</strong> -&gt; <strong>V3</strong>. Application begins to use (read, <strong>SELECT</strong>) new column.</li>
+</ol>
+<p>The above procedure assumes that the new column must have some calculated value. A 10-million rows table must now be updated, to have the correct values filled in. So we ask of the application to start filling in data for new rows, which makes the invalid row set static. We can just take a "from row" and a "to row" and fill in the missing column's value for those rows. Only when all rows contain valid values can we let the application start using that row. This makes for <em>two</em> application upgrades.</p>
+<p>If you're content with just a static <strong>DEFAULT</strong> value, then step <strong>3</strong> can be skipped, and step <strong>4</strong> can be merged with step <strong>2</strong>.</p>
+<h4>ADD UNIQUE INDEX</h4>
+<p>This is an altogether different case than the normal <strong>ADD INDEX</strong>, even though they may seem similar. And the case is particularly different when using Master-Slave failover for rebuilding the table.</p>
+<p>Consider the case where we add a <strong>UNIQUE INDEX</strong> on a slave. Some <strong>INSERT</strong> query executes on the master, successfully, and is logged to the binary log. The slave picks it up, tries to execute it, to find that it fails on a DUPLICATE KEY error.</p>
+<p>The <strong>UNIQUE INDEX</strong> is a constraint, and it makes the slave more constrained than the master. This is a delicate situation. Here how to (mostly) work it out:</p>
+<ol>
+<li>App: <strong>V1</strong> -&gt; <strong>V2</strong>. Change <strong>INSERT</strong> queries on relevant table to <strong>INSERT IGNORE</strong> or <strong>REPLACE</strong> queries, whichever is more appropriate.</li>
+<li>DB: <strong>V1</strong> -&gt; <strong>V2</strong> (possibly failover from <strong>M1</strong> to <strong>M2</strong>), change is <strong>ADD UNIQUE KEY</strong> (and while at it, a tip: are you aware of <a href="http://dev.mysql.com/doc/refman/5.1/en/alter-table.html">ALTER IGNORE TABLE</a>?)</li>
+</ol>
+<p>The change of query ensures that the query will succeed on the slave (either by silently doing nothing or by actually replacing content). It also means that the slave can now have different data than the master. Of course, it you trust your application to never <strong>INSERT</strong> duplicates, you can sleep better.</p>
+<p>We do not handle <strong>UPDATE</strong> statements here.</p>
+<h4>ADD CONSTRAINT FOREIGN KEY</h4>
+<p>As with <strong>ADD UNIQUE INDEX</strong>, there is a new constraint here. A slave becomes more constrained than the master. But we now have to make sure <strong>INSERT</strong>, <strong>UPDATE</strong> and <strong>DELETE</strong> statements all go peacefully (well, it also depends on the type of <strong>ON DELETE</strong> and <strong>ON UPDATE</strong> property of the FK).</p>
+<p>The steps would be:</p>
+<ol>
+<li>DB: <strong>V1</strong> -&gt; <strong>V2</strong> (possibly failover from <strong>M1</strong> to <strong>M2</strong>), change is <strong>ADD CONSTRAINT FOREIGN KEY</strong>.</li>
+</ol>
+<p>And then cross your fingers or have trust in your application. If the table is small enough, one does not have to use replication to do the refactoring, and life is simpler. Just execute the <strong>ALTER</strong> on the active master, and continue with your life.</p>
+<h4>CREATE TABLE</h4>
+<p>This is a simple case, since the table is new. The steps are:</p>
+<ol>
+<li>DB: <strong>V1</strong> -&gt; <strong>V2</strong> (no need to use slaves here)</li>
+<li>App: <strong>V1</strong> -&gt; <strong>V2</strong>. Application will start using new table.</li>
+</ol>
+<h4>Conslusion</h4>
+<p>Having such steps formalized help with development management and database management. It makes clear what is expected of the application, and what is expected of the database. The breaking down of these operations into sequential steps allows us to work more slowly; make preparation work; work within our own working hours; get a chance to see the family.</p>
+<p>In this post we took a look at "creation" refactoring changes. New columns, new keys, new constraints. In the next part of this article, we'll discuss <strong>DROP</strong> operations.</p>

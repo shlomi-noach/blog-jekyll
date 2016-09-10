@@ -1,0 +1,175 @@
+---
+title: 'Announcing mycheckpoint: lightweight, SQL oriented monitoring for MySQL'
+date: 2009-11-10 15:16:59.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Analysis
+- Configuration
+- Monitoring
+- mycheckpoint
+- python
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: gnarvaja@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I'm proud to announce <a href="http://code.openark.org/forge/mycheckpoint">mycheckpoint</a>, a monitoring utility for MySQL, with strong emphasis on user accessibility to monitored data.</p>
+<p><em>mycheckpoint</em> is a different kind of monitoring tool. It leaves the power in the user's hand. It's power is not with script-based calculations of recorded data. It's with the creation of a view hierarchy, which allows the user to access computed metrics directly.</p>
+<p><em>mycheckpoint</em> is needed first, to deploy a monitoring schema. It <em>may</em> be needed next, so as to INSERT recorded data (GLOBAL STATUS, GLOBAL VARIABLES, MASTER STATUS, SLAVE STATUS) -- but this is just a simple INSERT; anyone can do that, even another monitoring tool.</p>
+<p>It is then that you do not need it anymore: everything is laid at your fingertips. Consider:</p>
+<blockquote>
+<pre><strong>SELECT</strong> innodb_read_hit_percent, DML <strong>FROM</strong> sv_report_chart_hour;</pre>
+</blockquote>
+<blockquote><p><img class="alignnone" title="Google chart #1" src="{{ site.baseurl }}/assets/chart?cht=lc&amp;chs=400x200&amp;chts=303030,12&amp;chtt=Nov+5,+13:10++-++Nov+6,+10:25+(0+days,+21+hours)&amp;chdl=innodb_read_hit_percent&amp;chdlp=b&amp;chco=ff8c00&amp;chd=s:xz3m3P34z3svvz33xzsvxvvsz11xz344443x443133x414131444344144444o1K44444444664446664636444444z64x3666466666641q6666666666666666666666366668888616686866zMGq66666vhqW46666zqPx44466zljz444434343444444433434334434K434441413344444414444343434443434666666664464636&amp;chxt=x,y&amp;chxr=1,99.66,100.00&amp;chxl=0:||Nov+5,+17:25|Nov+5,+21:40|Nov+6,+01:55|Nov+6,+06:10|&amp;chxs=0,505050,10" alt="" width="400" height="200" /><img class="alignnone" title="Google Chat #2" src="{{ site.baseurl }}/assets/chart?cht=lc&amp;chs=400x200&amp;chts=303030,12&amp;chtt=Oct+26,+19:00++-++Nov+6,+10:00+(10+days,+15+hours)&amp;chdl=com_select_psec|com_insert_psec|com_delete_psec|com_update_psec|com_replace_psec&amp;chdlp=b&amp;chco=ff8c00,4682b4,9acd32,dc143c,9932cc&amp;chd=s:11455ljjkkjnlmnoo268wyy123445njjjkjkllnoorsuvyvxv4533mikkljklmnoqrstuxy001223mojjkjkkllnnpqrrttuvyxyxkghghhhiihijjklmnnoprrssfdeefefgihjjmnoqstwwzx00khiijijilkmopprsuuxx0012khiijhihkjmmnprtwt0z2242mjjkljlknnnnpqrrwwzy1034jijhjijjkkmoqqsswvyx0z11khihjijjkkk,WXYWW4UUWSSRTUWWWjoncZYXZYZXXzUSSSTUVWYWWYbgbYXWWWWWW7aWTTTSTWXXWVVVWWWYXZZXXznTTVTUUVYWVYWUVWVVWVXWU3WWUVVSSSTSTSSTWTUUVUTUUVSUTTTUUVUVVVVVVWXWVXXVVUSVXUSSTTVWVVWVWZXYYbZXXaVVVVUTUUWXVVYZabXaYXXWWaTXZXUTVVVVVVVYZYYYWWWWVaTSRRSSSTVXZaaYWYYbXXWYXbTTUXXUUVVV,JKLKKtJIHHGILJJJJJKJKJKKKKLKKpIHGJGIIJJKJKJJJJJJKKLKKwNIJHGHJJJJLJLJJIKKKKKKKlbIIHHJIKJJKJKKKKKKLLKKMtKHGGHGGLIKMJJMJJJIJJJIIKJHHHIGIJJJJIIJJJIJJKJIJKIIGKHHKLJJKJJJIJJJIJIJKMJJHIHHMMKJJIJIIIHIIIIIIOJIIHIHIJJJJIJIIKIJLKJLKQIHGHGHIKKKKKJJJLKKKKKOKRJJHHHIIKKK,HIIHHJHHHHHHHHIHHHIIIIIIIIIIHJHHHHHHIHIIHHIIIIHHHHIHHIHHHHHGHIIIHHHHHHIIIIIHHJHHHHHHHHHHHHIHHHIHHHHHHIHHHHHHHHHHGGHHHHGGGGHGGIGGGGGHHHHHGHHHHHHHHHHHHIHHHHHHHHHHHHHHHHHHIHHHHJHHHHHHHHHHHHHHHHHHHIIHHJHHHHHHHHIHHHHHHHIIHHHHHIHHHHHHHHHHHIIIHHIIIIIIHIHHHHHHHHHH,&amp;chxt=x,y&amp;chxr=1,0,142.31&amp;chxl=0:||Oct+28,+22:00|Oct+31,+01:00|Nov+2,+04:00|Nov+4,+07:00|&amp;chxs=0,505050,10" alt="" width="400" height="200" /></p></blockquote>
+<p><em>mycheckpoint</em> provides the views which take raw data (just <strong>innodb_buffer_pool_read_requests</strong>, <strong>com_select</strong>, <strong>innodb_buffer_pool_size</strong>, <strong>table_open_cache</strong>, <strong>seconds_behind_master</strong> etc.) and generate Google Charts URLs, HTML reports, human readable reports, or otherwise easily accessible data.</p>
+<p><!--more-->Data is provided in different time resolutions:</p>
+<ul>
+<li>Per sampling</li>
+<li>Per hour aggregated data</li>
+<li>Per day aggregated data</li>
+</ul>
+<p>It is thus easy to get a fine grained or a daily overview of your status. In fact, the <em>SQL-generated</em> <a href="http://code.openark.org/forge/wp-content/uploads/2009/11/report.html">HTML report</a> lays them all together.</p>
+<p><em>[Read more on <a href="http://code.openark.org/forge/mycheckpoint/documentation/generating-google-charts">generating Google Charts</a> and <a href="http://code.openark.org/forge/mycheckpoint/documentation/generating-html-reports">HTML reports</a>]</em></p>
+<h4>It is more about data accessibility</h4>
+<p>Charts are cool to look at, but they are not useful for detailed analysis. The user is free to ask anything of the supporting views:</p>
+<p>I want to see the average number of SELECT queries per second in the last 5 hours:</p>
+<blockquote>
+<pre>mysql&gt; SELECT ts, com_select_psec FROM sv_hour ORDER BY id DESC LIMIT 5;
++---------------------+-----------------+
+| ts                  | com_select_psec |
++---------------------+-----------------+
+| 2009-11-09 11:00:00 |          294.17 |
+| 2009-11-09 10:00:00 |          198.37 |
+| 2009-11-09 09:00:00 |          151.29 |
+| 2009-11-09 08:00:00 |           90.06 |
+| 2009-11-09 07:00:00 |           82.98 |
++---------------------+-----------------+</pre>
+</blockquote>
+<p>Hmm. Seems like too many SELECTs in the last hour.</p>
+<p>Unrelated, is the InnoDB buffer pool being utilized well?</p>
+<blockquote>
+<pre>mysql&gt; SELECT ts, innodb_buffer_pool_used_percent, innodb_read_hit_percent
+       FROM sv_report_sample
+       ORDER BY id DESC LIMIT 5;
++---------------------+---------------------------------+-------------------------+
+| ts                  | innodb_buffer_pool_used_percent | innodb_read_hit_percent |
++---------------------+---------------------------------+-------------------------+
+| 2009-11-09 12:35:01 |                           100.0 |                   99.93 |
+| 2009-11-09 12:30:01 |                           100.0 |                   99.89 |
+| 2009-11-09 12:25:01 |                           100.0 |                   99.60 |
+| 2009-11-09 12:20:01 |                           100.0 |                   99.14 |
+| 2009-11-09 12:15:01 |                           100.0 |                   98.99 |
++---------------------+---------------------------------+-------------------------+</pre>
+</blockquote>
+<p>Apparently, <strong>innodb_buffer_pool_size</strong> could use some more memory.</p>
+<p>When did we have excessive amount of writes?</p>
+<blockquote>
+<pre>mysql&gt; SELECT ts, com_insert_psec
+       FROM sv_hour
+       WHERE com_insert_psec &gt; (SELECT 2*AVG(com_insert_psec) FROM sv_hour);
++---------------------+-----------------+
+| ts                  | com_insert_psec |
++---------------------+-----------------+
+| 2009-10-27 00:00:00 |          133.66 |
+| 2009-10-28 00:00:00 |          121.79 |
+| 2009-10-29 00:00:00 |          138.88 |
+| 2009-10-30 00:00:00 |          120.79 |
+| 2009-10-31 00:00:00 |          131.78 |
++---------------------+-----------------+</pre>
+</blockquote>
+<p>Something is going on on those midnights!</p>
+<p><em>[Read more on <a href="http://code.openark.org/forge/mycheckpoint/documentation/querying-for-data">querying for data</a>]</em></p>
+<h4>Human reports</h4>
+<p>But while we're at it: it's nice to let the user the ability to ask around; but why not provide with some niceties? Special views aggregate monitored data to present human readable reports:</p>
+<blockquote>
+<pre>SELECT report FROM sv_report_human_hour ORDER BY id DESC LIMIT 1,1 \G</pre>
+</blockquote>
+<blockquote>
+<pre>Report period: 2009-11-08 14:00:00 to 2009-11-08 15:00:00. Period is 60 minutes (1.00 hours)
+Uptime: 100.0% (Up: 285 days, 07:17:28 hours)
+
+InnoDB:
+    innodb_buffer_pool_size: 4718592000 bytes (4500.0MB). Used: 100.0%
+    Read hit: 99.75%
+    Disk I/O: 83.00 reads/sec  20.33 flushes/sec
+    Estimated log written per hour: 797.0MB
+    Locks: 0.32/sec  current: 0
+
+MyISAM key cache:
+    key_buffer_size: 33554432 bytes (32.0MB). Used: 18.3%
+    Read hit: 99.7%  Write hit: 100.0%
+
+DML:
+    SELECT:  149.88/sec  34.1%
+    INSERT:  55.84/sec  12.7%
+    UPDATE:  17.55/sec  4.0%
+    DELETE:  20.68/sec  4.7%
+    REPLACE: 0.00/sec  0.0%
+    SET:     170.05/sec  38.7%
+    COMMIT:  0.02/sec  0.0%
+    slow:    2.28/sec  0.5% (slow time: 2sec)
+
+Selects:
+    Full scan: 8.37/sec  5.6%
+    Full join: 0.00/sec  0.0%
+    Range:     40.45/sec  27.0%
+    Sort merge passes: 0.00/sec
+
+Locks:
+    Table locks waited:  0.00/sec  0.0%
+
+Tables:
+    Table cache: 2048. Used: 26.5%
+    Opened tables: 0.00/sec
+
+Temp tables:
+    Max tmp table size:  67108864 bytes (64.0MB)
+    Max heap table size: 67108864 bytes (64.0MB)
+    Created:             7.15/sec
+    Created disk tables: 0.51/sec  7.1%
+
+Connections:
+    Max connections: 200. Max used: 245  122.5%
+    Connections: 3.31/sec
+    Aborted:     0.07/sec  2.1%
+
+Threads:
+    Thread cache: 32. Used: 50.0%
+    Created: 0.06/sec
+
+Replication:
+    Master status file number: 1494, position: 404951764
+    Relay log space limit: 10737418240, used: N/A  (N/A%)
+    Seconds behind master: N/A
+    Estimated time for slave to catch up: N/A seconds (N/A days, N/A hours)  ETA: N/A</pre>
+</blockquote>
+<p>The above is a <em>SQL-generated</em> report. The view's CREATE statement is <em>ugly</em>, trust me! But the user needs not be aware of this -- all is generated behind the scenes. Since it is SQL-generated, the report is not actually stored anywhere; and one can generate reports for as long as data exists. A three months old data can still be evaluated and used to produce a fresh report.</p>
+<p>The above report resembles the ever-so-useful <a href="http://hackmysql.com/mysqlreport">mysqlreport</a> by <a href="http://hackmysql.com/"><strong>Daniel Nichter</strong></a>. I have drawn many ideas from this tool.</p>
+<p><em>[Read more on <a href="http://code.openark.org/forge/mycheckpoint/documentation/generating-human-reports">generating human readable reports</a>]</em></p>
+<h4>Tracking change of parameters</h4>
+<p>Since <em>mycheckpoint</em> records server variables, it's easy enough to detect a change in variable. Did you dynamically change a variable and forgot to update <strong>my.cnf</strong>? Were you baffled when the server restarted and everything started behaving differently? Just ask away:</p>
+<blockquote>
+<pre>mysql&gt; SELECT * FROM sv_param_change;
++---------------------+-----------------+-----------+-----------+
+| ts                  | variable_name   | old_value | new_value |
++---------------------+-----------------+-----------+-----------+
+| 2009-11-04 13:00:01 | max_connections |       500 |       200 |
++---------------------+-----------------+-----------+-----------+</pre>
+</blockquote>
+<p>Doh! That's how we got <strong>122.5%</strong> max used connections!</p>
+<p><em>[Read more on <a href="http://code.openark.org/forge/mycheckpoint/documentation/detecting-parameters-change">detecting parameters change</a>]</em></p>
+<h4>Additional notes</h4>
+<p>Just recently, a somewhat similar project, <a href="http://www.pythian.com/news/4703/sar-sql-the-script-formerly-known-as-mysar">sar-sql</a> was announced by <a href="http://mmatemate.blogspot.com/"><strong>Gerry Narvaja</strong></a> (Ex-<a href="http://www.pythian.com/">Pythian</a>). When sar-sql (formerly MySAR) was announced, my own code and ideas were at late stages. I've pondered about this, and have decided to go on with a separate project. While both make use of the same ideas, the implementation is quite different.</p>
+<p>With proper setup, <em>mycheckpoint</em> can be used as an add-on to other monitoring tools. I currently have no plans for doing that, but time will tell.</p>
+<p>I believe the ease of access to monitored data is a compelling reason to try out <em>mycheckpoint</em>. Please visit the <a href="http://code.openark.org/forge/mycheckpoint">mycheckpoint home page</a>, read through the <a href="http://code.openark.org/forge/mycheckpoint/documentation">documentation</a>, and take some <a href="http://code.openark.org/forge/mycheckpoint/download">downloads</a> with you!</p>
+<p>As always, community feedback is welcome. Feel free to throw in valueable feedback, <a href="http://code.google.com/p/mycheckpoint/issues/list">bug reports</a> or even a couple of tomatoes!</p>
+<p><em>mycheckpoint</em> is released under the <a href="http://www.opensource.org/licenses/bsd-license.php">BSD license</a>.</p>

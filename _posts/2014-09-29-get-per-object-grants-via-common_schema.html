@@ -1,0 +1,80 @@
+---
+title: Get per-object grants via common_schema
+date: 2014-09-29 13:30:09.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- Security
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Did you know <a href="http://code.google.com/p/common-schema">common_schema</a> supports a complete breakdown of all accounts on your database server? It can provide you with the <strong>GRANT</strong> statements required to set up an account, the <strong>REVOKE</strong> statements to undo the former, and this can be broken down on a per-object &amp; per-object-type basis. Consider the <a href="https://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/sql_grants.html">sql_grants</a> view:</p>
+<p><em>Find who has privileges on a table called <strong>t</strong></em>:</p>
+<blockquote>
+<pre>select * from <strong>common_schema.sql_grants</strong> where <strong>priv_level_name</strong>='table' and <strong>object_name</strong>='t'\G
+
+           GRANTEE: 'power1'@'localhost'
+              user: power1
+              host: localhost
+        priv_level: `mytst`.`t`
+   priv_level_name: table
+     object_schema: mytst
+       object_name: t
+current_privileges: SELECT
+      IS_GRANTABLE: NO
+         sql_grant: GRANT SELECT ON `mytst`.`t` TO 'power1'@'localhost'
+        sql_revoke: REVOKE SELECT ON `mytst`.`t` FROM 'power1'@'localhost'
+     sql_drop_user: DROP USER 'power1'@'localhost'</pre>
+</blockquote>
+<p>or, <em>who has privileges on the <strong>test</strong> schema</em>:</p>
+<blockquote>
+<pre>select * from common_schema.sql_grants where priv_level_name='schema' and object_name='test' \G
+
+           GRANTEE: 'power1'@'localhost'
+              user: power1
+              host: localhost
+        priv_level: `test`.*
+   priv_level_name: schema
+     object_schema: NULL
+       object_name: test
+current_privileges: ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SELECT, SHOW VIEW, TRIGGER, UPDATE
+      IS_GRANTABLE: NO
+         sql_grant: GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SELECT, SHOW VIEW, TRIGGER, UPDATE ON `test`.* TO 'power1'@'localhost'
+        sql_revoke: REVOKE ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SELECT, SHOW VIEW, TRIGGER, UPDATE ON `test`.* FROM 'power1'@'localhost'
+     sql_drop_user: DROP USER 'power1'@'localhost'
+
+           GRANTEE: 'test'@'localhost'
+              user: test
+              host: localhost
+        priv_level: `test`.*
+   priv_level_name: schema
+     object_schema: NULL
+       object_name: test
+current_privileges: ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SELECT, SHOW VIEW, TRIGGER, UPDATE
+      IS_GRANTABLE: NO
+         sql_grant: GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SELECT, SHOW VIEW, TRIGGER, UPDATE ON `test`.* TO 'test'@'localhost'
+        sql_revoke: REVOKE ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SELECT, SHOW VIEW, TRIGGER, UPDATE ON `test`.* FROM 'test'@'localhost'
+     sql_drop_user: DROP USER 'test'@'localhost'
+
+</pre>
+</blockquote>
+<p>In the same manner, you can easily SELECT for all grants that are defined per-table, per-schema, ... <strong>priv_level_name</strong>: is any one of <strong>'user'</strong>, <strong>'schema'</strong>, <strong>'table'</strong>, <strong>'column'</strong>, <strong>'routine'</strong>.</p>
+<p>The above is a view, which aggregates data from all relevant <strong>INFORMATION_SCHEMA</strong> tables, normalizing and de-normalizing as necessary.</p>
+<p>You might also want to look at <a href="https://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/sql_show_grants.html">sql_show_grants</a> which provides with a no-breakdown GRANT for all accounts. It's like a SHOW ALL GRANTS which doesn't exist, plus it's SELECTable.</p>
+<p>Also, thanks to <a href="https://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">eval()</a>, the above make for executable code. Consider:<!--more--></p>
+<p><em>Revoke any and all specific grants on private_schema.private_table:</em></p>
+<blockquote>
+<pre>call <strong>common_schema.eval</strong>("<strong><span style="color: #808000;">select sql_revoke from sql_grants where object_schema='private_schema' and object_name='private_table'</span></strong>")</pre>
+<p>&nbsp;</p></blockquote>
+<p>It's been around for quite a while now. We're using it in production extensively. Try it out!</p>

@@ -1,0 +1,32 @@
+---
+title: In favour of a milestone based release model
+date: 2009-12-15 18:30:59.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Opinions
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I like milestone based release models.</p>
+<p>The advantages I find in this model are in particular beneficial for MySQL. What I find good about this model are:</p>
+<ul>
+<li>Things are unstable for shorter periods. Even if some feature is not full stable in some milestone, the model encourages that such a feature is fixed on higher priority.</li>
+<li>It is easy to create a priority ranking for new features. Moreover, priorities are expressed more by chronological time of development, less by "how many people are working on it".</li>
+<li>The model pushes towards rapid development, since you can't release M5 before M4 is complete.</li>
+</ul>
+<p>The last versions of MySQL took long time to complete. Take 5.1, for example: partitioning and event scheduling were long considered GA before row-based replication was half stable. Consider the so small but useful sub-second slow logs; the variables made dynamic in 5.1 (slow log again, for example); the new INFORMATION_SCHEMA tables.</p>
+<p><!--more-->Most of these took very little time to develop and stabilize, but had to wait extra couple of years till the entire version was evetually released.</p>
+<p>There is a matter of stability question. Is M3 stable? Is M2?</p>
+<p>Smaller, successive changes make for stabilized milestones; but this is vague: 5.5 is based on 5.4, in itself BETA. So is any 5.5 milestone stable?</p>
+<p>Such issues need to be resolved. Like everything else in life, this model can be abused to no good, or can be properly implemented to make good success.</p>
+<p>I'm glad to see google patches making it into the mainstream; I would love to see more community work merging in. I would love to have the community have a say about what should go into the next milestones.</p>

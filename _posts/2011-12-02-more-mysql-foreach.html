@@ -1,0 +1,76 @@
+---
+title: More MySQL foreach()
+date: 2011-12-02 15:55:32.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- Development
+- MySQL
+tags:
+- common_schema
+- Hack
+- INFORMATION_SCHEMA
+- Open Source
+- scripts
+- SQL
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: k.vaijanapurkar@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>In my <a href="http://code.openark.org/blog/mysql/mysql-foreach">previous post</a> I've shown several generic use cases for <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/foreach.html"><em>foreach()</em></a>, a new scripting functionality introduced in <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>.</p>
+<p>In this part I present DBA's handy syntax for schema and table operations and maintenance.</p>
+<p>Confession: while I love <strong>INFORMATION_SCHEMA</strong>'s power, I just <em>hate</em> writing queries against it. It's just so much typing! Just getting the list of tables in a schema makes for this heavy duty query:</p>
+<blockquote>
+<pre>SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='sakila' AND TABLE_TYPE='BASE TABLE';</pre>
+</blockquote>
+<p>When a join is involved this really becomes a nightmare. I think it's cumbersome, and as result, many do not remember the names and meaning of columns, making for <em>"oh, I need to read the manual all over again just to get that query right"</em>. Anyway, that's my opinion.</p>
+<p>A <strong>SHOW TABLES</strong> statement is easier to type, but cannot be integrated into a <strong>SELECT</strong> query (though <a href="http://code.openark.org/blog/mysql/reading-results-of-show-statements-on-server-side">we have a partial solution</a> for that, too), and besides, when filtering out the views, the <strong>SHOW</strong> statement becomes almost as cumbersome as the one on <strong>INFORMATION_SCHEMA</strong>.</p>
+<p>Which is why <em>foreach()</em> offers handy shortcuts to common iterations on schemata and tables, as follows:</p>
+<h4>Use case: iterate all databases</h4>
+<blockquote>
+<pre>call foreach(<span style="color: #808000;">'schema'</span>, <span style="color: #003366;">'CREATE TABLE ${schema}.event(event_id INT, msg VARCHAR(128))'</span>);</pre>
+</blockquote>
+<p>In the above we execute a query on each database. Hmmm, maybe not such a good idea to perform this operation on all databases? Let's filter them:</p>
+<h4>Use case: iterate databases by name match</h4>
+<blockquote>
+<pre>call foreach(<span style="color: #808000;">'schema like wordpress_%'</span>, <span style="color: #003366;">'ALTER TABLE ${schema}.wp_posts MODIFY COLUMN comment_author VARCHAR(96) NOT NULL'</span>);</pre>
+</blockquote>
+<p>The above will only iterate my WordPress databases (I have several of these), performing an <strong>ALTER</strong> on <strong>wp_posts</strong> for each of those databases.<!--more--></p>
+<p>I don't have to quote the <em>like</em> expression, but I can, if I wish to.</p>
+<p>I can also use a regular expression match:</p>
+<blockquote>
+<pre>call foreach(<span style="color: #808000;">'schema ~ /^wordpress_[0-9]+$/'</span>, <span style="color: #003366;">'ALTER TABLE ${schema}.wp_posts MODIFY COLUMN comment_author VARCHAR(96) NOT NULL'</span>);</pre>
+</blockquote>
+<h4>Use case: iterate tables in a specific schema</h4>
+<p>Time to upgrade our <strong>sakila</strong> tables to InnoDB's compressed format. We use <strong>$()</strong>, a synonym for <em>foreach()</em>.</p>
+<blockquote>
+<pre>call $(<span style="color: #808000;">'table in sakila'</span>, <span style="color: #003366;">'ALTER TABLE ${schema}.${table} ENGINE=InnoDB ROW_FORMAT=COMPRESSED'</span>);</pre>
+</blockquote>
+<p>The above will iterate on tables in <strong>sakila</strong>. I say <em>tables</em>, since it will avoid iterating views (there is still no specific syntax for views iteration). This is done on purpose, as my experience shows there is very little in common between tables and views when it comes to maintenance and operations.</p>
+<h4>Use case: iterate tables by name match</h4>
+<p>Here's a interesting scenario: you wish to work on all tables matching some name. The naive approach would be to:</p>
+<blockquote>
+<pre>SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'wp_posts' AND TABLE_TYPE = 'BASE TABLE'</pre>
+</blockquote>
+<p><em><strong>Wait!</strong></em> Are you aware this may bring your server down? This query will open all databases at once, opening all <strong>.frm</strong> files (though thankfully not data files, since we only check for name and type).</p>
+<p>Here's a better approach:</p>
+<blockquote>
+<pre>call foreach(<span style="color: #808000;">'table like wp_posts'</span>, <span style="color: #003366;">'ALTER TABLE ${schema}.${table} ENGINE=InnoDB'</span>);</pre>
+</blockquote>
+<p>(There's now FULLTEXT to InnoDB, so the above can make sense in the near future!)</p>
+<p>The good part is that <em>foreach()</em> will look for matching tables <em>one database at a time</em>. It will iterate the list of database, then look for matching tables per database, thereby optimizing the query on <strong>INFORMATION_SCHEMA</strong>.</p>
+<p>Here, too, I can use regular expressions:</p>
+<blockquote>
+<pre>call $(<span style="color: #808000;">'table ~ /^wp_.*$/'</span>, <span style="color: #003366;">'ALTER TABLE ${schema}.${table} ENGINE=InnoDB'</span>);</pre>
+</blockquote>
+<h4>Conclusion</h4>
+<p>This is work in the making, but, as someone who maintains a few productions servers, I've already put it to work.</p>
+<p>I'm hoping the syntax is easy to comprehend. I know that since I developed it it must be far more intuitive to myself than to others. I've tried to keep close on common syntax and concepts from various programming languages.</p>
+<p>I would like to get as much feedback as possible. I have further ideas and thoughts on the direction <a href="http://code.google.com/p/common-schema/">common_schema</a> is taking, but wish take it in small steps. Your feedback is appreciated!</p>

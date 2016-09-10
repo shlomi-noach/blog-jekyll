@@ -1,0 +1,87 @@
+---
+title: Online ALTER TABLE now available in openark kit
+date: 2009-03-24 18:19:59.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- openark kit
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: sauravkothari2@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>A new utility in <a title="openark kit home page" href="http://code.openark.org/forge/openark-kit">openark kit</a> allows for online ALTER TABLE operation. That is, the modification of table structure without locking down the entire table for the duration of the operation. The <a title="oak-online-alter-table utility" href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-online-alter-table.html">oak-online-alter-table</a> utility works under the following restrictions:</p>
+<ul>
+<li>The table has at least one single-column UNIQUE KEY <em>[*]</em></li>
+<li>Altered table shares a single-column UNIQUE KEY with the original table <em>[*]</em></li>
+<li>No 'AFTER' triggers are defined on the table (the utility creates its own triggers for the duration of the operation)</li>
+<li>The table has no FOREIGN KEYs <em>[*][#]</em></li>
+<li>Table name is no longer than 57 characters</li>
+</ul>
+<p><em>[*]: Restriction is scheduled to be removed or partly removed.</em></p>
+<p><em>[#]: 'Child-side' foreign keys may actually work, but have not been tested.<br />
+</em></p>
+<p>Follows is a mini FAQ which attempts to introduce the utility.</p>
+<h4>So what exactly does this utility provide?</h4>
+<ul>
+<li>First and foremost, the ability to perform a non blocking ALTER TABLE. This has long been an issue with MySQL, and complex Master-Master, application aware solutions are currently required in order to perform an ALTER TABLE with minimal downtime. The utility offers a no-downtime solution, albeit there is performance penalty for the duration of its runtime, and some requirements to meet.</li>
+<li>It also supports a 'null' ALTER. That is, an ALTER TABLE which does not change anything. This effectively means rebuilding of the table. For InnoDB tables with innodb_file_per_table, for example, this could be the means of regaining disk space after removing many rows from the table. Also, while it does not strictly act like OPTIMIZE TABLE, the effect of running this utility should build a better organized table on disk (this as yet unverified).</li>
+<li>Another thing this utility supports is the building of a ghost table: a duplicate of a given table, which keeps mirroring the original table via triggers. <em>[May be removed in future versions]</em></li>
+</ul>
+<h4><!--more-->How does it work?</h4>
+<p>Well, there are some wiki pages <a href="http://code.google.com/p/openarkkit/wiki/OakOnlineAlterTableSteps">[1]</a> <a href="http://code.google.com/p/openarkkit/wiki/OakOnlineAlterTableConcurrency">[2]</a> <a href="http://code.google.com/p/openarkkit/wiki/OakOnlineAlterTableConstraints">[3]</a> which explain the details, but in general it goes as follows:</p>
+<ol>
+<li>The utility creates an empty 'ghost'  table, a copy of the original</li>
+<li>The ghost table is ALTERed (or left unchanged, if no ALTER specified)</li>
+<li>Triggers are created on the original table, which propagate changes to the ghost table.</li>
+<li>In two passes, data is copied from the original table to the ghost table, then reviewed for deletion.</li>
+<li>The ghost table is renamed to take place of the original table; the original table is dropped.</li>
+</ol>
+<p>Here's an invocation sample, in which we modify the type of the AUTO_INCREMENT column, add a column, add a key and drop a column - all at the same time, all online:</p>
+<blockquote>
+<pre>oak-online-alter-table -u root --ask-pass --socket=/tmp/mysql.sock --database=world --table=City --alter="MODIFY Id BIGINT UNSIGNED AUTO_INCREMENT, ADD COLUMN Mayor VARCHAR(64) CHARSET utf8, DROP COLUMN District, ADD KEY(Population)"</pre>
+</blockquote>
+<h4>What kind of ALTERs are supported?</h4>
+<ul>
+<li>ADD COLUMN (new column must have a default value)</li>
+<li>DROP COLUMN (as long as there's still a shared single-column UNIQUE KEY between the old table and the altered one)</li>
+<li>MODIFY COLUMN (change type, including UNIQUE KEY columns)</li>
+<li>ADD KEY (normal, unique, fulltext etc.)</li>
+<li>DROP KEY (as long as there's still a shared single-column UNIQUE KEY between the old table and the altered one)</li>
+<li>Change ENGINE: works, but great care should be taken when dealing with non-transactional engines</li>
+<li>Adding FOREIGN KEY constraints is possible</li>
+<li>More... Not all ALTERS have been tested, e.g. CONVERT, partition handling...</li>
+<li>none: it is possible to just do an online rebuild of the table, with no modification to its structure</li>
+</ul>
+<p>The following are not allowed <em>while the utility is running</em>:</p>
+<ul>
+<li>An ALTER TABLE on the original table (well, obviously)</li>
+<li>A TRUNCATE on the original table</li>
+<li>LOAD DATA INFILE into the original table</li>
+<li>OPTIMIZE on the original table</li>
+</ul>
+<p>In short, while this utility runs, just act normal...</p>
+<h4>Which engines are supported?</h4>
+<p>MyISAM &amp; InnoDB are both supported. Any engine which uses table level locks is implicitly supported (Memory, Archive). There is currently no support for Maria (transactional), PBXT or Falcon. No plans for the near future include these.</p>
+<p>It is possible to ALTER the ENGINE of a table, but this is highly unrecommended (due to differences in transactional behavior, or lack of transactional support altogether).</p>
+<p>With InnoDB, and when running long transactions during the runtime of this utility, one of the steps (which requires a LOCK TABLES...WRITE) may take some time to complete: it repeatedly attempts to set up locks until successful. However, there is no blocking during these attempts, and the lock time, once the locks are gained, is minor.</p>
+<h4>What impact does this utility have?</h4>
+<p>For the duration of runtime, you can expect a performance penalty. There are many reasons for that:</p>
+<ul>
+<li>Triggers are added to your table. This, by itself, is performance penalty.</li>
+<li>Any changes to your table is propagated to the ghost table. So every INSERT makes for two, actually.</li>
+<li>More locks are held. While this utility is non-blocking, it does lock small chunks in turns, and for very short periods. But still locks are held.</li>
+<li>While the ghost table is being built, disk space of up to the same size as your original table is consumed. Depending on your ENGINE and storage means, some disk space may be released later on.</li>
+</ul>
+<h4>I was drunk when I decided to run it, but now that I'm sober, I find out it's still running and I want to undo everything!</h4>
+<p>OK. First, don't drink and DBA. Next, stop the utility, run it again with --cleanup. All should be back to normal.</p>
+<h4>How mature is this utility? I think there's a bug!</h4>
+<p>It is <em>very</em> experimental. It seems to be working well as far as I know, but community feedback is appreciated. Please report bugs <a href="http://code.google.com/p/openarkkit/issues/list">here</a>. Thank you!</p>

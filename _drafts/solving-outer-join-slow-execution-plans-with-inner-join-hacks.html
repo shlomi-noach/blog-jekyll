@@ -1,0 +1,110 @@
+---
+layout: post
+title: Solving OUTER JOIN slow execution plans with INNER JOIN hacks
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags:
+- Join
+- Optimization
+- SQL
+meta:
+  _edit_last: '2'
+  _syntaxhighlighter_encoded: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+excerpt: |-
+  An OUTER JOIN is a useful SQL tool. It allows me to select all rows from table A, joined with table B, such that even rows in table A that do not have a match in table B - are included in the result set. It is a join that "makes sense" to humans.
+
+  But how does MySQL perform on OUTER JOINs? As it turns out, an OUTER JOIN (we will focus on LEFT JOIN, though everything applies on RIGHT JOIN as well) can be quite an misguide for the query optimizer. We will see that by doing a LEFT JOIN, we can deprive the optimizer of possible good plans, forcing its hands to provide bad plans.
+
+  I will present an alternative to LEFT JOIN, which utilizes INNER JOIN queries only, though not so elegant in their SQL form. The solution presented has helped out in reducing query time in some company I was working with down from 1 hour to roughly 1 minute.
+---
+<p>An OUTER JOIN is a useful SQL tool. It allows me to select all rows from table A, joined with table B, such that even rows in table A that do not have a match in table B - are included in the result set. It is a join that "makes sense" to humans.</p>
+<p>But how does MySQL perform on OUTER JOINs? As it turns out, an OUTER JOIN (<span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span> will focus on LEFT JOIN, though everything applies on RIGHT JOIN as <span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span>ll) can be quite an misguide for the query optimizer. <span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">We</span> will see that by doing a LEFT JOIN, <span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span> can deprive the optimizer of possible good plans, forcing its hands to provide bad plans.</p>
+<p>I will present an alternative to LEFT JOIN, which utilizes INNER JOIN queries only, though not so elegant in their SQL form. The solution presented has helped out in reducing query time in some company I was working with down from 1 hour to roughly 1 minute.</p>
+<h4>The Problem</h4>
+<p>Using MySQL's <a title="MySQL's world database setup" href="http://dev.mysql.com/doc/world-setup/en/world-setup.html">world database</a>, <span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span> wish to list all countries names, along with their cities names. <span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">We</span> wish to include countries which have no cities (there's always Antarctica). <span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">We</span> find that the following query works:</p>
+<p>[code lang="sql"]SELECT Country.Code, Country.Name AS CountryName, City.Name AS CityName FROM Country LEFT JOIN City ON (Country.Code = City.CountryCode)[/code]</p>
+<p>Sure enough, <span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span> get the following results:</p>
+<p><strong><code>...<br />
+| ZMB  | Zambia             | Mufulira              |<br />
+| ZMB  | Zambia             | Luanshya              |<br />
+| Z<span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">WE</span> | Zimbab<span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span> | Harare                |<br />
+| Z<span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">WE</span> | Zimbab<span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span> | Bulawayo              |<br />
+| Z<span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">WE</span> | Zimbab<span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span> | Chitungwiza           |<br />
+| Z<span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">WE</span> | Zimbab<span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span> | Mount Darwin          |<br />
+| Z<span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">WE</span> | Zimbab<span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span> | Mutare                |<br />
+| Z<span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">WE</span> | Zimbab<span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span> | G<span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span>ru                 |<br />
++------+--------------------+-----------------------+<br />
+4086 rows in set (1.89 sec)</code></strong></p>
+<p>I did notice a slight delay in the computation of this query. Interested to know why, I EXPLAINed the query:</p>
+<p><code><strong>mysql&gt; EXPLAIN SELECT Country.Code, Country.Name, City.Name FROM Country LEFT JOIN City ON (Country.Code = City.CountryCode)\G<br />
+*************************** 1. row ***************************<br />
+id: 1<br />
+select_type: SIMPLE<br />
+table: Country<br />
+type: ALL<br />
+possible_keys: NULL<br />
+key: NULL<br />
+key_len: NULL<br />
+ref: NULL<br />
+rows: 227<br />
+Extra:<br />
+*************************** 2. row ***************************<br />
+id: 1<br />
+select_type: SIMPLE<br />
+table: City<br />
+type: ALL<br />
+possible_keys: NULL<br />
+key: NULL<br />
+key_len: NULL<br />
+ref: NULL<br />
+rows: 4079<br />
+Extra:<br />
+2 rows in set (0.01 sec)</strong><br />
+</code></p>
+<p>Yikes! This is a poor plan: <span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span> get a full table scan on Country; for each row in Country, <span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span> then get a full table scan on City! In total MySQL estimates 227*4079 = 925933 scanned rows to fulfill this query.</p>
+<p>But, why did this happen? Let's look at the table definitions.</p>
+<p><strong><code>mysql&gt; SHOW CREATE TABLE Country\G<br />
+*************************** 1. row ***************************<br />
+Table: Country<br />
+Create Table: CREATE TABLE `Country` (<br />
+`Code` char(3) NOT NULL default '',<br />
+`Name` char(52) NOT NULL default '',<br />
+...<br />
+PRIMARY KEY  (`Code`)<br />
+) ENGINE=MyISAM DEFAULT CHARSET=latin1<br />
+1 row in set (0.00 sec)</code></strong></p>
+<p><strong><code>mysql&gt; SHOW CREATE TABLE City\G<br />
+*************************** 1. row ***************************<br />
+Table: City<br />
+Create Table: CREATE TABLE `City` (<br />
+`ID` int(11) NOT NULL auto_increment,<br />
+`Name` char(35) NOT NULL default '',<br />
+`CountryCode` char(3) NOT NULL default '',<br />
+...<br />
+PRIMARY KEY  (`ID`)<br />
+) ENGINE=MyISAM AUTO_INCREMENT=4080 DEFAULT CHARSET=latin1<br />
+1 row in set (0.00 sec)</code></strong></p>
+<p>The Country table has only one index (the PRIMARY KEY) on Code column. The City table has only one index (again, PRIMARY KEY) on id. <span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">We</span> see that to join the two tables, best way is to start with the City table, then, for each row in City, get the corresponding row from Country using its PRIMARY KEY.</p>
+<p>Why wasn't this plan chosen?</p>
+<p><span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">We</span>ll, because of the LEFT JOIN. <span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">We</span> <span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span> do a LEFT JOIN, <span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span> force MySQL to scan the tables in the order provided. It must start with the Country table, because <span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span> stated ... FROM Country LEFT JOIN City...</p>
+<p>Logically, our query made sense. <span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">We</span> got all countries, seven of which have no cities. Technically, <span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span> forced MySQL to a very poor plan. I've seen this kind of problem more than once. Most MySQL users (programmers) are unaware of this issue. It is then the DBA's job to ask them to rewrite the query.</p>
+<p>Of course, adding an index on City.CountryCode can solve the problem. Unfortunately, adding and index is not always possible, nor is it always adviable. <span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">We</span> will next see a solution to the problem which does not change the schema for Country and City.</p>
+<h4>First step</h4>
+<p><span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">We</span> observe that an outer join is much like an inner join, plus rows from one table which did not match rows from the second table.</p>
+<p><span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">We</span> will now rewrite our original query using a UNION. The first part of the UNION will provide a simple INNER JOIN. The second part will choose those rows from County, which do not appear in the INNER JOIN bet<span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span>en Country and City.</p>
+<p>SELECT Country.Code, Country.Name AS CountryName, City.Name AS CityName FROM Country INNER JOIN City ON (Country.Code = City.CountryCode)<br />
+UNION ALL<br />
+SELECT Country.Code, Country.Name AS CountryName, NULL AS CityName FROM Country WHERE Country.Code NOT IN (SELECT Co.Code FROM Country Co INNER JOIN City Ci ON (Co.Code = Ci.CountryCode))</p>
+<p>What's going on here? <span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">We</span> have (almost) the same query executed twice, and an additional NOT IN part. The two INNER JOINs, although executed twice, can perform rather <span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span>ll, since MySQL can join first City, then Country. Ho<span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span>ver, <span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span> do have a problem: the NOT IN clause means <span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span> have to perform a table scan. MySQL has decided that the union's second part's subquery should, again, be executed Country first (wasn't that an election slogan?), City second. This choice helped out with the NOT IN search, but seemed to have brought us up to square one.</p>
+<h4>Second step</h4>
+<p><span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">We</span> introduce temporary tables to store the intermediate INNER JOIN results, so that the data need not be produces twice. Moreover, <span class="__mozilla-findbar-search" style="padding: 0pt; background-color: yellow; display: inline; font-size: inherit; color: black;">we</span> will index these tables appropriately.</p>

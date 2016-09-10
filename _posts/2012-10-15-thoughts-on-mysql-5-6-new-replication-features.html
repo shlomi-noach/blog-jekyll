@@ -1,0 +1,109 @@
+---
+title: Thoughts on MySQL 5.6 new replication features
+date: 2012-10-15 09:50:39.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Configuration
+- InnoDB
+- New Features
+- Opinions
+- Replication
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>After playing a little bit with MySQL <strong>5.6</strong> (RC), and following closely on Giuseppe's <a href="http://datacharmer.blogspot.co.il/2012/08/mysql-56-replication-gotchas-and-bugs.html">MySQL 5.6 replication gotchas (and bugs)</a>, I was having some thoughts.</p>
+<p>These are shared for a few reasons:</p>
+<ul>
+<li>Maybe I didn't understand it well, and someone could correct me</li>
+<li>Or I understood it well, and my input could be of service to the developers</li>
+<li>Or it could be of service to the users</li>
+</ul>
+<h4>InnoDB tables in mysql schema</h4>
+<p>The introduction of InnoDB tables in <strong>mysql</strong> makes for crash-safe replication information: the exact replication position (master log file+pos, relay log file+pos etc.) is updated on InnoDB tables; with <strong>innodb_flush_logs_at_trx_commit=1</strong> this means replication status is durable and consistent with server data. This is great news!</p>
+<p>However, the introduction of InnoDB tables to the mysql schema also breaks some common usage on installation and setup of MySQL servers. You can't just drop your <strong>ib_data1</strong> file upon dump+restore, since it also contains internal data. Giuseppe outlines the workaround for that.</p>
+<p>I was thinking: would it be possible to have a completely different tablespace for MySQL's internal InnoDB tables? That could be a single tablespace file (who cares about file-per-table on a few internal tables). And I'm throwing an idea without being intimate with the internals: you know how it is possible to span the shared tablespace across multiple files, as in:<!--more--></p>
+<blockquote>
+<pre>[mysqld]
+innodb_data_file_path=ibdata1:50M;ibdata2:50M:autoextend</pre>
+</blockquote>
+<p>Would it be possible to, for example, force the first file in this setup to be the internal database? It would look like:</p>
+<blockquote>
+<pre>[mysqld]
+innodb_data_file_path=<strong>ibdata_internal_do_not_touch</strong>:2M;<strong>ibdata1_this_one_is_yours</strong>:50M:autoextend</pre>
+</blockquote>
+<p>Only the user would not have to actually set this thing up: the internal tablespace would be there by default (and always first).</p>
+<p>Then we would be able to drop our own table space as much as we would like to, but never touch the internal tablespace. It would always extend into our own <strong>ibdata1</strong> file.</p>
+<p>I'm wondering if I'm making sense at all and if this is possible.</p>
+<h4>GTID and settings</h4>
+<p>The fact that you have to specify both <strong>gtid_mode=ON</strong> as well as <strong>disable-gtid-unsafe-statements</strong> is a bit of a bummer. I wouldn't mind as much if error messages would be informative. But as it turned out, when I wanted to test GTID I did the following:</p>
+<blockquote>
+<pre>mysql&gt; STOP SLAVE;
+mysql&gt; change master to MASTER_AUTO_POSITION=1;
+ERROR 1777 (HY000): CHANGE MASTER TO MASTER_AUTO_POSITION = 1 can only be executed when GTID_MODE = ON.
+
+-- OK, setting <strong>gtid_mode=ON</strong> in config file, restarting server.
+--
+-- <strong>Oooops</strong>, server won't restart!
+-- Getting this error message in log: <strong>"--gtid-mode=UPGRADE_STEP_1 or --gtid-mode=UPGRADE_STEP_2 are not yet supported"</strong>
+-- What?</pre>
+</blockquote>
+<p>Checking up on Giuseppe's post I realized I didn't set the <strong>disable-gtid-unsafe-statements</strong> param. But this was not mentioned on the above <strong>ERROR 1777</strong>, and the log error was quite cryptic.</p>
+<p>TODO: just mention this <em>other</em> variable.</p>
+<h4>GTID, internal InnoDB tables &amp; wreckage</h4>
+<p>OK, I managed to completely crash my replication setup. I setup GTID, and then:</p>
+<blockquote>
+<pre>set global master_info_repository:='table';
+set global relay_log_info_repository='table';</pre>
+</blockquote>
+<p>Then shut down mysql; I wanted to see how reverting back to <strong>gtid_mode=OFF</strong> works. Oh, I didn't set the two params in the config file, so their effect was lost.</p>
+<p>Starting mysql, I get:</p>
+<blockquote>
+<pre>ERROR 1794 (HY000) at line 1: Slave is not configured or failed to initialize properly. You must at least set --server-id to enable either a master or a slave. Additional error messages can be found in the MySQL error log.</pre>
+</blockquote>
+<p>The error log says:</p>
+<blockquote>
+<pre>121015  9:38:58 [ERROR] Error creating master info: Multiple replication metadata repository instances found with data in them. Unable to decide which is the correct one to choose.
+121015  9:38:58 [ERROR] Failed to create or recover replication info repository.
+121015  9:38:58 [Note] Check error log for additional messages. You will not be able to start replication until the issue is resolved and the server restarted.</pre>
+</blockquote>
+<p>What's interesting is that the data is still in the tables:</p>
+<blockquote>
+<pre>mysql&gt; select * from mysql.slave_master_info\G
+*************************** 1. row ***************************
+       Number_of_lines: 23
+       Master_log_name: mysql-bin.000003
+        Master_log_pos: 2623
+                  Host: 127.0.0.1
+             User_name: rsandbox
+         User_password: rsandbox
+                  Port: 14701
+         Connect_retry: 60
+           Enabled_ssl: 0
+                Ssl_ca: 
+            Ssl_capath: 
+              Ssl_cert: 
+            Ssl_cipher: 
+               Ssl_key: 
+Ssl_verify_server_cert: 0
+             Heartbeat: 1800
+                  Bind: 
+    Ignored_server_ids: 0
+                  Uuid: 10fa73da-13ac-11e2-bdcd-0024e8cd3122
+           Retry_count: 86400
+               Ssl_crl: 
+           Ssl_crlpath: 
+ Enabled_auto_position: 1</pre>
+</blockquote>
+<p>I've tried restarting, setting variables in the config file, changing them dynamically. To no avail.</p>
+<p>No, I haven't filed a bug report yet.</p>
+<p>These are still my first steps into 5.6 replication and my very first impressions.</p>

@@ -1,0 +1,46 @@
+---
+title: How to export OpenOffice presentations to PDF
+date: 2009-10-16 21:14:53.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- OpenOffice
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>OpenOffice 3.x has an improved PDF export mechanism. With <strong>File-&gt;Export as PDF...</strong>, one can export a presentation file (*.odp) to PDF format.</p>
+<p><strong>[Edit:</strong> see updated notes at the end of this post<strong>]</strong></p>
+<p>But there is a "feature" which is very annoying. One can export the presentation:</p>
+<ul>
+<li>Without notes, in which case the presentation frames are exported one per page. This is the standard export, and what you would normally use to present in front of an audience.</li>
+<li>With notes, which would normally be used for printing. The problem is, this kind of export first produces the pages <em>without</em> notes, exactly as in previous case, then followed by the slides (again!) <em>with</em> notes. It was argued that this is a feature, not a bug; I fail to see the reasoning behind this.</li>
+</ul>
+<p>If I want to create a PDF for printing, why would I want the bare slides? Anyway, for those who wonder like me, here's how to overcome this using OpenOffice:</p>
+<ol>
+<li>Install the <a href="http://extensions.services.openoffice.org/project/pdfimport">PDF import extension</a>. It will be used in following steps, but it's a nice extension to have anyway.</li>
+<li>Export your presentation using <strong>File-&gt;Export as PDF...</strong>, make sure <strong>Export notes</strong> is checked. Say you export to <strong>"my_notes.pdf"</strong>.</li>
+<li>Open <strong>"my_notes.pdf"</strong> with OpenOffice (opens with Draw). The PDF extension allows for some PDF editing capabilities.</li>
+<li>Delete pages starting page #1 and until the last slide-PDF. 1st page should now be page #1 with slide+notes.</li>
+<li>Yet again, export with <strong>File-&gt;Export as PDF...</strong>, make sure <strong>Export notes</strong> is checked. Save as <strong>"my_notes_final.pdf"</strong>.</li>
+</ol>
+<p>And there you have it. The <strong>"my_notes_final.pdf"</strong> file contains a printable version of slides+notes, without initial slides-only pages.</p>
+<p>Of course, if you only want to produce slides in PDF, all you have to do is <strong>File-&gt;Export as PDF...</strong>, then make sure <strong>Export notes</strong> is unchecked.</p>
+<h4>Notes</h4>
+<p>On ubuntu, the best way to install the PDF import extension it to:</p>
+<blockquote>
+<pre>sudo apt-get install openoffice.org-pdfimport</pre>
+</blockquote>
+<h4>Edit:</h4>
+<p>More than two years have passed. The "feature" is still there, but a couple more solutions are available:</p>
+<ol>
+<li>Just use cups-PDF on your Linux machine. However, at the time of writing this, the <strong>pdftops</strong> module on Ubuntu is CPU hogging, and doesn't do the job. Argggh! I hate regressions.</li>
+<li>On the good side, you can just use <strong>pdfmod</strong>, a nice GUI application allowing you to remove or reorder PDF pages. So, just export to PDF with notes, then use <strong>pdfmod</strong> to remove slides, or to remove notes.</li>
+</ol>

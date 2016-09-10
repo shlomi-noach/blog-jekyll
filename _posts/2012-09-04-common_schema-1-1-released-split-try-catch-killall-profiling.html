@@ -1,0 +1,180 @@
+---
+title: 'common_schema 1.1 released: split(), try-catch, killall(), profiling'
+date: 2012-09-04 08:15:25.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Analysis
+- common_schema
+- Development
+- Open Source
+- QueryScript
+- scripts
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I'm very happy to announce the release of <a href="http://code.google.com/p/common-schema/">common_schema</a>, version <strong>1.1</strong> (revision <strong>300</strong>).</p>
+<p>This version boasts with compelling new features: innovative QueryScript syntax, libraries, views which add to your skills as a DBA, making some maintenance and management tasks a breeze.</p>
+<ul>
+<li>QueryScript, <strong>split</strong> statement: automagically break long queries into smaller chunks, avoid long locks and reduce query/transaction overhead</li>
+<li>QueryScript, <strong>try-catch</strong> statement: just <strong>try { something; } catch { act_on_error; }</strong>.</li>
+<li><strong>killall()</strong>: quickly kill connections based on grantee/user/host information.</li>
+<li><strong>profiling</strong>/<strong>profiling_last</strong>: utility views to assist in query profiling diagnostics</li>
+<li><strong>1 size fits all</strong>: a single installer which auto-recognizes available server features and enables respective <em>common_schema</em> features accordingly.</li>
+<li>QueryScript performance boost</li>
+<li>much much more...</li>
+</ul>
+<p>Not familiar with <em>common_schema</em>? It allows you to do stuff on server side, by selecting from views, calling upon useful routines or writing <em>easy-to-manage</em> scripts.</p>
+<p>I'm suggesting that <em>common_schema</em> should be a <em>really-should-have</em> tool to accompany your MySQL install. Did I say "tool"? It's merely a <em>schema</em>. But it makes for a great framework:</p>
+<p>In <a href="http://www.amazon.com/High-Performance-MySQL-Optimization-Replication/dp/1449314287/ref=dp_ob_title_bk">High Performance MySQL, 3rd edition</a>, Baron Schwartz describes <em>common_schema</em>:</p>
+<blockquote><p>The <em>common_schema</em> is to MySQL as jQuery is to javaScript</p></blockquote>
+<p>Reviewing highlights for version <strong>1.1</strong>:</p>
+<h4>QueryScript</h4>
+<p><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script.html">QueryScript</a> is a scripting language. It sees some major improvements here. I've made some speed boosts by <a href="http://code.openark.org/blog/mysql/on-stored-routines-and-dynamic-statements">avoiding using temporary tables</a>, and by using string parsing instead.</p>
+<p>Without doubt the two most handy statements added to <em>QueryScript</em> are:<!--more--></p>
+<ul>
+<li><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_split.html"><strong>split</strong></a>: automagically break a long query into smaller, distinct chunks, and execute those iteratively. Just write your query; <em>split</em> will parse it, analyze it, rewrite it, break your table into parts, iterate your table and apply query for each chunk of rows. You can reduce lock time, avoid huge transactions and give your server room to breathe on operations such as massive updates of rows, transferring of rows between tables, massive purging of rows etc. Consider: the following query will execute <strong>1,000</strong> rows at a time, and the script will throttle execution so as to sleep in between chunks. And you need know nothing about how it works internally (though it's quite interesting):</li>
+</ul>
+<blockquote>
+<pre>create table world.City_dup like world.City;
+split (insert into world.City_dup select * from world.City)
+{
+  throttle 2;
+}</pre>
+</blockquote>
+<ul>
+<li><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_try_catch.html"><strong>try-catch</strong></a>: if, like me, you are frustrated with stored routines way of handling errors, QueryScript now offers you familiar (yet enhanced) form of <strong>try something catch do_something_on_error</strong>. It is limited in that you cant have a catch for particular error codes - MySQL <a href="http://code.openark.org/blog/mysql/mysql-error-handling-on-server-side-a-no-go">does not provide such info on server side</a>. Nevertheless, consider:</li>
+</ul>
+<blockquote>
+<pre>while (true)
+{
+  try
+  {
+    -- Attempt query which is expected to abort on deadlock:
+    UPDATE some_table SET some_column = 1 WHERE some_condition;
+    -- Got here? This means query is successful! We can leave now.
+    break;
+  }
+  catch
+  {
+    -- Apparently there was a deadlock. Rest, then loop again until succeeds
+    sleep 1;
+  }
+}</pre>
+</blockquote>
+<p>QueryScript also adds:</p>
+<ul>
+<li><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_eval.html"><strong>eval</strong></a>: evaluate SQL statements on the fly. I've got some very cool use cases already in production.</li>
+<li><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_sleep.html"><strong>sleep</strong></a>: just... sleep.</li>
+<li><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_pass.html"><strong>pass</strong></a>: similar to Python's pass statement, this statement does nothing and makes for a placeholder.</li>
+</ul>
+<p>QueryScript <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_variables.html">variables</a> now support:</p>
+<ul>
+<li>Declare &amp; assign syntax: <strong>var $sum := 0</strong></li>
+<li>New expansion syntax: <strong>DELETE FROM t LIMIT :${number_of_rows},</strong> or<strong> CREATE TABLE customer_:${shard_number}_details<br />
+</strong></li>
+<li>Support for expanded variables in expressions, <em>throttle</em>, <em>sleep</em>, <em>throw</em> statements.</li>
+</ul>
+<h4>Routines:</h4>
+<p>Plenty of new routines. Most notable:</p>
+<ul>
+<li><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/killall.html"><strong>killall()</strong></a>: much like Unix <em>killall</em> command, this routine kills connections based on names, rather than process IDs. Names are <em>grantee name</em>, or just the <em>user</em> part, or just the <em>host</em> part. Which allows for quick killing of all connections coming from a specific user or host:</li>
+</ul>
+<blockquote>
+<pre>CALL killall('host3.analytics.mycompany.com');
+CALL killall('reporting_user');</pre>
+</blockquote>
+<ul>
+<li><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/table_exists.html"><strong>table_exists()</strong></a>: test for (isn't it clear?) table existence. This uses INFORMATION_SCHEMA optimizations: it's a lightweight query.</li>
+</ul>
+<blockquote>
+<pre>SELECT table_exists('sakila', 'rental') AS does_it_exist;</pre>
+</blockquote>
+<p>We also have text manipulation routines: <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/encode_xml.html"><strong>encode_xml()</strong></a> and <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/decode_xml.html"><strong>decode_xml()</strong></a>, <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/strip_urls.html"><strong>strip_urls()</strong></a>, <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/prettify_message.html"><strong>prettify_message()</strong></a></p>
+<h4>Views</h4>
+<ul>
+<li>Profiling views, inspired by <a href="http://www.mysqlperformanceblog.com/2012/02/20/how-to-convert-show-profiles-into-a-real-profile/">How to convert MySQL’s SHOW PROFILES into a real profile</a>: <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_profiling.html"><strong>query_profiling</strong></a> &amp; <strong><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/last_query_profiling.html">last_query_profiling</a>:</strong></li>
+</ul>
+<blockquote>
+<pre>mysql&gt; SET PROFILING := 1;
+
+mysql&gt; SELECT COUNT(*) FROM sakila.nicer_but_slower_film_list INTO @dummy;
+
+mysql&gt; SELECT * FROM last_query_profiling;
++----------+----------------------+-------------+--------------------+-------------------------+--------------------+------------+
+| QUERY_ID | STATE                | state_calls | state_sum_duration | state_duration_per_call | state_duration_pct | state_seqs |
++----------+----------------------+-------------+--------------------+-------------------------+--------------------+------------+
+|       41 | checking permissions |           5 |           0.000320 |            0.0000640000 |               0.33 | 5,6,7,8,9  |
+|       41 | cleaning up          |           1 |           0.000007 |            0.0000070000 |               0.01 | 31         |
+|       41 | closing tables       |           1 |           0.000016 |            0.0000160000 |               0.02 | 29         |
+|       41 | Copying to tmp table |           1 |           0.042363 |            0.0423630000 |              44.34 | 15         |
+|       41 | Creating tmp table   |           1 |           0.000123 |            0.0001230000 |               0.13 | 13         |
+|       41 | end                  |           1 |           0.000004 |            0.0000040000 |               0.00 | 23         |
+|       41 | executing            |           2 |           0.000014 |            0.0000070000 |               0.01 | 14,22      |
+|       41 | freeing items        |           2 |           0.000216 |            0.0001080000 |               0.23 | 25,27      |
+|       41 | init                 |           1 |           0.000012 |            0.0000120000 |               0.01 | 20         |
+|       41 | logging slow query   |           1 |           0.000004 |            0.0000040000 |               0.00 | 30         |
+|       41 | Opening tables       |           1 |           0.028909 |            0.0289090000 |              30.26 | 2          |
+|       41 | optimizing           |           2 |           0.000026 |            0.0000130000 |               0.03 | 10,21      |
+|       41 | preparing            |           1 |           0.000018 |            0.0000180000 |               0.02 | 12         |
+|       41 | query end            |           1 |           0.000004 |            0.0000040000 |               0.00 | 24         |
+|       41 | removing tmp table   |           3 |           0.000130 |            0.0000433333 |               0.14 | 18,26,28   |
+|       41 | Sending data         |           2 |           0.016823 |            0.0084115000 |              17.61 | 17,19      |
+|       41 | Sorting result       |           1 |           0.006302 |            0.0063020000 |               6.60 | 16         |
+|       41 | starting             |           1 |           0.000163 |            0.0001630000 |               0.17 | 1          |
+|       41 | statistics           |           1 |           0.000048 |            0.0000480000 |               0.05 | 11         |
+|       41 | System lock          |           1 |           0.000017 |            0.0000170000 |               0.02 | 3          |
+|       41 | Table lock           |           1 |           0.000018 |            0.0000180000 |               0.02 | 4          |
++----------+----------------------+-------------+--------------------+-------------------------+--------------------+------------+</pre>
+</blockquote>
+<p><em>common_schema</em> meta info is in the <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/status.html"><strong>status</strong></a> view, which can be used, for example, in bug reports. It indicated version, revision, time and status of installation process.</p>
+<h4>Installer</h4>
+<p><em>common_schema</em> comes with an invisible installer. It's just a SQL file, imported via <strong>SOURCE</strong> command or your favorite import method. But, once base components are installed, it activates itself to spawn a smart-mode install phase, where it checks upon existing MySQL server features, and adding respective <em>common_schema</em> features. So, if InnoDB plugin is present, you get the InnoDB plugin views in <em>common_schema</em>. If this is a Percona Server, you also get those related views. This makes for a single distribution file, as opposed to <strong>3</strong> different distributions in previous versions.</p>
+<h4>Documentation</h4>
+<p>There are no compromises here. Documenting <em>common_schema</em> takes more time than writing &amp; testing it. But everything is well documented. You can read the documentation online, or <a href="http://code.google.com/p/common-schema/">download</a> a bundle, or call for <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/help.html"><strong>help()</strong></a> from within <em>common_schema</em>: the documentation is internal, too.</p>
+<blockquote>
+<pre>root@mysql-5.1.51&gt; CALL help('try');
++--------------------------------------------------------------------------------+
+| help                                                                           |
++--------------------------------------------------------------------------------+
+| QueryScript Flow Control: try-catch statement                                  |
+|                                                                                |
+| SYNOPSIS                                                                       |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|        try                                                                     |
+|          statement;                                                            |
+|        catch                                                                   |
+|          statement;                                                            |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+| DESCRIPTION                                                                    |
+|                                                                                |
+| try-catch is an error handling flow control structure. Flow is determined      |
+| based on the appearance or non-appearance of execution errors.                 |
+| The try statement (or block of statements) is executed. If no error occurs, it |
+| completes, and the catch statement is never executed.                          |
+| If an error is detected within execution of the try statement, the try         |
+| statement is aborted at the point of error (i.e. all statements following the  |
+| point of error are discarded), and the catch statement (or block of            |
+| statements) is executed.                                                       |
+...
++--------------------------------------------------------------------------------+</pre>
+</blockquote>
+<h4>Tests</h4>
+<p>With over <strong>350</strong> tests and counting, <em>common_schema</em> and <em>QueryScript</em> are well tested. There are still tests to write, the cover is not complete, and I'm working on it.</p>
+<h4>Bugfixes</h4>
+<p>Changed view definitions affected by <a href="http://bugs.mysql.com/65388">MySQL bug #65388</a>.</p>
+<h4>Download</h4>
+<p><a href="http://code.google.com/p/common-schema/">Download common_schema</a>. You will find it is rich and smart.</p>

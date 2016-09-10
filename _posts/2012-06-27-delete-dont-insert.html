@@ -1,0 +1,56 @@
+---
+title: DELETE, don't INSERT
+date: 2012-06-27 07:25:09.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- openark kit
+- Performance
+- QueryScript
+meta:
+  _edit_last: '2'
+  _oembed_55835302a9154b1a33fa9bef669291f7: '<iframe src="http://www.slideshare.net/slideshow/embed_code/28163348"
+    width="427" height="356" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"
+    style="border:1px solid #CCC; border-width:1px 1px 0; margin-bottom:5px; max-width:
+    100%;" allowfullscreen> </iframe> <div style="margin-bottom:5px"> <strong> <a
+    href="https://www.slideshare.net/shlominoach/commonschema-22" title="common_schema
+    2.2 DBA&#x27;s framework for MySQL" target="_blank">common_schema 2.2 DBA&#x27;s
+    framework for MySQL</a> </strong> from <strong><a href="http://www.slideshare.net/shlominoach"
+    target="_blank">Shlomi Noach</a></strong> </div>'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Have just read <a href="http://blog.9minutesnooze.com/insert-delete/">INSERT, Don’t DELETE</a> by Aaron Brown, and have some lengthy response, which is why I write this post instead of commenting on said post.</p>
+<p>I wish to offer my counter thought and suggest that <strong>DELETE</strong>s are probably the better choice.</p>
+<p>Aaron suggests that, when one wishes to purge rows from some table, a trick can be used: instead of <strong>DELETE</strong>ing unwanted rows, one can <strong>INSERT</strong> "good" rows into a new table, then switch over with <strong>RENAME</strong> (but please read referenced post for complete details).</p>
+<p>I respectfully disagree on several points discussed.</p>
+<h4>Lockdown</h4>
+<p>The fact one needs to block writes during the time of creation of new table is problematic: you need to essentially turn off parts of your application. The posts suggests one could use a slave - but this solution is far from being trivial as well. To switch over, you yet again need to turn off access to DB, even if for a short while.<!--more--></p>
+<p>A switch over to a slave is quite a big deal, in my opinion, for the mere purpose of deletion of rows.</p>
+<h4>DELETEs are easy</h4>
+<p>The DELETEs are so much easier: the first thing to note is the following: <em>You don't actually have to delete all the rows *at once*</em>.</p>
+<p>You just need to drop some rows, right? Why waste a huge transaction that takes minutes, when you can drop the rows by chunks, one at a time?<br />
+For that, you can use either <a href="http://www.percona.com/doc/percona-toolkit/2.1/pt-archiver.html">pt-archive</a> from <em>Percona Toolkit</em>, <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-chunk-update.html">oak-chunk-update</a> from <em>openark-kit</em>, or write a simple <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script.html">QueryScript</a> code with <em>common_schema</em>:</p>
+<blockquote>
+<pre>while (DELETE FROM title WHERE title &lt;= 'g' LIMIT 1000)
+{
+  throttle 1;
+}</pre>
+</blockquote>
+<p>So, drop <strong>1,000</strong> rows or so at a time, then sleep some time, etc. The total runtime is longer, but who cares? The impact can be reduced to be unnoticeable.</p>
+<h4>Space reclaim</h4>
+<p>You can use online table operations to rebuild your table and reclaim the disk space. Either see <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-online-alter-table.html">oak-online-alter-table</a> or <a href="http://www.percona.com/doc/percona-toolkit/2.1/pt-online-schema-change.html">pt-online-schema-change</a>. Again, both work in small chunks, so no long stalls.</p>
+<p>But more on this: my usual purge scenario shows that it is repetitive. You purge, data fills again, you purge again, and so on.</p>
+<p>Which is why it doesn't make much sense to rebuild the table and reclaim the disk space: it just grows again to roughly same dimensions.<br />
+For a one time operation (e.g. after neglect of cleanup for long time) -- yes, absolutely, do a rebuild and reclaim. For repetitive cleanup - I don't bother.</p>
+<h4>Conclusion</h4>
+<p>Aaron does make note at the end of his post that <strong>DELETE</strong> operations can be done online, while the <strong>INSERT</strong> trick requires downtime, and this is a fair assessment.</p>
+<p>But just to make a point: none of the <strong>DELETE</strong> timings are interesting. Since we are not concerned with deleting the rows in a given time (no "press the red button"), we can spread them over time and make the impact negligible. So not only is everything done online, it also goes unnoticed by the user. And this, I believe, is the major thing to consider.</p>

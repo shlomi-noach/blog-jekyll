@@ -1,0 +1,75 @@
+---
+title: MySQL's character sets and collations demystified
+date: 2008-12-08 08:44:24.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Data Types
+- SQL
+- Syntax
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+excerpt: "MySQL's character sets and collations are often considered as a mystery,
+  and many users either completely disregard them and keep with the defaults, or set
+  everything to UTF8.\r\n\r\nThis post will attempt to shed some light on the mystery,
+  and provide with some best practices for use with text columns with regard to character
+  sets."
+---
+<p>MySQL's character sets and collations are often considered as a mystery, and many users either completely disregard them and keep with the defaults, or set everything to UTF8.</p>
+<p>This post will attempt to shed some light on the mystery, and provide with some best practices for use with text columns with regard to character sets.<!--more--></p>
+<h4>Character Sets</h4>
+<p>A thorough discussion of how the character sets have evolved through history is beyond the scope of this post. While the Unicode standard is gaining recognition, the "older" character sets are still around. Understanding the difference between Unicode and local character sets is crucial.</p>
+<p>Consider, for example, MySQL's <strong><code>latin1</code></strong> character set. In this character set there are 256 different characters, represented by one byte. The first 128 characters map to ASCII, the standard "ABCabc012 dot comma" set, of which most of this post is composed. The latter 128 characters in <strong><code>latin1</code></strong> are composed of West European specific characters, such as À, ë, õ, Ñ.</p>
+<p>A <strong><code>Name VARCHAR(60) CHARSET latin1</code></strong> column can describe names with West European characters. But it cannot describe Russian or Hebrew names. To represent a name in Hebrew, you'd need the <strong><code>hebrew</code></strong> charset (ISO 8859-8), in which the first 128 characters are, as always, mapped to ASCII, and the latter 128 characters describe the Hebrew alphabet and punctuation marks, such as ש,ל,מ,ה. The Cyrillic, Arabic and Turkish charsets follow in a similar manner.</p>
+<p>Assume now I'm building a world wide web application, such as a popular social network. I would like to store the first names of my users, in every possible language. None of the above character sets support all languages. I therefore turn to <a title="What is Unicode" href="http://www.unicode.org/standard/WhatIsUnicode.html">Unicode</a>. In particular, MySQL supports <strong><code>utf8</code></strong>, a Unicode encoding scheme, which is commonly used due to its economic storage requirements.</p>
+<p>In Unicode there is a dedicated number for each letter in the known languages, in ancient languages, and some imaginary or otherwise non existing languages, such as Klingon (yes, I know there are people who actually speak Klingon), may yet find their way into the standard.</p>
+<p>UTF8 (or utf8), a Unicode encoding scheme, states the following: for ASCII characters, such as 'a', '6', '$', only one byte of storage is required. For Hebrew, Cyrillic or Turkish characters, 2 bytes are required. For Japanese, Chinese - more (MySQL supports up to 3 bytes per character). Again, the exact details of the implementation are beyond the scope of this post, and are well described <a title="UTF-8 and Unicode FAQ" href="http://www.cl.cam.ac.uk/~mgk25/unicode.html#utf-8">here</a> and <a title="Wikipedia - UTF-8" href="http://en.wikipedia.org/wiki/UTF-8">here.</a></p>
+<p>What's important to me is that I can define <strong><code>Name VARCHAR(30) CHARSET utf8</code></strong> for my columns, and Voila! Any name can be represented in my database.</p>
+<h4>So why not define everything as utf8 and get done with it?</h4>
+<p>Well, it just so happens that Unicode comes with a price. See, for example, the following column definition:<strong></strong></p>
+<blockquote><p><code>CountryCode CHAR(3) CHARSET utf8</code></p></blockquote>
+<p>We are asking for a column with 3 characters exactly. The required storage for this column will be such that any 3-letter name must fit in. This means (3 characters) times (3 bytes per character) = 9 bytes of storage. So <strong><code>CHAR</code></strong> and <strong><code>utf8</code></strong> together may be less than ideal.<strong><code> VARCHAR</code></strong> behaves better: it only requires as many bytes per character as described above. So the text "abc" will only require 3 bytes (plus <strong><code>VARCHAR</code></strong>'s leading 1 or 2 bytes).</p>
+<h4>Why don't we drop the 'CHAR' altogether, then, and use only 'VARCHAR'?</h4>
+<p>Because some values are simply better represented with <strong><code>CHAR</code></strong>: consider a "password" column, encoded with MD5. The <strong><code>MD5()</code></strong> function returns a 32 characters long text. It's always 32 characters, and, moreover, it's always in ASCII. The best data type and character set definition would be <strong><code>password CHAR(32) CHARSET ascii</code></strong>. We thus ensure exactly 32 bytes are allocated to this column. A <strong><code>VARCHAR</code></strong> will acquire an additional byte or two, depending on its defined length, which will indicate the length of the text.</p>
+<h4>And why would I care about collations?</h4>
+<p>Collations deal with text comparison. We observed that the default character set in MySQL is <strong><code>latin1</code></strong>. The default collation is <strong><code>latin1_swedish_ci</code></strong>. In this collation the following holds true: <strong><code>'ABC' = 'abc'</code></strong>.</p>
+<p>Wait. What?</p>
+<p>Look at the "ci" in <strong><code>latin1_swedish_ci</code></strong>. It stands for "case insensitive". Collations which end with "cs" or "bin" are case sensitive. The <strong><code>utf8</code></strong> character set comes with <strong><code>utf8_general_ci</code></strong> collation. This can make sense. Let's review our web application table (I'm using plain text passwords here, bare with me for this example):</p>
+<blockquote>
+<pre>CREATE TABLE my_users (
+  name VARCHAR(30) CHARSET utf8 COLLATE utf8_general_ci,
+  plainPassword VARCHAR(16) CHARSET ASCII,
+  UNIQUE KEY (name)
+);
+INSERT INTO my_users (name, password) VALUES ('David', 'mypass');</pre>
+</blockquote>
+<p>It holds true that the name 'David' equals 'david'. If I were to <strong><code>SELECT * FROM my_users WHERE name='david'</code></strong>, I would find the desired row. The unique key will also guarantee that no daVID user can be added.</p>
+<p>But David certainly wouldn't want users to login with the password 'MYPASS'. So we refine our table:</p>
+<blockquote>
+<pre>CREATE TABLE my_users (
+  name VARCHAR(30) CHARSET utf8 COLLATE utf8_general_ci,
+  plainPassword VARCHAR(16) CHARSET ascii COLLATE ascii_bin,
+  UNIQUE KEY (name)
+);</pre>
+</blockquote>
+<p>The <strong><code>ascii_bin</code></strong> collation is a case sensitive collation for <strong><code>ascii</code></strong>. The following will not find anything:</p>
+<blockquote><p><code>SELECT * FROM my_users WHERE name='david' AND plainPassword='MYPASS';</code></p></blockquote>
+<p>Holding a plain text password in your database is not a best practice, but apparently it's common.</p>
+<p>Collations also deal with text ordering. For any two strings, the collation determines which is larger, or if they are equal. Probably the most common situation you see collations in action is when you <strong>ORDER BY</strong> a text column.</p>
+<h4>Also keep in mind</h4>
+<ul>
+<li>When you check for length of strings, do you use the <strong><code>LENGTH()</code></strong> function, as in <strong><code>SELECT LENGTH(Name) FROM City</code></strong>? You probably wish to replace this with <strong><code>CHAR_LENGTH()</code></strong>. <strong><code>LENGTH()</code></strong> returns the number of bytes required for the text storage. <strong><code>CHAR_LENGTH()</code></strong> returns the number of characters in the text, and is usually what you are looking for. It may hold true that for a string s, <strong><code>LENGTH(s)=12</code></strong> and <strong><code>CHAR_LENGTH(s)=8</code></strong>. Watch out for these glitches.</li>
+<li>You can converts texts between character sets with <strong><code>CONVERT</code></strong>. For example: <strong><code>CONVERT(s USING utf8)</code></strong></li>
+<li>Stored routines should not be overlooked. If your stored routine accepts a text argument, or if your stored function returns one, make sure the character sets are properly defined. If not, then your utf8 text may be converted to latin1 during the call to your stored routine. This also applies to local parameters within the stored routines.</li>
+<li>An <strong><code>ALTER TABLE <em>&lt;some table&gt;</em> CONVERT TO <em>&lt;some charset&gt;</em></code></strong> will change the character set not only for the table itself, but also for all existing textual columns.</li>
+</ul>
+<p>See the following post: <a title="Useful database analysis queries with INFORMATION_SCHEMA" href="http://code.openark.org/blog/mysql/useful-database-analysis-queries-with-information_schema">Useful database analysis queries with INFORMATION_SCHEMA</a> for queries which diagnose your databases character sets.</p>

@@ -1,0 +1,69 @@
+---
+title: Guide to MySQL installation files
+date: 2010-12-01 12:27:14.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Installation
+meta:
+  _edit_last: '2'
+  _wp_old_slug: ''
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Even for DBAs already familiar with MySQL, the choice of installation methods and the variety of install/package files is overwhelming and confusing.</p>
+<p>I'll make a (very!) brief introduction to the various installation options, concentrating on the Linux operating system, and provide with a simple shopping list.</p>
+<p>For illustration, I'll refer to the MySQL <strong>5.1.52</strong> community edition, the latest at the time of this writing. Downloads are available at <a href="http://dev.mysql.com/downloads/mysql/5.1.html">http://dev.mysql.com/downloads/mysql/5.1.html</a>.</p>
+<p>I will then refer to alternate distributions.</p>
+<h4>A note for Windows users</h4>
+<p>You are lucky: your choice is very clear. Download the Windows MSI package. Choose <strong>32</strong> or <strong>64</strong> bit architecture according to your OS. If you know about the other ways to install and setup MySQL under Windows, you don't need this post.</p>
+<h4>Linux: repositories</h4>
+<p>Easiest way to install MySQL on linux would be to use your distro's repository. Just:</p>
+<blockquote>
+<pre>sudo apt-get install mysql-server-5.1</pre>
+</blockquote>
+<p>or</p>
+<blockquote>
+<pre>sudo yum install MySQL-Server-5.1</pre>
+</blockquote>
+<p>Your distro should resolve any package dependencies.</p>
+<p>I'm in the opinion that if MySQL is the main application to be used on a server, distribution's default repositories are <em>not</em> the way to go. Reasons include MySQL outdated version, incapability of installing multiple instance, danger of automatic upgrades or downgrades. Read <a href="http://code.openark.org/blog/mysql/to-not-yum-or-to-not-apt-get">this post and discussion</a> that follows for more.</p>
+<h4>Linux: packages</h4>
+<p>If you're a RedHat/CentOS/SuSE user, you're in luck: MySQL provides pre-built RPM packages for your system. I vaguely remember MySQL announcing that Ubuntu is to be supported. That was a couple years ago; there is still no package for Debian/Ubuntu.</p>
+<p><!--more-->So, assuming you're a RedHat/CentOs user, which packages should you download?</p>
+<p>There's over <strong>60</strong> different RPMs available for download. I always need to stress my eyes to get it right. Here's the simple answer (again, if you know better, you don't need this post). Choose <strong>"RedHat &amp; Oracle Enterprise Linux"</strong>; download:</p>
+<ul>
+<li><strong>MySQL-client-community-5.1.52-1.rhel5.x86_64.rpm</strong></li>
+<li><strong>MySQL-server-community-5.1.52-1.rhel5.x86_64.rpm</strong></li>
+<li><strong>MySQL-shared-community-5.1.52-1.rhel5.x86_64.rpm</strong></li>
+<li><strong>MySQL-shared-compat-5.1.52-1.rhel5.x86_64.rpm</strong></li>
+</ul>
+<p>The above assumes a RedHat/CentOS 5.x and a 64 bit Intel/AMD processor.</p>
+<p>The aforementioned post relays my opinion of using RPMs; these are still susceptible to <strong>yum</strong>'s whims. Be careful.</p>
+<h4>Linux: binary</h4>
+<p>Not afraid to install by hand? Want to avoid limitations introduced by pre-built packages? Download a binary distribution:</p>
+<ul>
+<li>Choose <strong>"Linux - Generic"</strong>. Downlaod <strong>mysql-5.1.52-linux-x86_64-glibc23.tar.gz</strong></li>
+</ul>
+<p>This <em>tar.gz</em> distribution includes server &amp; client. It includes <em>glibc</em> so it does not depend on your OS installed <em>glibc</em> version (a pain to upgrade/downgrade as it is used by so many packages).</p>
+<p>You may still want to download and install the <em>shared-compat</em> RPM package (see previous section) to have all possible libmysqlclientX.X packages installed.</p>
+<h4>Linux: source</h4>
+<p>If you got here, then you either know your way around (why do you keep reading?) or you have a good reason to use a source distribution.</p>
+<p>What good reason could that be?</p>
+<p>A more and more common reason is that you want to add something to MySQL. Sphinx search storage engine is such a common addition.</p>
+<ul>
+<li>Choose <strong>"Source Code"</strong>: download <strong>mysql-5.1.52.tar.gz</strong> (Architecture Independent).</li>
+</ul>
+<h4>Non MySQL downloads</h4>
+<p>You don't have to download the official MySQL distribution. Two good alternatives are:</p>
+<ul>
+<li>Percona Server; download from <a href="http://www.percona.com/software/percona-server/">http://www.percona.com/software/percona-server/</a>. The Percona Server (a MySQL fork by <a href="http://www.percona.com/">Percona</a>) is available in RPM, DEB, BSD, Binary, Source distributions. There are no Windows distributions.</li>
+<li>MariaDB, download from <a href="http://askmonty.org/wiki/MariaDB:Download">http://askmonty.org/wiki/MariaDB:Download</a>. MariaDB is a MySQL fork by <a href="http://mariadb.org/">Montry Program AB</a>, and is available for Windows, Linux, Solaris, in Source, Binary, RPM and DEB distributions.</li>
+</ul>

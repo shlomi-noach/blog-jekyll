@@ -1,0 +1,41 @@
+---
+title: Reasons to use InnoDB Plugin
+date: 2009-08-03 10:32:35.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- InnoDB
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I wish to present some compelling reasons to use the InnoDB plugin. The plugin is a drop-in replacement for "normal" InnoDB tables; enabling many new features. It is the outcome of a long termed silence from InnoBase (Oracle), which were thought to be neglecting the InnoDB engine.</p>
+<p>I'm going to leave out "performance" for the reason that grander forces <a href="http://www.mysqlperformanceblog.com/2008/12/03/mysql-50-51-and-innodb-plugin-cpu-efficiency/">have benchmarked and written</a> about it.</p>
+<h4>Compression</h4>
+<p>Using the new <strong>Barracuda</strong> table format, table data can be compressed. Compression depends on the type of data you have in your table, and in <strong>KEY_BLOCK_SIZE</strong>. I have found tables with lots of textual data to compress well, to about 25% volume (that is, reduction of 75%), and strictly integer-typed tables (like an a-2-b connecting table) to compress poorly.</p>
+<p>I have seen an InnoDB 50GB database shrink into some 12GB only. Wow! That meant a server which only had RAID 1 two 72GB disks, and which was dangerously filled up with disk space, could now accommodate the database, a backup, and then some!</p>
+<p><!--more-->Compression does not only occur on disk: when pages are loaded to memory, they are loaded compressed. This means the same <strong>innodb_buffer_pool_size</strong> you had, now holds a lot more data.</p>
+<p>There is no compression for the undo buffer.</p>
+<h4>INFORMATION_SCHEMA</h4>
+<p>There's lot's of useful data in the new <strong>INFORMATION_SCHEMA</strong> tables. Very interesting questions can be answered:</p>
+<ul>
+<li>How many transactions are open right now?</li>
+<li>What's the state of each transaction?</li>
+<li>What queries are being run right now?</li>
+<li>Are any transaction waiting on locks? Which locks? Held by which transactions?</li>
+<li>What kind of locks are currently held? On which tables?</li>
+<li>How much time has been spent on compression/uncompress?</li>
+<li>How many compression operations have occurred?</li>
+<li>How many pages are allocated? How many are free?</li>
+</ul>
+<h4>Fast index creation</h4>
+<p>Just to be clear, this is <em>not</em> non-blocking index creation. It's just <em>fast</em>. What's <em>fast</em>? Well, <em>slow</em> index creation is what we're used to: to add an index we <strong>ALTER TABLE</strong>, thereby creating a new, temporary tablespace, into which the entire table's data is copied. With fast index creation, table data is left untouched. The new index is created by scanning the primary key and to-be indexed values. Thus, it requires less I/O operations.</p>
+<p>Dropping an index is an instantaneous operation.</p>

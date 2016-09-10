@@ -1,0 +1,33 @@
+---
+title: Some anecdotes I learned at Percona Live
+date: 2014-04-08 04:06:20.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Opinions
+- PerconaLive
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>While on the plane back home I wrote down all my impressions from Percona Live 2014. Have lots of TODOs and great ideas to implement. Among all my impressions, there were a few anecdotes worth noting.</p>
+<ul>
+<li>5.6 GTID is still unfriendly. It will require complete shutdown &amp; reconfiguration of your entire replication topology; and some companies present hacks around this. Notable, Facebook recoded GTID related code (slave agrees to replicate with GTID even though its master still uses binlog coordinates). Booking.com have their own hack around slowly migrating their topologies. And in a great lightning talk we were shown how to patch MySQL such that the relay logs turn into a  consistent GTID-like coordinate system.</li>
+<li>Galera replication has been implemented for TokuDB (only active-passive mode, not active-active). This came as a surprise to Tokutek ; apparently Codership did this within a few hours of work. The rest is up for Tokutek!</li>
+<li>WebScaleSQL is a cool initiative that aims to assist in pushing commonly desired featured back upstream. It is Web Scale. It is also not a productio0n distribution and I do not expect it to be, It is not a fork that is meant for the common DBA to download and deploy.</li>
+<li>Tungsten replicator has MySQL to Hadoop replication using staging tables - an auditing of changes that are group-deployed on Hadoop.</li>
+<li>Still so many people unfamiliar with MySQLSandbox. It's such a basic tool, especially for testing and local installations.</li>
+<li>Still misconceptions about common_schema. Yes, I do use it on production.</li>
+<li>Everyone has the same problems :)</li>
+<li>Replication is still queen of MySQL's featureset. We're still all about failing over, promoting, scaling via replication.</li>
+<li>Linux rules. Where two MacBooks failed to connect to the projector, my Lenovo/Ubuntu Linux did the job just fine and saved the day.</li>
+</ul>

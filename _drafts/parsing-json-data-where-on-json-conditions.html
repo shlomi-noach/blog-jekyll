@@ -1,0 +1,32 @@
+---
+layout: post
+title: Parsing JSON data; WHERE on JSON conditions
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Since MySQL follows the relational model, a table only has a fixed set of columns. Sometimes some versatility is needed, and you get these "all in one" text columns which contain arbitrary key:value pairs. I don't mean to dwell on the question whether the relational model is in place here, or whether a NoSQL solution fits better. The fact is, I've seen it in many places.</p>
+<p>As for how these arbitrary values are stored, some use their own made up delimiter syntax (like <strong>'x=3;y=5;z=kaboom'</strong>) and are left with their own parsers and their own parsing errors. Others use XML, and utilize the <a href="http://dev.mysql.com/doc/refman/5.5/en/xml-functions.html#function_extractvalue">ExtractValue()</a> function - but suffer from lengthy columns due to XML's inherent verbosity. Yet others use JSON, which is a well defined notatation, quite compact, very popular -- but lacks any support on MySQL.</p>
+<p>Enter <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/extract_json_value.html"><strong>extract_json_value()</strong></a>: it works much like <em>ExtractValue()</em>, only it works on valid JSON objects. This means you can do something like this:</p>
+<blockquote>
+<pre>SELECT 
+  id, name 
+FROM 
+  my_customer_data 
+WHERE 
+  customer_id = 17 
+  AND <strong>extract_json_value</strong>(additional_options_column, <span style="color: #800000;">'//priority_continent'</span>) = 'Europe'</pre>
+</blockquote>
+<p>In the above, <strong>additional_options_column</strong> is a text column denoting a valid JSON object. We extract the value of <strong>"priority_continent"</strong> via XPath expression.</p>

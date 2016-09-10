@@ -1,0 +1,80 @@
+---
+title: Where's my cnf file?
+date: 2010-12-07 12:24:44.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Configuration
+- Linux
+meta:
+  _edit_last: '2'
+  _wp_old_slug: ''
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>So you have a running MySQL server, it's working well and everyone's happy. You want to make a minor change to the configuration file, so you edit the file, restart MySQL - but the change doesn't catch!</p>
+<p>Or maybe you want to check that some global variable has not been dynamically changed without an update to the configuration file. But the configuration file doesn't make any sense -- it looks like nothing is common between the file and the server.</p>
+<p>Wait, which <strong>my.cnf</strong> file does MySQL read? Rather, which <strong>my.cnf</strong> <em>files</em>?</p>
+<p>Ever happened to you? If you're well organized, and only keep a single <strong>/etc/my.cnf</strong> file, you know exactly where everything is. But some systems are messier, with <em>lots</em> of configuration files hanging around. Which ones apply?</p>
+<p>Let's find out which configuration files apply.</p>
+<h4>No direct information</h4>
+<p>It would all be easier if we could just <strong>SHOW GLOBAL VARIABLES LIKE 'configuration_files_that_this_server_has_read_list'</strong>. There isn't such an option.</p>
+<p><!--more-->The MySQL documentation <a href="http://dev.mysql.com/doc/refman/5.1/en/option-files.html">explains</a> about the configuration files search path, and that's one path you can follow. Also, you can detect another estimated search path by invoking:</p>
+<blockquote>
+<pre><strong>root@myhost:~# mysqld --verbose --help | head -n 20
+</strong>100927 19:53:06 [ERROR] Fatal error: Please read "Security" section of the manual to find out how to run mysqld as root!
+
+mysqld  Ver 5.1.41 for unknown-linux-gnu on x86_64 (MySQL Community Server (GPL))
+Copyright (C) 2000-2008 MySQL AB, by Monty and others
+Copyright (C) 2008 Sun Microsystems, Inc.
+This software comes with ABSOLUTELY NO WARRANTY. This is free software,
+and you are welcome to modify and redistribute it under the GPL license
+
+Starts the MySQL database server
+
+Usage: mysqld [OPTIONS]
+
+Default options are read from the following files in the given order:
+<strong>/etc/my.cnf /etc/mysql/my.cnf /usr/local/mysql/etc/my.cnf ~/.my.cnf</strong>
+The following groups are read: mysqld server mysqld-5.1
+The following options may be given as the first argument:
+...</pre>
+</blockquote>
+<p>Easy enough, right? Just walk through that search path and you've covered it all. Better yet, see which of these even exist!</p>
+<blockquote>
+<pre><strong>root@myhost:~# ls -l /etc/my.cnf /etc/mysql/my.cnf /usr/local/mysql/etc/my.cnf ~/.my.cnf</strong>
+ls: cannot access /etc/my.cnf: No such file or directory
+ls: cannot access /etc/mysql/my.cnf: No such file or directory
+ls: cannot access /usr/local/mysql/etc/my.cnf: No such file or directory
+-rw-r--r-- 1 shlomi shlomi 32 2010-03-03 15:21 <strong>/home/shlomi/.my.cnf</strong></pre>
+</blockquote>
+<p>Seems like we got it. The <strong>mysqld</strong> process only reads <strong>/home/shlomi/.my.cnf</strong>. Right?</p>
+<h4>Wrong!</h4>
+<p>There are two running instances of MySQL running on my machine. Neither of the primary <strong>my.cnf</strong> files used by these instances is listed above.</p>
+<blockquote>
+<pre><strong>root@myhost:~# ps aux | grep mysqld
+</strong>shlomi   12092  0.0  0.0   4096   352 pts/1    S    Sep26   0:00 /bin/sh /home/shlomi/sandboxes/5.1/5.1.50/bin/mysqld_safe <strong>--defaults-file=/home/shlomi/sandboxes/msb_5_1_50/my.sandbox.cnf</strong>
+shlomi   12167  0.0 14.5 765520 587924 pts/1   Sl   Sep26   1:12 /home/shlomi/sandboxes/5.1/5.1.50/bin/mysqld <strong>--defaults-file=/home/shlomi/sandboxes/msb_5_1_50/my.sandbox.cnf</strong> --basedir=/home/shlomi/sandboxes/5.1/5.1.50 --datadir=/home/shlomi/sandboxes/msb_5_1_50/data --log-error=/home/shlomi/sandboxes/msb_5_1_50/data/msandbox.err --pid-file=/home/shlomi/sandboxes/msb_5_1_50/data/mysql_sandbox5150.pid --socket=/tmp/mysql_sandbox5150.sock --port=5150
+root     22827  0.0  0.0   4096   668 pts/3    S    16:50   0:00 /bin/sh /usr/local/mysql/bin/mysqld_safe --datadir=/usr/local/mysql/data --pid-file=/usr/local/mysql/data/eeyore.pid
+mysql    22960  0.1  2.2 274584 90188 pts/3    Sl   16:50   0:18 /usr/local/mysql/bin/mysqld <strong>--defaults-extra-file=/usr/local/mysql/data/my.cnf</strong> --basedir=/usr/local/mysql --datadir=/usr/local/mysql/data --user=mysql --log-error=/usr/local/mysql/data/eeyore.err --pid-file=/usr/local/mysql/data/eeyore.pid --socket=/tmp/mysql.sock --port=3306</pre>
+</blockquote>
+<p>Can you see the mess above?</p>
+<p>The first two lines refer to a MySQL instance running under <a href="http://mysqlsandbox.net/">mysqlsandbox</a>. The <em>mysqld_safe</em> script is passed the defaults-file parameter, and passes it on to the <em>mysqld</em> service.</p>
+<p>However the next couple of lines refer to a MySQL server installed as a service; installed from a binary tarball, this instance reads configuration from the <strong>datadir</strong>. This time the <em>mysqld_safe</em> instance is passed nothing, but invokes <em>mysqld</em> with <strong>default-extra-file</strong>.</p>
+<p>To be fair, I wasn't expecting the <strong>"mysqld --verbose --help"</strong> invocation to find the <em>mysqlsandbox</em> configuration files. I did expect it to find the <strong>/usr/local/mysql/data/my.cnf</strong> file which it eventually used.</p>
+<p>That's nice &amp; ugly. I can see the <strong>my.cnf</strong> file used by peeking at <em>ps</em>. A bit overkill.</p>
+<h4>Not quite there yet...</h4>
+<p>Because there's still my private configuration file (resides on <strong>/home/shlomi/.my.cnf</strong> on my account). Now I do not expect this file to be read by my standard MySQL server, since it does not run as user "shlomi". However my command line clients do actually read this file, and so I am affected by its settings.</p>
+<p>I can verify whether such files have been used on a file system which is configured to support the <strong>atime</strong> option:</p>
+<blockquote>
+<pre><strong>root@myhost:~# ls -lt --time=atime $(locate *my.cnf)
+</strong></pre>
+</blockquote>
+<p>I usually keep the <strong>atime</strong> option enabled for my <em>"/"</em> and <em>"/home"</em> partitions, but disable it on data partitions.</p>

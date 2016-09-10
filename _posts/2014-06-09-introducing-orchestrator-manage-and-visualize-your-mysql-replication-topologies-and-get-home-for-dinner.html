@@ -1,0 +1,75 @@
+---
+title: 'Introducing Orchestrator: manage and visualize your MySQL replication topologies
+  and get home for dinner'
+date: 2014-06-09 09:02:26.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Open Source
+- orchestrator
+- Replication
+- tools
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+  _sg_subscribe-to-comments: arjen@openquery.com.au
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I'm happy to announce the availability of <a href="http://www.outbrain.com/">Outbrain</a>'s <strong><a href="https://github.com/outbrain/orchestrator">Orchestrator</a></strong>: MySQL replication management &amp; visualization tool.</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/05/orchestrator-simple.png"><img class="alignnone size-full wp-image-6898" src="{{ site.baseurl }}/assets/orchestrator-simple.png" alt="orchestrator - simple topology" width="785" height="353" /></a></p></blockquote>
+<ul>
+<li>Orchestrator reads your replication topologies (give it one server - be it master or slave - in each topology, and it will reveal the rest).</li>
+<li>It keeps a state of this topology.</li>
+<li>It can continuously poll your servers to get an up to date topology map.</li>
+<li>It visualizes the topology in a clear and slick D3 tree.</li>
+<li>It allows you to <em>modify your topology;</em> move slaves around. You can use the command line variation, the JSON API, or you can use the web interface.</li>
+</ul>
+<p>Quick links: <strong><a href="https://github.com/outbrain/orchestrator/wiki/Orchestrator-Manual">Orchestrator Manual</a></strong>, <strong><a href="https://github.com/outbrain/orchestrator/wiki/FAQ">FAQ</a></strong>, <strong><a href="https://github.com/outbrain/orchestrator/releases">Downloads</a></strong></p>
+<h4>Nothing like nice screenshots</h4>
+<p>To move slaves around the topology (repoint a slave to a different master) through <em>orchestrator</em>'s web interface, we use <em>Drag and Drop</em>,<!--more--></p>
+<p>just</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/05/orchestrator-simple-drag.png"><img class="alignnone size-full wp-image-6899" src="{{ site.baseurl }}/assets/orchestrator-simple-drag.png" alt="orchestrator - simple topology - rag" width="785" height="353" /></a></p></blockquote>
+<p>like</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/06/orchestrator-simple-drag-hover.png"><img class="alignnone size-full wp-image-6900" src="{{ site.baseurl }}/assets/orchestrator-simple-drag-hover.png" alt="orchestrator - simple topology -drag-hover" width="785" height="353" /></a></p></blockquote>
+<p>that.</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/06/orchestrator-simple-dropped.png"><img class="alignnone size-full wp-image-6902" src="{{ site.baseurl }}/assets/orchestrator-simple-dropped.png" alt="orchestrator - simple topology - dropped" width="870" height="272" /></a></p></blockquote>
+<h4>Safety</h4>
+<p>Orchestrator keeps you safe. It does so by:</p>
+<ul>
+<li>Correctly calculating the binary log files &amp; positions (aka coordinates) of the slave you're moving, its current master, its new master; it properly stops, starts and stalls your replication till everything is in sync.</li>
+<li>Helping you to avoid shooting yourself in the leg. It will not allow moving a slave that uses <strong>STATEMENT</strong> based replication under a <strong>ROW</strong> based replication server. Or a <strong>5.5</strong> under a <strong>5.6</strong>. Or anything under a server that doesn't have binary logs. Or <strong>log_slave_updates</strong>. Or if one of the servers involed lags too much. Or more...</li>
+</ul>
+<h4>Visualization</h4>
+<p>It also points out a few problems, visually. While it is <em>not</em> - and will not be - a monitoring tool, it requires some replication status info for its own purposes. Too much lag? Replication not working? Server cannot be accessed? Server under maintenance? This all shows up in your topology. We use it a lot to get a holistic view over our <em>current</em> replication topologies status.</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/06/orchestrator-simple-with-problems.png"><img class="alignnone size-full wp-image-6932" src="{{ site.baseurl }}/assets/orchestrator-simple-with-problems.png" alt="orchestrator-simple-with-problems" width="696" height="353" /></a></p></blockquote>
+<h4>State</h4>
+<p><em>Orchestrator</em> keeps the state of your topologies. Unlike other tools that will drill down from the master and just pick up on whatever's connected <em>right now</em>, <em>orchestrator</em> remembers what used to be connected, too. If a slave is not replicating at this very moment, that does not mean it's not part of the topology. Same for a MySQL service that has been temporarily stopped. And this includes all their slaves, if any. Until told otherwise (or until too much time passes and a server is assumed dead), <em>orchestrator</em> keeps the map intact.</p>
+<h4>Maintenance</h4>
+<p><em>Orchestrator</em> supports a maintenance-mode state; it's a flag saying "this server is in maintenance mode right now". But this flag includes an owner and a reason for audit purposes. And while a server is under maintenance, orchestrator will disallow replication topology changes that include this server.</p>
+<h4>Audit</h4>
+<p>Operations performed via orchestrator are audited (well, almost all). You have a complete history on what slave has been moved from where to where; what server has been taken under maintenance and when, etc.</p>
+<h4>Automation</h4>
+<p>The most important thing is of course automating error-prone human sequences of actions. Repointing slaves is a mess (when you don't have GTIDs). Automation saves time and greatly reduces the possibility that something goes wrong (of course never eliminates). We happen to use <em>orchestrator</em> at Outbrain on production, and twice in the past month had major events where <em>orchestrator</em> saved us many hours and worry.</p>
+<h4>Support</h4>
+<p><em>Orchestrator</em> supports "standard" replication: log file:pos kind of replication. Non GTID, non-parallel. Good (?) old replication.</p>
+<p>To quickly explain why not GTID: we're using MySQL <strong>5.5</strong>. We've had <a href="http://code.openark.org/blog/mysql/the-mystery-of-mysql-5-6-excessive-buffer-pool-flushing">issues</a> while evaluating <strong>5.6</strong>; and besides, migrating to GTID is <a href="http://blog.booking.com/mysql-5.6-gtids-evaluation-and-online-migration.html">a mess</a> (several solutions or proposed solutions seem to exist). On April's Percona Live event, I realized only a few companies actually use MySQL <strong>5.6</strong>, and a few of these use GTID. We're not doing GTID (yet), as much as we would want to. Not there yet.</p>
+<p>Read the <strong><a href="https://github.com/outbrain/orchestrator/wiki/FAQ">FAQ</a></strong> for further questions on supported replication technologies.</p>
+<h4>How do you like it?</h4>
+<p><em>Orchestrator</em> can run as a command line tool (no need for Web). It can server HTTP JSON API (no need for visualization) or it can server as HTTP web interface (no need to use command line options). Have it your way.</p>
+<h4>The technology stack</h4>
+<p><em>Orchestrator</em> is written in <a href="http://golang.org/">Go</a>, with <a href="https://github.com/go-martini/martini">Martini</a> as web framework; <a href="http://dev.mysql.com/">MySQL</a> as backend database; <a href="http://d3js.org/">D3</a>, <a href="http://jquery.com/">jQuery</a> &amp; <a href="http://getbootstrap.com/">bootstrap</a> for frontend.</p>
+<h4>License</h4>
+<p><em>Orchestrator</em> is released as open source under the <a href="https://raw.githubusercontent.com/outbrain/orchestrator/master/LICENSE">Apache 2.0 license</a> and is available at: <a href="https://github.com/outbrain/orchestrator">https://github.com/outbrain/orchestrator</a></p>
+<h4>Documentation</h4>
+<p>Read the <strong><a href="https://github.com/outbrain/orchestrator/wiki/Orchestrator-Manual">Manual</a></strong></p>
+<h4>Download</h4>
+<p>Get the <strong><a href="https://github.com/outbrain/orchestrator/releases">bundled binary+web files</a></strong> tarball, RPM or DEB packages. Or just clone the project. It's free.</p>
+<p>&nbsp;</p>

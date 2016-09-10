@@ -1,0 +1,108 @@
+---
+title: Implicit casting you don't want to see around
+date: 2010-07-07 10:53:37.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Data Types
+- SQL
+meta:
+  _edit_last: '2'
+  _syntaxhighlighter_encoded: '1'
+  _wp_old_slug: ''
+  _oembed_55835302a9154b1a33fa9bef669291f7: '<iframe src="http://www.slideshare.net/slideshow/embed_code/28163348"
+    width="427" height="356" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"
+    style="border:1px solid #CCC; border-width:1px 1px 0; margin-bottom:5px; max-width:
+    100%;" allowfullscreen> </iframe> <div style="margin-bottom:5px"> <strong> <a
+    href="https://www.slideshare.net/shlominoach/commonschema-22" title="common_schema
+    2.2 DBA&#x27;s framework for MySQL" target="_blank">common_schema 2.2 DBA&#x27;s
+    framework for MySQL</a> </strong> from <strong><a href="http://www.slideshare.net/shlominoach"
+    target="_blank">Shlomi Noach</a></strong> </div>'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>In <a href="http://code.openark.org/blog/mysql/beware-of-implicit-casting">Beware of implicit casting</a>, I have outlined the dangers of implicit casting. Here's a few more real-world examples I have tackled:</p>
+<h4>Number-String comparisons</h4>
+<p>Much like in programming languages, implicit casting is made to numbers when at least one of the arguments is a number. Thus:</p>
+<blockquote><p>[sql]<br />
+mysql&gt; SELECT 3 = '3.0';<br />
++-----------+<br />
+| 3 = '3.0' |<br />
++-----------+<br />
+|         1 |<br />
++-----------+<br />
+1 row in set (0.00 sec)</p>
+<p>mysql&gt; SELECT '3' = '3.0';<br />
++-------------+<br />
+| '3' = '3.0' |<br />
++-------------+<br />
+|           0 |<br />
++-------------+<br />
+[/sql]</p></blockquote>
+<p>The second query consists of pure strings comparison. It has no way to determine that number comparison should be made.</p>
+<h4>Direct DATE arithmetics</h4>
+<p>The first query <em>seems</em> to work, but is completely incorrect. The second explains why. The third is a total mess.<!--more--></p>
+<blockquote><p>[sql]<br />
+mysql&gt; SELECT DATE('2010-01-01')+3;<br />
++----------------------+<br />
+| DATE('2010-01-01')+3 |<br />
++----------------------+<br />
+|             20100104 |<br />
++----------------------+<br />
+1 row in set (0.00 sec)</p>
+<p>mysql&gt; SELECT DATE('2010-01-01')-3;<br />
++----------------------+<br />
+| DATE('2010-01-01')-3 |<br />
++----------------------+<br />
+|             20100098 |<br />
++----------------------+<br />
+1 row in set (0.00 sec)</p>
+<p>mysql&gt; SELECT '2010-01-01' - 3;<br />
++------------------+<br />
+| '2010-01-01' - 3 |<br />
++------------------+<br />
+|             2007 |<br />
++------------------+<br />
+1 row in set, 1 warning (0.00 sec)<br />
+[/sql]</p></blockquote>
+<h4>Number-String comparisons, big integers</h4>
+<p>Look at the following crazy comparisons:</p>
+<blockquote><p>[sql]<br />
+mysql&gt; SELECT 1234 = '1234';<br />
++---------------+<br />
+| 1234 = '1234' |<br />
++---------------+<br />
+|             1 |<br />
++---------------+</p>
+<p>mysql&gt; SELECT 123456789012345678 = '123456789012345678';<br />
++-------------------------------------------+<br />
+| 123456789012345678 = '123456789012345678' |<br />
++-------------------------------------------+<br />
+|                                         0 |<br />
++-------------------------------------------+</p>
+<p>mysql&gt; SELECT 123456789012345678 = '123456789012345677';<br />
++-------------------------------------------+<br />
+| 123456789012345678 = '123456789012345677' |<br />
++-------------------------------------------+<br />
+|                                         1 |<br />
++-------------------------------------------+<br />
+[/sql]</p></blockquote>
+<p>The amazing result of the last two comparisons may strike as odd. Actually, it may strike as a bug, and indeed when a customer approached me with this behavior I was at loss for words. But this is <a href="http://dev.mysql.com/doc/refman/5.0/en/type-conversion.html">documented</a>. The manual describes the cases for casting, then states: "... In all other cases, the arguments are compared <em>as             floating-point (real) numbers</em>. ..."</p>
+<h4>Lessons learned:</h4>
+<ul>
+<li>Be careful when comparing strings with floating point values. Matching depends on how both are represented.</li>
+<li>Avoid converting temporal types to strings when doing date manipulation.</li>
+<li>Avoid direct math on temporal types.</li>
+<li>Avoid casting <strong>BIGINT</strong>s represented by strings. Casting will turn out to use <strong>FLOAT</strong>s and may be incorrect.</li>
+</ul>
+<p>Last but not least:</p>
+<ul>
+<li>Use the proper data types for your data's representation. When dealing with numbers, use numbers. When dealing with temporal values, use temporal types.</li>
+</ul>

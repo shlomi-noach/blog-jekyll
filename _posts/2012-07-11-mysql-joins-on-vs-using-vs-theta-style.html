@@ -1,0 +1,124 @@
+---
+title: 'MySQL joins: ON vs. USING vs. Theta-style'
+date: 2012-07-11 06:54:20.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- SQL
+- Syntax
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>What is the difference between the following three syntaxes?</p>
+<blockquote>
+<pre>SELECT * FROM film JOIN film_actor ON (film.film_id = film_actor.film_id)
+SELECT * FROM film JOIN film_actor USING (film_id)
+SELECT * FROM film, film_actor WHERE film.film_id = film_actor.film_id</pre>
+</blockquote>
+<p>The difference is mostly syntactic sugar, but with a couple interesting notes.</p>
+<p>To put names, the first two are called <strong>"ANSI-style"</strong> while the third is called <strong>"Theta-style"</strong>.</p>
+<h4>Theta style</h4>
+<p>On the <strong>FROM</strong> clause, tables are listed as if with Cartesian products, and the <strong>WHERE</strong> clause specifies how the join should take place.</p>
+<p>This is considered to be the "old" style. It is somewhat confusing to read. Consider the following query:<!--more--></p>
+<blockquote>
+<pre><strong>SELECT</strong> * <strong>FROM</strong> film, film_actor <strong>WHERE</strong> film.film_id = film_actor.film_id <strong>AND</strong> actor_id = 17 <strong>AND</strong> film.length &gt; 120</pre>
+</blockquote>
+<p>The above lists films over <strong>120</strong> minutes in length, in which actor <strong>#17</strong> plays. Never mind the results; what about the query? Being just one part of the <strong>WHERE</strong> clause, a one out of three elements in the <strong>AND</strong> expression, the join equation gets lost. It is difficult to find and isolate the terms which make for table joins as opposed to terms which filter out rows. In the above example it is still relatively easy to point out. How about a query with <strong>5</strong> tables and a <strong>20</strong> terms <strong>WHERE</strong> clause?</p>
+<h4>ANSI style: ON</h4>
+<p>With <strong>JOIN</strong> ... <strong>ON</strong>, one separates the join terms from the filtering terms. Rewriting the previous example:</p>
+<blockquote>
+<pre><strong>SELECT</strong> * <strong>FROM</strong> film <strong>JOIN</strong> film_actor <strong>ON</strong> (film.film_id = film_actor.film_id) <strong>WHERE</strong> actor_id = 17 <strong>AND</strong> film.length &gt; 120</pre>
+</blockquote>
+<p>It is quite clear now what belongs to what.</p>
+<p>Note: the parenthesis are not strictly required in the <strong>ON</strong> clause. I personally like to use them: it makes for an even greater distinction between query parts. SQL syntax is such a mess!</p>
+<h4>ANSI style: USING</h4>
+<p>Is the special case where we join tables on columns of the same name, we can make a shortcut and use <strong>USING</strong>:</p>
+<blockquote>
+<pre><strong>SELECT</strong> * <strong>FROM</strong> film <strong>JOIN</strong> film_actor <strong>USING</strong> (film_id) <strong>WHERE</strong> actor_id = 17 <strong>AND</strong> film.length &gt; 120</pre>
+</blockquote>
+<p>This time the parenthesis are required (I'm not sure why the difference on that part).</p>
+<p>This is mainly a nicety, less words to type, and a resulting prettified query. But also note a couple differences:</p>
+<h4>USING vs. ON</h4>
+<p>The following is valid:</p>
+<blockquote>
+<pre>SELECT film.title, film_id FROM film JOIN film_actor USING (film_id) WHERE actor_id = 17 AND film.length &gt; 120;</pre>
+</blockquote>
+<p>But the following is not:</p>
+<blockquote>
+<pre>SELECT film.title, film_id FROM film JOIN film_actor ON (film.film_id = film_actor.film_id) WHERE actor_id = 17 AND film.length &gt; 120;
+<strong>ERROR 1052 (23000): Column 'film_id' in field list is ambiguous</strong></pre>
+</blockquote>
+<p>Since <strong>USING</strong> "knows" the film_id column is shared between both tables, it doesn't mind if we ask it without specifying an exact table. It would be the same value anyway!</p>
+<p><strong>ON</strong> is not as smart and requires further clarifications: which table exactly do you want?</p>
+<p>And the above is actually the result of this interesting phenomena: when using <strong>USING</strong>, the column only appears <em>once</em> in the result set:</p>
+<blockquote>
+<pre>SELECT * FROM film JOIN film_actor USING (film_id) WHERE actor_id = 17 AND film.length &gt; 120 LIMIT 1\G
+*************************** 1. row ***************************
+             <strong>film_id</strong>: 96
+               title: BREAKING HOME
+         description: A Beautiful Display of a Secret Agent And a Monkey who must Battle a Sumo Wrestler in An Abandoned Mine Shaft
+        release_year: 2006
+         language_id: 1
+original_language_id: NULL
+     rental_duration: 4
+         rental_rate: 2.99
+              length: 169
+    replacement_cost: 21.99
+              rating: PG-13
+    special_features: Trailers,Commentaries
+         last_update: 2006-02-15 05:03:42
+            actor_id: 17
+         last_update: 2006-02-15 05:05:03</pre>
+</blockquote>
+<p>But joining on <strong>ON</strong>, we get this column <em>twice</em>:</p>
+<blockquote>
+<pre>SELECT * FROM film JOIN film_actor ON film.film_id = film_actor.film_id WHERE actor_id = 17 AND film.length &gt; 120 LIMIT 1\G
+*************************** 1. row ***************************
+             <strong>film_id</strong>: 96
+               title: BREAKING HOME
+         description: A Beautiful Display of a Secret Agent And a Monkey who must Battle a Sumo Wrestler in An Abandoned Mine Shaft
+        release_year: 2006
+         language_id: 1
+original_language_id: NULL
+     rental_duration: 4
+         rental_rate: 2.99
+              length: 169
+    replacement_cost: 21.99
+              rating: PG-13
+    special_features: Trailers,Commentaries
+         last_update: 2006-02-15 05:03:42
+            actor_id: 17
+             <strong>film_id</strong>: 96
+         last_update: 2006-02-15 05:05:03</pre>
+</blockquote>
+<h4>Behind the scenes</h4>
+<p>The news is that MySQL treats all in the exact same way. With the kind help of <strong>EXPLAIN EXTENDED</strong>, we see that:</p>
+<blockquote>
+<pre>EXPLAIN EXTENDED SELECT film.title, film_id FROM film JOIN film_actor <strong>USING</strong> (film_id) WHERE actor_id = 17 AND film.length &gt; 120\G
+*************************** 1. row ***************************
+...
+2 rows in set, 1 warning (0.00 sec)
+
+root@mysql-5.1.51&gt; SHOW WARNINGS\G
+*************************** 1. row ***************************
+  Level: Note
+   Code: 1003
+Message: select `sakila`.`film`.`title` AS `title`,`sakila`.`film`.`film_id` AS `film_id` 
+         from `sakila`.`film` join `sakila`.`film_actor` 
+         where (
+                 <strong>(`sakila`.`film`.`film_id` = `sakila`.`film_actor`.`film_id`)</strong> 
+                 and (`sakila`.`film_actor`.`actor_id` = 17) 
+                 and (`sakila`.`film`.`length` &gt; 120)
+               )</pre>
+</blockquote>
+<p>All queries are translated internally to <em>theta-style</em>.</p>
+<p>This post only discusses inner joins. With outer joins the situation is somewhat different. Read <a href="http://www.mysqldiary.com/mysql-left-join/">this post</a> for more insight.</p>

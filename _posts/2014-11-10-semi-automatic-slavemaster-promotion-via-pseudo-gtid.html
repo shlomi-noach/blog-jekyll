@@ -1,0 +1,41 @@
+---
+title: Semi-automatic slave/master promotion via Pseudo GTID
+date: 2014-11-10 07:56:58.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- orchestrator
+- Pseudo GTID
+- Replication
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><a href="https://github.com/outbrain/orchestrator">Orchestrator</a> release <a href="https://github.com/outbrain/orchestrator/releases">1.2.7-beta</a> now supports semi-automatic slave promotion to master upon master death, via <a href="code.openark.org/blog/mysql/refactoring-replication-topology-with-pseudo-gtid">Pseudo GTID</a>.</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/10/orchestrator-make-master-highlighted.png"><img class="alignnone size-full wp-image-7150" src="{{ site.baseurl }}/assets/orchestrator-make-master-highlighted.png" alt="orchestrator-make-master-highlighted" width="809" height="363" /></a></p></blockquote>
+<p>When the master is dead, <em>orchestrator</em> automatically picks the most up-to-date slaves and marks them as <strong>"Master candidates"</strong>. It allows a <strong>/api/make-master</strong> call on such a slave (S), in which case it uses <a href="http://code.openark.org/blog/mysql/refactoring-replication-topology-with-pseudo-gtid">Pseudo GTID</a> to enslave its siblings, and set S as <strong>read-only = 0</strong>. All we need to do is click the <strong>"Make master"</strong> button.<!--more--></p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/10/orchestrator-make-master-confirm1.png"><img class="alignnone size-full wp-image-7145" src="{{ site.baseurl }}/assets/orchestrator-make-master-confirm1.png" alt="orchestrator-make-master-confirm" width="946" height="367" /></a></p></blockquote>
+<p>Yes, <strong>"OK"</strong>. A moment later:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/10/orchestrator-make-master-refactored1.png"><img class="alignnone size-large wp-image-7146" src="{{ site.baseurl }}/assets/orchestrator-make-master-refactored1-1024x256.png" alt="orchestrator-make-master-refactored" width="1024" height="256" /></a></p></blockquote>
+<p>See how the two slaves <strong>22988</strong>, <strong>22989</strong> are happily replicating from <strong>22990</strong>. Turning them into <strong>22990</strong>'s slave was possible even though their shared master was dead and were stopped at different replication positions.</p>
+<p><strong>22990</strong> is now writeable, and its on you to disconnect from its old master and to direct your application into this newly promoted instance.</p>
+<h4>Local master promotion</h4>
+<p>Likewise, a semi-automated solution for the corruption of a local master is in place. Consider the following, where <strong>22989</strong> is dead/inaccessible. <strong>22988</strong> and <strong>22990</strong> are stuck in replication:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/11/orchestrator-make-local-master.png"><img class="alignnone size-large wp-image-7164" src="{{ site.baseurl }}/assets/orchestrator-make-local-master-1024x263.png" alt="orchestrator-make-local-master" width="1024" height="263" /></a></p></blockquote>
+<p><em>Orchestrator</em> detects this situation and picks the most up-to-date slave, marking it as candidate for promotion. Click <strong>"Make lock master"</strong> to get:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/11/orchestrator-make-local-master-confirm.png"><img class="alignnone size-large wp-image-7165" src="{{ site.baseurl }}/assets/orchestrator-make-local-master-confirm-1024x257.png" alt="orchestrator-make-local-master-confirm" width="1024" height="257" /></a></p></blockquote>
+<p>Sure, OK:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/11/orchestrator-make-local-master-refactored.png"><img class="alignnone size-large wp-image-7166" src="{{ site.baseurl }}/assets/orchestrator-make-local-master-refactored-1024x276.png" alt="orchestrator-make-local-master-refactored" width="1024" height="276" /></a></p></blockquote>
+<p>And now <strong>22990</strong> takes over instead of <strong>22989</strong>, enslaving <strong>22988</strong>, both running happily ever after.</p>
+<h4> Automation</h4>
+<p>The above buttons are just convenience methods. You don't strictly need visualization/GUI for that. Everything is supported by the API, and can be used by a fully automated monitoring system. More to come in <em>orchestrator</em>.</p>
+<p>&nbsp;</p>

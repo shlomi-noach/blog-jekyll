@@ -1,0 +1,24 @@
+---
+layout: post
+title: 'SQL: Check if all columns are ''TRUE'''
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>SELECT MIN(c) = 1</p>
+<p>SELECT MIN(c) = 1 AND COUNT(DISTINCT c) = 1</p>
+<p>SELECT SUM(c = 0) = 0</p>
+<p>SELECT SUM(c =1) = COUNT(*)</p>
+<p>SELECT SUM(c) = COUNT(*)</p>

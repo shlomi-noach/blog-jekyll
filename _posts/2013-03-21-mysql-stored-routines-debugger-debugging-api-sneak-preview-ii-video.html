@@ -1,0 +1,47 @@
+---
+title: 'MySQL Stored Routines Debugger & Debugging API: sneak preview II, video'
+date: 2013-03-21 11:15:03.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- debug
+- rdebug
+- Stored routines
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+  _oembed_497ae8700f0f4fd2beeea7d4df54317b: <iframe width="500" height="281" src="http://www.youtube.com/embed/ynqLmK77XjE?feature=oembed"
+    frameborder="0" allowfullscreen></iframe>
+  _oembed_time_497ae8700f0f4fd2beeea7d4df54317b: '1429724384'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This is the <strong>2nd</strong> sneak preview of <a href="http://code.google.com/p/common-schema">common_schema</a>'s <strong>rdebug</strong>: debugger &amp; debugging API for MySQL stored routines (<a href="http://code.openark.org/blog/mysql/mysql-stored-routines-debugger-debugging-api-sneak-preview-video">see <strong>1st</strong> preview here</a>).</p>
+<p><em>rdebug</em> will be released as part of <em>common_schema</em>, free and open sourced.</p>
+<p>In this sneak preview I present:</p>
+<ul>
+<li>Compiling multiple routines with debug info</li>
+<li>Starting/stopping a debug session</li>
+<li>Step-over, step-in, step-out</li>
+<li>Showing stack trace</li>
+<li>Showing the next-statement to execute</li>
+<li>Viewing and manipulating local routine variables</li>
+<li>Misc. meta routines</li>
+</ul>
+<h4>The quick technical overview</h4>
+<p><em>rdebug</em> is a server-side mechanism, itself written in MySQL stored routines. It manipulates your routines by injecting debug code (easily removed afterwards).</p>
+<p>To debug a routine you will need two connections: one is the debugging connection, and the other is the worker connection. The debugger connection attaches itself to the worker connection, where your routines execute.</p>
+<p><em>rdebug</em> is controlled by an <strong>API</strong> of stored routines. This means any GUI tool may choose to use <em>rdebug</em> as its routine debugging mechanism. Your are not bound to a specific tool, a specific OS or framework. You may choose to invoke the API via command line, if you like; it's all in your server.</p>
+<h4>A video is worth a thousand blogs<!--more--></h4>
+<p>The following video demonstrates the debugging process of two stored procedures, one invoking the other. This allows for step-in/over/out commands, stack trace analysis, and of course variable inspection and modification.</p>
+<p>I can't say I caught the hang of capturing my desktop and editing the movie (doing it one on Linux and once on Mac), so please excuse any poor quality video/sound.</p>
+<p>http://youtu.be/ynqLmK77XjE</p>
+<p>The code is not yet released, but will be, shortly, under an open source license.</p>

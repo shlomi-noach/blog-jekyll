@@ -1,0 +1,2263 @@
+---
+title: ROUTINE_PRIVILEGES implementation
+date: 2011-06-22 14:14:45.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- INFORMATION_SCHEMA
+- Open Source
+- Security
+- Stored routines
+- Views
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Following up on <a title="Link to MySQL security: inconsistencies" rel="bookmark" href="http://code.openark.org/blog/mysql/mysql-security-inconsistencies">MySQL security: inconsistencies</a>, and on <a href="http://bugs.mysql.com/bug.php?id=61596">MySQL bug #61596</a>, I was thinking it may take a long time till the non-existent <strong>ROUTINE_PRIVILEGES</strong> view is implemented. Here's my own implementation of the view.</p>
+<p>I've followed the somewhat strange conventions used in the <strong>*_PRIVILEGES</strong> tables in <strong>INFORMATION_SCHEMA</strong>, where the <strong>IS_GRANTABLE</strong> is a separate column, although in <em><del>2nd</del> 1st normal form</em>.</p>
+<p>I present it here as a query, using session variables, rather than a view definition:<!--more--></p>
+<blockquote>
+<pre>SELECT STRAIGHT_JOIN
+  CONCAT('
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre>SELECT
+  CONCAT('
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', User, '
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+@
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', Host, '
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+') AS GRANTEE,
+  NULL AS ROUTINE_CATALOG,
+  Db AS ROUTINE_SCHEMA,
+  Routine_name AS ROUTINE_NAME,
+  Routine_type AS ROUTINE_TYPE,
+  UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) AS PRIVILEGE_TYPE,
+  IF(grantable_procs_priv.User IS NULL, 'NO', 'YES') AS IS_GRANTABLE
+FROM
+  mysql.procs_priv
+  CROSS JOIN (SELECT @counter := -1) select_init
+  CROSS JOIN (
+    SELECT
+      @counter := @counter+1 AS n
+    FROM
+      INFORMATION_SCHEMA.COLLATIONS
+    LIMIT 5
+  ) numbers
+  LEFT JOIN (
+      SELECT
+        DISTINCT User, Host, Db, Routine_name
+      FROM
+        mysql.procs_priv
+      WHERE
+         find_in_set('Grant', Proc_priv) &gt; 0
+    ) grantable_procs_priv USING (User, Host, Db, Routine_name)
+WHERE
+  numbers.n BETWEEN 0 AND CHAR_LENGTH(Proc_priv) - CHAR_LENGTH(REPLACE(Proc_priv, ',', ''))
+  AND UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) != 'GRANT'
+ORDER BY
+  GRANTEE, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, n
+;</pre>
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', User, '
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', User, '
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+@
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', Host, '
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+') AS GRANTEE,
+  NULL AS ROUTINE_CATALOG,
+  Db AS ROUTINE_SCHEMA,
+  Routine_name AS ROUTINE_NAME,
+  Routine_type AS ROUTINE_TYPE,
+  UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) AS PRIVILEGE_TYPE,
+  IF(grantable_procs_priv.User IS NULL, 'NO', 'YES') AS IS_GRANTABLE
+FROM
+  mysql.procs_priv
+  CROSS JOIN (SELECT @counter := -1) select_init
+  CROSS JOIN (
+    SELECT
+      @counter := @counter+1 AS n
+    FROM
+      INFORMATION_SCHEMA.COLLATIONS
+    LIMIT 5
+  ) numbers
+  LEFT JOIN (
+      SELECT
+        DISTINCT User, Host, Db, Routine_name
+      FROM
+        mysql.procs_priv
+      WHERE
+         find_in_set('Grant', Proc_priv) &gt; 0
+    ) grantable_procs_priv USING (User, Host, Db, Routine_name)
+WHERE
+  numbers.n BETWEEN 0 AND CHAR_LENGTH(Proc_priv) - CHAR_LENGTH(REPLACE(Proc_priv, ',', ''))
+  AND UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) != 'GRANT'
+ORDER BY
+  GRANTEE, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, n
+;</pre>
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+@
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', User, '
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+@
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', Host, '
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+') AS GRANTEE,
+  NULL AS ROUTINE_CATALOG,
+  Db AS ROUTINE_SCHEMA,
+  Routine_name AS ROUTINE_NAME,
+  Routine_type AS ROUTINE_TYPE,
+  UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) AS PRIVILEGE_TYPE,
+  IF(grantable_procs_priv.User IS NULL, 'NO', 'YES') AS IS_GRANTABLE
+FROM
+  mysql.procs_priv
+  CROSS JOIN (SELECT @counter := -1) select_init
+  CROSS JOIN (
+    SELECT
+      @counter := @counter+1 AS n
+    FROM
+      INFORMATION_SCHEMA.COLLATIONS
+    LIMIT 5
+  ) numbers
+  LEFT JOIN (
+      SELECT
+        DISTINCT User, Host, Db, Routine_name
+      FROM
+        mysql.procs_priv
+      WHERE
+         find_in_set('Grant', Proc_priv) &gt; 0
+    ) grantable_procs_priv USING (User, Host, Db, Routine_name)
+WHERE
+  numbers.n BETWEEN 0 AND CHAR_LENGTH(Proc_priv) - CHAR_LENGTH(REPLACE(Proc_priv, ',', ''))
+  AND UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) != 'GRANT'
+ORDER BY
+  GRANTEE, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, n
+;</pre>
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', Host, '
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', User, '
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+@
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', Host, '
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+') AS GRANTEE,
+  NULL AS ROUTINE_CATALOG,
+  Db AS ROUTINE_SCHEMA,
+  Routine_name AS ROUTINE_NAME,
+  Routine_type AS ROUTINE_TYPE,
+  UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) AS PRIVILEGE_TYPE,
+  IF(grantable_procs_priv.User IS NULL, 'NO', 'YES') AS IS_GRANTABLE
+FROM
+  mysql.procs_priv
+  CROSS JOIN (SELECT @counter := -1) select_init
+  CROSS JOIN (
+    SELECT
+      @counter := @counter+1 AS n
+    FROM
+      INFORMATION_SCHEMA.COLLATIONS
+    LIMIT 5
+  ) numbers
+  LEFT JOIN (
+      SELECT
+        DISTINCT User, Host, Db, Routine_name
+      FROM
+        mysql.procs_priv
+      WHERE
+         find_in_set('Grant', Proc_priv) &gt; 0
+    ) grantable_procs_priv USING (User, Host, Db, Routine_name)
+WHERE
+  numbers.n BETWEEN 0 AND CHAR_LENGTH(Proc_priv) - CHAR_LENGTH(REPLACE(Proc_priv, ',', ''))
+  AND UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) != 'GRANT'
+ORDER BY
+  GRANTEE, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, n
+;</pre>
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+') AS GRANTEE,
+  NULL AS ROUTINE_CATALOG,
+  Db AS ROUTINE_SCHEMA,
+  Routine_name AS ROUTINE_NAME,
+  Routine_type AS ROUTINE_TYPE,
+  UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) AS PRIVILEGE_TYPE,
+  IF(find_in_set('Grant', Proc_priv) &gt; 0, 'YES', 'NO') AS IS_GRANTABLE
+FROM
+  mysql.procs_priv
+  CROSS JOIN (
+    SELECT
+      @counter := @counter+1 AS n
+    FROM
+      INFORMATION_SCHEMA.COLLATIONS, (SELECT @counter := -1) select_init
+    LIMIT 5
+  ) numbers
+WHERE
+  numbers.n BETWEEN 0 AND CHAR_LENGTH(Proc_priv) - CHAR_LENGTH(REPLACE(Proc_priv, ',', ''))
+  AND UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) != 'GRANT'
+ORDER BY
+  GRANTEE, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, n
+;</pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', User, '
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre>SELECT
+  CONCAT('
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+@
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', Host, '
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+') AS GRANTEE,
+  NULL AS ROUTINE_CATALOG,
+  Db AS ROUTINE_SCHEMA,
+  Routine_name AS ROUTINE_NAME,
+  Routine_type AS ROUTINE_TYPE,
+  UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) AS PRIVILEGE_TYPE,
+  IF(grantable_procs_priv.User IS NULL, 'NO', 'YES') AS IS_GRANTABLE
+FROM
+  mysql.procs_priv
+  CROSS JOIN (SELECT @counter := -1) select_init
+  CROSS JOIN (
+    SELECT
+      @counter := @counter+1 AS n
+    FROM
+      INFORMATION_SCHEMA.COLLATIONS
+    LIMIT 5
+  ) numbers
+  LEFT JOIN (
+      SELECT
+        DISTINCT User, Host, Db, Routine_name
+      FROM
+        mysql.procs_priv
+      WHERE
+         find_in_set('Grant', Proc_priv) &gt; 0
+    ) grantable_procs_priv USING (User, Host, Db, Routine_name)
+WHERE
+  numbers.n BETWEEN 0 AND CHAR_LENGTH(Proc_priv) - CHAR_LENGTH(REPLACE(Proc_priv, ',', ''))
+  AND UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) != 'GRANT'
+ORDER BY
+  GRANTEE, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, n
+;</pre>
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', User, '
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+@
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', Host, '
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+') AS GRANTEE,
+  NULL AS ROUTINE_CATALOG,
+  Db AS ROUTINE_SCHEMA,
+  Routine_name AS ROUTINE_NAME,
+  Routine_type AS ROUTINE_TYPE,
+  UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) AS PRIVILEGE_TYPE,
+  IF(grantable_procs_priv.User IS NULL, 'NO', 'YES') AS IS_GRANTABLE
+FROM
+  mysql.procs_priv
+  CROSS JOIN (SELECT @counter := -1) select_init
+  CROSS JOIN (
+    SELECT
+      @counter := @counter+1 AS n
+    FROM
+      INFORMATION_SCHEMA.COLLATIONS
+    LIMIT 5
+  ) numbers
+  LEFT JOIN (
+      SELECT
+        DISTINCT User, Host, Db, Routine_name
+      FROM
+        mysql.procs_priv
+      WHERE
+         find_in_set('Grant', Proc_priv) &gt; 0
+    ) grantable_procs_priv USING (User, Host, Db, Routine_name)
+WHERE
+  numbers.n BETWEEN 0 AND CHAR_LENGTH(Proc_priv) - CHAR_LENGTH(REPLACE(Proc_priv, ',', ''))
+  AND UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) != 'GRANT'
+ORDER BY
+  GRANTEE, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, n
+;</pre>
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+@
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+@
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', Host, '
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+') AS GRANTEE,
+  NULL AS ROUTINE_CATALOG,
+  Db AS ROUTINE_SCHEMA,
+  Routine_name AS ROUTINE_NAME,
+  Routine_type AS ROUTINE_TYPE,
+  UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) AS PRIVILEGE_TYPE,
+  IF(grantable_procs_priv.User IS NULL, 'NO', 'YES') AS IS_GRANTABLE
+FROM
+  mysql.procs_priv
+  CROSS JOIN (SELECT @counter := -1) select_init
+  CROSS JOIN (
+    SELECT
+      @counter := @counter+1 AS n
+    FROM
+      INFORMATION_SCHEMA.COLLATIONS
+    LIMIT 5
+  ) numbers
+  LEFT JOIN (
+      SELECT
+        DISTINCT User, Host, Db, Routine_name
+      FROM
+        mysql.procs_priv
+      WHERE
+         find_in_set('Grant', Proc_priv) &gt; 0
+    ) grantable_procs_priv USING (User, Host, Db, Routine_name)
+WHERE
+  numbers.n BETWEEN 0 AND CHAR_LENGTH(Proc_priv) - CHAR_LENGTH(REPLACE(Proc_priv, ',', ''))
+  AND UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) != 'GRANT'
+ORDER BY
+  GRANTEE, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, n
+;</pre>
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', Host, '
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+@
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', Host, '
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+') AS GRANTEE,
+  NULL AS ROUTINE_CATALOG,
+  Db AS ROUTINE_SCHEMA,
+  Routine_name AS ROUTINE_NAME,
+  Routine_type AS ROUTINE_TYPE,
+  UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) AS PRIVILEGE_TYPE,
+  IF(grantable_procs_priv.User IS NULL, 'NO', 'YES') AS IS_GRANTABLE
+FROM
+  mysql.procs_priv
+  CROSS JOIN (SELECT @counter := -1) select_init
+  CROSS JOIN (
+    SELECT
+      @counter := @counter+1 AS n
+    FROM
+      INFORMATION_SCHEMA.COLLATIONS
+    LIMIT 5
+  ) numbers
+  LEFT JOIN (
+      SELECT
+        DISTINCT User, Host, Db, Routine_name
+      FROM
+        mysql.procs_priv
+      WHERE
+         find_in_set('Grant', Proc_priv) &gt; 0
+    ) grantable_procs_priv USING (User, Host, Db, Routine_name)
+WHERE
+  numbers.n BETWEEN 0 AND CHAR_LENGTH(Proc_priv) - CHAR_LENGTH(REPLACE(Proc_priv, ',', ''))
+  AND UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) != 'GRANT'
+ORDER BY
+  GRANTEE, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, n
+;</pre>
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+') AS GRANTEE,
+  NULL AS ROUTINE_CATALOG,
+  Db AS ROUTINE_SCHEMA,
+  Routine_name AS ROUTINE_NAME,
+  Routine_type AS ROUTINE_TYPE,
+  UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) AS PRIVILEGE_TYPE,
+  IF(find_in_set('Grant', Proc_priv) &gt; 0, 'YES', 'NO') AS IS_GRANTABLE
+FROM
+  mysql.procs_priv
+  CROSS JOIN (
+    SELECT
+      @counter := @counter+1 AS n
+    FROM
+      INFORMATION_SCHEMA.COLLATIONS, (SELECT @counter := -1) select_init
+    LIMIT 5
+  ) numbers
+WHERE
+  numbers.n BETWEEN 0 AND CHAR_LENGTH(Proc_priv) - CHAR_LENGTH(REPLACE(Proc_priv, ',', ''))
+  AND UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) != 'GRANT'
+ORDER BY
+  GRANTEE, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, n
+;</pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+@
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre>SELECT
+  CONCAT('
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', Host, '
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+') AS GRANTEE,
+  NULL AS ROUTINE_CATALOG,
+  Db AS ROUTINE_SCHEMA,
+  Routine_name AS ROUTINE_NAME,
+  Routine_type AS ROUTINE_TYPE,
+  UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) AS PRIVILEGE_TYPE,
+  IF(grantable_procs_priv.User IS NULL, 'NO', 'YES') AS IS_GRANTABLE
+FROM
+  mysql.procs_priv
+  CROSS JOIN (SELECT @counter := -1) select_init
+  CROSS JOIN (
+    SELECT
+      @counter := @counter+1 AS n
+    FROM
+      INFORMATION_SCHEMA.COLLATIONS
+    LIMIT 5
+  ) numbers
+  LEFT JOIN (
+      SELECT
+        DISTINCT User, Host, Db, Routine_name
+      FROM
+        mysql.procs_priv
+      WHERE
+         find_in_set('Grant', Proc_priv) &gt; 0
+    ) grantable_procs_priv USING (User, Host, Db, Routine_name)
+WHERE
+  numbers.n BETWEEN 0 AND CHAR_LENGTH(Proc_priv) - CHAR_LENGTH(REPLACE(Proc_priv, ',', ''))
+  AND UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) != 'GRANT'
+ORDER BY
+  GRANTEE, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, n
+;</pre>
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', User, '
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', Host, '
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+') AS GRANTEE,
+  NULL AS ROUTINE_CATALOG,
+  Db AS ROUTINE_SCHEMA,
+  Routine_name AS ROUTINE_NAME,
+  Routine_type AS ROUTINE_TYPE,
+  UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) AS PRIVILEGE_TYPE,
+  IF(grantable_procs_priv.User IS NULL, 'NO', 'YES') AS IS_GRANTABLE
+FROM
+  mysql.procs_priv
+  CROSS JOIN (SELECT @counter := -1) select_init
+  CROSS JOIN (
+    SELECT
+      @counter := @counter+1 AS n
+    FROM
+      INFORMATION_SCHEMA.COLLATIONS
+    LIMIT 5
+  ) numbers
+  LEFT JOIN (
+      SELECT
+        DISTINCT User, Host, Db, Routine_name
+      FROM
+        mysql.procs_priv
+      WHERE
+         find_in_set('Grant', Proc_priv) &gt; 0
+    ) grantable_procs_priv USING (User, Host, Db, Routine_name)
+WHERE
+  numbers.n BETWEEN 0 AND CHAR_LENGTH(Proc_priv) - CHAR_LENGTH(REPLACE(Proc_priv, ',', ''))
+  AND UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) != 'GRANT'
+ORDER BY
+  GRANTEE, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, n
+;</pre>
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+@
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', Host, '
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+') AS GRANTEE,
+  NULL AS ROUTINE_CATALOG,
+  Db AS ROUTINE_SCHEMA,
+  Routine_name AS ROUTINE_NAME,
+  Routine_type AS ROUTINE_TYPE,
+  UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) AS PRIVILEGE_TYPE,
+  IF(grantable_procs_priv.User IS NULL, 'NO', 'YES') AS IS_GRANTABLE
+FROM
+  mysql.procs_priv
+  CROSS JOIN (SELECT @counter := -1) select_init
+  CROSS JOIN (
+    SELECT
+      @counter := @counter+1 AS n
+    FROM
+      INFORMATION_SCHEMA.COLLATIONS
+    LIMIT 5
+  ) numbers
+  LEFT JOIN (
+      SELECT
+        DISTINCT User, Host, Db, Routine_name
+      FROM
+        mysql.procs_priv
+      WHERE
+         find_in_set('Grant', Proc_priv) &gt; 0
+    ) grantable_procs_priv USING (User, Host, Db, Routine_name)
+WHERE
+  numbers.n BETWEEN 0 AND CHAR_LENGTH(Proc_priv) - CHAR_LENGTH(REPLACE(Proc_priv, ',', ''))
+  AND UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) != 'GRANT'
+ORDER BY
+  GRANTEE, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, n
+;</pre>
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', Host, '
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', Host, '
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+') AS GRANTEE,
+  NULL AS ROUTINE_CATALOG,
+  Db AS ROUTINE_SCHEMA,
+  Routine_name AS ROUTINE_NAME,
+  Routine_type AS ROUTINE_TYPE,
+  UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) AS PRIVILEGE_TYPE,
+  IF(grantable_procs_priv.User IS NULL, 'NO', 'YES') AS IS_GRANTABLE
+FROM
+  mysql.procs_priv
+  CROSS JOIN (SELECT @counter := -1) select_init
+  CROSS JOIN (
+    SELECT
+      @counter := @counter+1 AS n
+    FROM
+      INFORMATION_SCHEMA.COLLATIONS
+    LIMIT 5
+  ) numbers
+  LEFT JOIN (
+      SELECT
+        DISTINCT User, Host, Db, Routine_name
+      FROM
+        mysql.procs_priv
+      WHERE
+         find_in_set('Grant', Proc_priv) &gt; 0
+    ) grantable_procs_priv USING (User, Host, Db, Routine_name)
+WHERE
+  numbers.n BETWEEN 0 AND CHAR_LENGTH(Proc_priv) - CHAR_LENGTH(REPLACE(Proc_priv, ',', ''))
+  AND UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) != 'GRANT'
+ORDER BY
+  GRANTEE, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, n
+;</pre>
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+') AS GRANTEE,
+  NULL AS ROUTINE_CATALOG,
+  Db AS ROUTINE_SCHEMA,
+  Routine_name AS ROUTINE_NAME,
+  Routine_type AS ROUTINE_TYPE,
+  UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) AS PRIVILEGE_TYPE,
+  IF(find_in_set('Grant', Proc_priv) &gt; 0, 'YES', 'NO') AS IS_GRANTABLE
+FROM
+  mysql.procs_priv
+  CROSS JOIN (
+    SELECT
+      @counter := @counter+1 AS n
+    FROM
+      INFORMATION_SCHEMA.COLLATIONS, (SELECT @counter := -1) select_init
+    LIMIT 5
+  ) numbers
+WHERE
+  numbers.n BETWEEN 0 AND CHAR_LENGTH(Proc_priv) - CHAR_LENGTH(REPLACE(Proc_priv, ',', ''))
+  AND UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) != 'GRANT'
+ORDER BY
+  GRANTEE, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, n
+;</pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', Host, '
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre>SELECT
+  CONCAT('
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+') AS GRANTEE,
+  NULL AS ROUTINE_CATALOG,
+  Db AS ROUTINE_SCHEMA,
+  Routine_name AS ROUTINE_NAME,
+  Routine_type AS ROUTINE_TYPE,
+  UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) AS PRIVILEGE_TYPE,
+  IF(grantable_procs_priv.User IS NULL, 'NO', 'YES') AS IS_GRANTABLE
+FROM
+  mysql.procs_priv
+  CROSS JOIN (SELECT @counter := -1) select_init
+  CROSS JOIN (
+    SELECT
+      @counter := @counter+1 AS n
+    FROM
+      INFORMATION_SCHEMA.COLLATIONS
+    LIMIT 5
+  ) numbers
+  LEFT JOIN (
+      SELECT
+        DISTINCT User, Host, Db, Routine_name
+      FROM
+        mysql.procs_priv
+      WHERE
+         find_in_set('Grant', Proc_priv) &gt; 0
+    ) grantable_procs_priv USING (User, Host, Db, Routine_name)
+WHERE
+  numbers.n BETWEEN 0 AND CHAR_LENGTH(Proc_priv) - CHAR_LENGTH(REPLACE(Proc_priv, ',', ''))
+  AND UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) != 'GRANT'
+ORDER BY
+  GRANTEE, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, n
+;</pre>
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', User, '
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+') AS GRANTEE,
+  NULL AS ROUTINE_CATALOG,
+  Db AS ROUTINE_SCHEMA,
+  Routine_name AS ROUTINE_NAME,
+  Routine_type AS ROUTINE_TYPE,
+  UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) AS PRIVILEGE_TYPE,
+  IF(grantable_procs_priv.User IS NULL, 'NO', 'YES') AS IS_GRANTABLE
+FROM
+  mysql.procs_priv
+  CROSS JOIN (SELECT @counter := -1) select_init
+  CROSS JOIN (
+    SELECT
+      @counter := @counter+1 AS n
+    FROM
+      INFORMATION_SCHEMA.COLLATIONS
+    LIMIT 5
+  ) numbers
+  LEFT JOIN (
+      SELECT
+        DISTINCT User, Host, Db, Routine_name
+      FROM
+        mysql.procs_priv
+      WHERE
+         find_in_set('Grant', Proc_priv) &gt; 0
+    ) grantable_procs_priv USING (User, Host, Db, Routine_name)
+WHERE
+  numbers.n BETWEEN 0 AND CHAR_LENGTH(Proc_priv) - CHAR_LENGTH(REPLACE(Proc_priv, ',', ''))
+  AND UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) != 'GRANT'
+ORDER BY
+  GRANTEE, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, n
+;</pre>
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+@
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+') AS GRANTEE,
+  NULL AS ROUTINE_CATALOG,
+  Db AS ROUTINE_SCHEMA,
+  Routine_name AS ROUTINE_NAME,
+  Routine_type AS ROUTINE_TYPE,
+  UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) AS PRIVILEGE_TYPE,
+  IF(grantable_procs_priv.User IS NULL, 'NO', 'YES') AS IS_GRANTABLE
+FROM
+  mysql.procs_priv
+  CROSS JOIN (SELECT @counter := -1) select_init
+  CROSS JOIN (
+    SELECT
+      @counter := @counter+1 AS n
+    FROM
+      INFORMATION_SCHEMA.COLLATIONS
+    LIMIT 5
+  ) numbers
+  LEFT JOIN (
+      SELECT
+        DISTINCT User, Host, Db, Routine_name
+      FROM
+        mysql.procs_priv
+      WHERE
+         find_in_set('Grant', Proc_priv) &gt; 0
+    ) grantable_procs_priv USING (User, Host, Db, Routine_name)
+WHERE
+  numbers.n BETWEEN 0 AND CHAR_LENGTH(Proc_priv) - CHAR_LENGTH(REPLACE(Proc_priv, ',', ''))
+  AND UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) != 'GRANT'
+ORDER BY
+  GRANTEE, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, n
+;</pre>
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', Host, '
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+') AS GRANTEE,
+  NULL AS ROUTINE_CATALOG,
+  Db AS ROUTINE_SCHEMA,
+  Routine_name AS ROUTINE_NAME,
+  Routine_type AS ROUTINE_TYPE,
+  UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) AS PRIVILEGE_TYPE,
+  IF(grantable_procs_priv.User IS NULL, 'NO', 'YES') AS IS_GRANTABLE
+FROM
+  mysql.procs_priv
+  CROSS JOIN (SELECT @counter := -1) select_init
+  CROSS JOIN (
+    SELECT
+      @counter := @counter+1 AS n
+    FROM
+      INFORMATION_SCHEMA.COLLATIONS
+    LIMIT 5
+  ) numbers
+  LEFT JOIN (
+      SELECT
+        DISTINCT User, Host, Db, Routine_name
+      FROM
+        mysql.procs_priv
+      WHERE
+         find_in_set('Grant', Proc_priv) &gt; 0
+    ) grantable_procs_priv USING (User, Host, Db, Routine_name)
+WHERE
+  numbers.n BETWEEN 0 AND CHAR_LENGTH(Proc_priv) - CHAR_LENGTH(REPLACE(Proc_priv, ',', ''))
+  AND UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) != 'GRANT'
+ORDER BY
+  GRANTEE, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, n
+;</pre>
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre wp-pre-tag-1></pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+') AS GRANTEE,
+  NULL AS ROUTINE_CATALOG,
+  Db AS ROUTINE_SCHEMA,
+  Routine_name AS ROUTINE_NAME,
+  Routine_type AS ROUTINE_TYPE,
+  UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) AS PRIVILEGE_TYPE,
+  IF(find_in_set('Grant', Proc_priv) &gt; 0, 'YES', 'NO') AS IS_GRANTABLE
+FROM
+  mysql.procs_priv
+  CROSS JOIN (
+    SELECT
+      @counter := @counter+1 AS n
+    FROM
+      INFORMATION_SCHEMA.COLLATIONS, (SELECT @counter := -1) select_init
+    LIMIT 5
+  ) numbers
+WHERE
+  numbers.n BETWEEN 0 AND CHAR_LENGTH(Proc_priv) - CHAR_LENGTH(REPLACE(Proc_priv, ',', ''))
+  AND UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) != 'GRANT'
+ORDER BY
+  GRANTEE, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, n
+;</pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+') AS GRANTEE,
+  NULL AS ROUTINE_CATALOG,
+  Db AS ROUTINE_SCHEMA,
+  Routine_name AS ROUTINE_NAME,
+  Routine_type AS ROUTINE_TYPE,
+  UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) AS PRIVILEGE_TYPE,
+  IF(grantable_procs_priv.User IS NULL, 'NO', 'YES') AS IS_GRANTABLE
+FROM
+  mysql.procs_priv
+  CROSS JOIN (SELECT @counter := -1) select_init
+  CROSS JOIN (
+    SELECT
+      @counter := @counter+1 AS n
+    FROM
+      INFORMATION_SCHEMA.COLLATIONS
+    LIMIT 5
+  ) numbers
+  LEFT JOIN (
+      SELECT
+        DISTINCT User, Host, Db, Routine_name
+      FROM
+        mysql.procs_priv
+      WHERE
+         find_in_set('Grant', Proc_priv) &gt; 0
+    ) grantable_procs_priv USING (User, Host, Db, Routine_name)
+WHERE
+  numbers.n BETWEEN 0 AND CHAR_LENGTH(Proc_priv) - CHAR_LENGTH(REPLACE(Proc_priv, ',', ''))
+  AND UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) != 'GRANT'
+ORDER BY
+  GRANTEE, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, n
+;</pre>
+</blockquote>
+<p>It takes <strong>2</strong> views and a table to make this a VIEW rather than a query.</p>
+<p>First teaser: the view which represents this query, along with many other interesting diagnostic views, is to take part in a new open source project I'm working on.</p>
+<h4>[UPDATE]</h4>
+<p>Guess I was in a rush to produce the query. Here's a shorter, cleaner one:</p>
+<blockquote>
+<pre>SELECT
+  CONCAT('
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', User, '
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+@
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+', Host, '
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>
+') AS GRANTEE,
+  NULL AS ROUTINE_CATALOG,
+  Db AS ROUTINE_SCHEMA,
+  Routine_name AS ROUTINE_NAME,
+  Routine_type AS ROUTINE_TYPE,
+  UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) AS PRIVILEGE_TYPE,
+  IF(find_in_set('Grant', Proc_priv) &gt; 0, 'YES', 'NO') AS IS_GRANTABLE
+FROM
+  mysql.procs_priv
+  CROSS JOIN (
+    SELECT
+      @counter := @counter+1 AS n
+    FROM
+      INFORMATION_SCHEMA.COLLATIONS, (SELECT @counter := -1) select_init
+    LIMIT 5
+  ) numbers
+WHERE
+  numbers.n BETWEEN 0 AND CHAR_LENGTH(Proc_priv) - CHAR_LENGTH(REPLACE(Proc_priv, ',', ''))
+  AND UPPER(SUBSTRING_INDEX(SUBSTRING_INDEX(Proc_priv, ',', n+1), ',', -1)) != 'GRANT'
+ORDER BY
+  GRANTEE, ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, n
+;</pre>
+</blockquote>
+<p>Example output:</p>
+<blockquote>
+<pre>+--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| GRANTEE                  | ROUTINE_CATALOG | ROUTINE_SCHEMA | ROUTINE_NAME               | ROUTINE_TYPE | PRIVILEGE_TYPE | IS_GRANTABLE |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | film_in_stock              | PROCEDURE    | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | EXECUTE        | NO           |
+| 'other_user'@'localhost' |            NULL | sakila         | inventory_held_by_customer | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | film_in_stock              | PROCEDURE    | EXECUTE        | YES          |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | NO           |
+| 'shlomi'@'127.0.0.1'     |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | NO           |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | EXECUTE        | YES          |
+| 'world_user'@'localhost' |            NULL | sakila         | get_customer_balance       | FUNCTION     | ALTER ROUTINE  | YES          |
++--------------------------+-----------------+----------------+----------------------------+--------------+----------------+--------------+</pre>
+</blockquote>

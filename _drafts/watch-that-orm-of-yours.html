@@ -1,0 +1,29 @@
+---
+layout: post
+title: Watch that ORM of yours
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>ORMs (Object-Relational Mappings) are a way to hide underlying database structure and workings, and provide with programmer-friendly interface to handling database objects. Ideally, a programmer will never have to understand SQL, and will never care about the specific RDBMS implementation she is using.</p>
+<p>Nothing is as simple, and ORMs are required to handle complicated cases &amp; understand the different RDBMS flavors. To a programmer, ORMs look cool. As a DBA, one finds drawbacks to using ORMs. Sometimes you just have to understand proper SQL or know your RDBMS if you want to make this work.</p>
+<p>I wish to provide with some examples; I'll relate to <em>Hibernate</em>, a popular Java ORM, and <em>Django</em>, a python web framework which includes its own ORM implementation.</p>
+<p>Hibernate:</p>
+<p>- sql obfuscation with weird aliases</p>
+<p>- duplicate and triple - indexes</p>
+<p>django:</p>
+<p>- check about offset/limit [20:10], with/out Pagination</p>
+<p>- how about the COUNT(*) per bookmark example?</p>
+<p>- django: creates AUTO_INCREMENT -- signed... why?</p>

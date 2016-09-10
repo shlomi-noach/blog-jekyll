@@ -1,0 +1,56 @@
+---
+title: New and Noteworthy in openark kit
+date: 2009-06-30 08:38:27.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- openark kit
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>A new release of <a href="http://code.openark.org/forge/openark-kit">openark kit</a> is out. Some interesting additions.changes are:</p>
+<ul>
+<li><a href="http://code.openark.org/forge/openark-kit/oak-online-alter-table">oak-online-alter-table</a>: now works with multicolumn UNIQUE KEYs</li>
+<li>New: <a title="oka-chunk-update" href="http://code.openark.org/forge/openark-kit/oak-chunk-update">oak-chunk-update</a>: break an long running or non indexed UPDATE/DELETE to small chunks</li>
+<li><a href="http://code.openark.org/forge/openark-kit/oak-purge-master-logs">oak-purge-master-logs</a>, <a href="http://code.openark.org/forge/openark-kit/oak-show-replication-status">oak-show-replication-status</a>: support for non standard slave ports</li>
+</ul>
+<p>openark kit is a set of utilities for MySQL, helping in easing out everyday's work. Let's look more closely at the changes.</p>
+<h4>oak-online-alter-table</h4>
+<p>The utility allows for non-blocking ALTER TABLE operations, under certain limitations. One limitation which has been removed in the current release was the single-column UNIQUE KEY limitation. As of now, a requirement for running <strong>oak-online-alter-table</strong> is that the altered table has <em>some</em> UNIQUE KEY. It could be numerical, textual, single column, multi-column (compound), anything.<!--more--></p>
+<p>Other requirements:</p>
+<ul>
+<li>The table must not have any FOREIGN KEY association (neither parent nor child). This will be the next requirement to change. Support for child-side FOREIGN KEY will be added. At current, I do not see a solution for parent-side.</li>
+<li>The altered table must share a UNIQUE KEY with the original one (that is, at least one UNIQUE KEY must stay in place after altering the table).</li>
+<li>The table must not have any 'AFTER' triggers defined. At current, I do not see a solution for that, the reason being that the utility needs to create those triggers as port of its mechanism, and that MySQL does not allow for atomic alteration of triggers. Also see <a href="http://code.openark.org/blog/mysql/why-of-the-week">this post</a>.</li>
+<li>Some operations, such as TRUNCATE, OPTIMIZE etc. are not permitted on the table while the utility works.</li>
+</ul>
+<p>There was need (and there still is) for many MySQL issues workarounds. I'll update as work progresses.</p>
+<h4>oak-chunk-update</h4>
+<p>Using similar techniques to oak-online-alter-table, and requiring a UNIQUE KEY on a table, this utility allows for breaking of a long running, or a non-indexed query, into small chunks, thereby allowing for relatively non blocking UPDATE/DELETE operations.</p>
+<p>For example, a <strong>DELETE FROM log WHERE log_ts &lt; '2009-01-01 00:00:00'</strong> might prove to be a long running query. If the log_ts column is not indexed, the table is virtually locked, whether this was MyISAM or InnoDB. Assuming an AUTO_INCREMENT column called 'id' exists (any UNIQUE KEY will do, so this is just an example), we can provide the following query as argument to oak-chunk-update:</p>
+<blockquote>
+<pre>DELETE FROM log WHERE log_ts &lt; '2009-01-01 00:00:00' AND <strong>OAK_CHUNK(log.id)</strong></pre>
+</blockquote>
+<p>The utility will parse the magic token <strong>OAK_CHUNK(...)</strong>, and will work the query over distinct ranges, e.g.:</p>
+<blockquote>
+<pre>DELETE FROM log WHERE log_ts &lt; '2009-01-01 00:00:00' AND log.id &gt; 11000 AND log.id &lt;= 12000
+DELETE FROM log WHERE log_ts &lt; '2009-01-01 00:00:00' AND log.id &gt; 12000 AND log.id &lt;= 13000
+etc.</pre>
+</blockquote>
+<p>While the above can also be easily solved using a simple stored procedure, the magic becomes more interesting when you have a compound UNIQUE KEY, which may have non integral columns.</p>
+<p>The utility also supports operations on multiple tables. Thus, one can use <strong>DELETE FROM t1 USING t1,t2...</strong>, for example, as long as an <strong>OAK_CHUNK(...)</strong> is proivded on one of the tables. It is interesting to see how the choice of table affects the chunking process.</p>
+<h4>oak-purge-master-logs, oak-show-replication-status</h4>
+<p>The two now support non default ports for slaves. This is achieved by utilizing the <strong>report_port</strong> parameter on the slaves, reading the value on <strong>SHOW SLAVE HOSTS</strong> (see <a href="http://code.openark.org/blog/mysql/the-importance-of-report_host-report_port">this post</a>). Both utilities support skipping <strong>SHOW SLAVE HOSTS</strong> and just picking up slaves by looking at <strong>SHOW PROCESSLIST</strong>.</p>
+<h4>Bugs</h4>
+<p>I've had issues with Google's Issues, which made me leave a couple of unanswered issues for a couple of months. Brrrr. (BTW both were only related to prerequisites). I'll resolve my issues issues. I'm looking forward for input, even though my spare time is little these days.</p>
+<h4>Acknowledgments</h4>
+<p>Writing of the toolkit is mostly done at my spare time, though being utilized in my professional work. Recently, a customer in urgent need has agreed for paying out for required development time on these scripts, while recognizing the open source model and license under which it is being developed and released, and removing all claims for copyright. I very much appreciate the customer's approach and wish to acknowledge his contribution.</p>

@@ -1,0 +1,113 @@
+---
+title: Checking for string permutation
+date: 2010-01-20 08:58:10.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Math
+- SQL
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>A permutation is a change of places. Thus, <strong>'lolhe'</strong> is a permuted <strong>'hello'</strong> (commonly referred to as 'scrambled text').</p>
+<p>I wish to present an SQL solution for checking if two strings are permutations of the same text.</p>
+<h4>About permutations</h4>
+<p>So, if <strong>'lolhe'</strong> is a permutation of <strong>'hello'</strong>, then <strong>'hello'</strong> is a permutation of <strong>'lolhe'</strong>, as well; and both are permutations of <strong>'elloh'</strong>. The <strong>REVERSE()</strong> of a text is an example of permutation. Mathematically, string permutation is an equivalence relation, and divides all strings to equivalence classes.</p>
+<h4>Use cases</h4>
+<ul>
+<li>We may be interested in permutations when a user chooses a password. We may disallow a password which is identical to the login name; but we may also disallow upper-lower-case-only transformations of the text. We may still disallow a <em>permutation</em> of the text.</li>
+<li>On a slightly different scale, the two queries: <strong>SELECT * FROM City WHERE id IN (5, 21, 13)</strong> and <strong>SELECT * FROM City WHERE id IN (13, 5, 21)</strong> are identical. Here, the permutation is not with string characters, but with string tokens. While the solution discussed is targeted at string characters, it can be easily converted to work with string tokens.</li>
+</ul>
+<h4>Checking for permutation</h4>
+<p>The solution I'm suggesting checks for permutation between 2 strings by permuting both to a third, <strong>normal form</strong>. The two string are permutations of each other if both have <em>the same normal form</em>.</p>
+<p><!--more-->What exactly <em>is</em> a normal form? Well, anything you like, really, as long as it's deterministic and works the same for all elements in the equivalence class (mathematically speaking, this was a really bad definition, I know).</p>
+<p>Enough of mathematical notions: on the practical side, I'll normalize 'CAB' to 'ABC', and 'DOG' to 'DGO'. Can you see what normalization means here? I'm merely rearranging the characters in alphabetical order. This rearrangement is in itself a permutation of the string (hence, one last mathematical statement, it can be seen as a representative of the equivalence class).</p>
+<p>So, to see if two strings are permutations of each other, we rearrange both in alphabetical order, and see if we got the same text. <strong>'hello'</strong> and <strong>'lolhe'</strong> both normalize to <strong>'ehllo'</strong>, hence are permutations.</p>
+<h4>Normalizing the text</h4>
+<p>Down to business: how do we normalize a text using SQL? Well, once again, <a href="http://code.openark.org/blog/mysql/unwalking-a-string-with-group_concat">string walking and string unwalking</a> to the rescue. The trick is to break the string apart (to distinct characters), then re-combine the characters, but instead of in original order, do that in ascending order.</p>
+<p>Breaking of the word 'hello' is as follows:</p>
+<blockquote>
+<pre>SELECT
+ SUBSTRING(s, value+1, 1) AS c
+FROM
+ tinyint_asc, (SELECT 'hello' AS s) sel1
+WHERE
+ value &lt; char_length(s);</pre>
+</blockquote>
+<p>Recombining it in ascending character order is as follows:</p>
+<blockquote>
+<pre>SELECT GROUP_CONCAT(c ORDER BY c SEPARATOR '') AS normalized FROM
+ (
+ SELECT
+   SUBSTRING(s, value+1, 1) AS c
+ FROM
+   tinyint_asc, (SELECT 'hello' AS s) sel1
+ WHERE
+   value &lt; char_length(s)
+ ) walked_string_select;
++------------+
+| normalized |
++------------+
+| ehllo      |
++------------+
+1 row in set (0.00 sec)</pre>
+</blockquote>
+<p>We can write a stored function to do that more conveniently (and, while at it, also normalize character case):</p>
+<blockquote>
+<pre>DELIMITER $$
+
+DROP FUNCTION IF EXISTS `normalize_text`$$
+CREATE FUNCTION `normalize_text` (input_text VARCHAR(255) CHARSET utf8) RETURNS VARCHAR(255) CHARSET utf8
+DETERMINISTIC
+READS SQL DATA
+BEGIN
+ SELECT GROUP_CONCAT(c ORDER BY c SEPARATOR '') INTO @normalized FROM
+ (
+ SELECT
+   SUBSTRING(s, value+1, 1) AS c
+ FROM
+   tinyint_asc, (SELECT input_text AS s) sel1
+ WHERE
+   value &lt; char_length(s)
+ ) walked_string_select;
+ RETURN LOWER(@normalized);
+END$$
+
+DELIMITER ;</pre>
+</blockquote>
+<p>And use like this:</p>
+<blockquote>
+<pre>mysql&gt; SELECT normalize_text('Smith');
++-------------------------+
+| normalize_text('Smith') |
++-------------------------+
+| himst                   |
++-------------------------+
+1 row in set (0.00 sec)
+
+mysql&gt; SELECT normalize_text('Smith') = normalize_text('Thims');
++---------------------------------------------------+
+| normalize_text('Smith') = normalize_text('Thims') |
++---------------------------------------------------+
+|                                                 1 |
++---------------------------------------------------+
+1 row in set (0.00 sec)
+
+mysql&gt; SELECT normalize_text('Smith') = normalize_text('Sniff');
++---------------------------------------------------+
+| normalize_text('Smith') = normalize_text('Sniff') |
++---------------------------------------------------+
+|                                                 0 |
++---------------------------------------------------+
+1 row in set (0.00 sec)</pre>
+</blockquote>
+<p>To compare tokenized strings (like <strong>'21,5,13'</strong> vs. <strong>'5,13,21'</strong>), we can use the <strong>SUBSTRING_INDEX()</strong> function to break the string apart, instead of <strong>SUBSTRING()</strong>.</p>

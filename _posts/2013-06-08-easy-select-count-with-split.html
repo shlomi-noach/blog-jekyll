@@ -1,0 +1,52 @@
+---
+title: Easy SELECT COUNT(*) with split()
+date: 2013-06-08 06:41:13.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- InnoDB
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+  _sg_subscribe-to-comments: j.faber@elevate.nl
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>The two conservative ways of getting the number of rows in an InnoDB table are:</p>
+<ul>
+<li><strong>SELECT COUNT(*) FROM my_table</strong>:<br />
+provides with an accurate number, but makes for a long running transaction which take ages on large tables. Long transactions make for locks</li>
+<li><strong>SELECT TABLE_ROWS FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='my_schema' AND TABLE_NAME='my_table'</strong>, or get same info via <strong>SHOW TABLE STATUS</strong>.<br />
+Gives immediate response, but the value can be <em>way off</em>; it can be two times as large as real value, or half the value. For query execution plans this may be a "good enough" estimation, but typically you just can't trust it for your own purposes.</li>
+</ul>
+<h4>Get a good estimate using chunks</h4>
+<p>You can get a good estimate by calculating the total number of rows in steps. Walk the table 1,000 rows at a time, and keep a counter. Each chunk is its own transaction, so, if the table is modified while counting, the final value does not make for an accurate account at any point in time. Typically this should be a far better estimate than <strong>TABLE_ROWS</strong>.</p>
+<p><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_split.html">QueryScript's split()</a> construct provides you with the means to work this out. Consider this script:<!--more--></p>
+<blockquote>
+<pre>set @total := 0;
+
+split(SELECT COUNT(*) FROM world.City INTO @chunk) {
+  set @total = @total + @chunk;
+}
+
+select @total;</pre>
+</blockquote>
+<p><strong>split()</strong> breaks the above <strong>SELECT COUNT(*)</strong> into distinct chunks, like:</p>
+<blockquote>
+<pre>SELECT COUNT(*) FROM world.City WHERE ((((`City`.`ID` &gt; '3000'))) AND (((`City`.`ID` &lt; '4000')) OR ((`City`.`ID` = '4000')))) INTO @chunk</pre>
+</blockquote>
+<p>You can make this a one liner like this:</p>
+<blockquote><p>call common_schema.run("set @total := 0;split(SELECT COUNT(*) FROM world.City INTO @chunk) set @total = @total + @chunk; select @total;");</p></blockquote>
+<p>If you like to watch the progress, add some verbose:</p>
+<blockquote>
+<pre>call common_schema.run("set @total := 0;split(SELECT COUNT(*) FROM world.City INTO @chunk) {set @total = @total + @chunk; select $split_step, @total} select @total;");</pre>
+</blockquote>
+<p><em>QueryScript</em> is available via <a href="https://code.google.com/p/common-schema/">common_schema</a>.</p>

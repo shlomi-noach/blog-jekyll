@@ -1,0 +1,84 @@
+---
+title: TokuDB configuration variables of interest
+date: 2013-10-23 19:42:12.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Configuration
+- InnoDB
+- Performance
+- TokuDB
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+  _sg_subscribe-to-comments: infoshevtsov@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>During our experiments I came upon a few TokuDB variables of interest; if you are using TokuDB you might want to look into these:</p>
+<ul>
+<li>
+<h4>tokudb_analyze_time</h4>
+</li>
+</ul>
+<p style="padding-left: 30px;">This is a boundary on the number of seconds an <strong>ANALYZE TABLE</strong> will operate on each index on each partition on a TokuDB table.</p>
+<p style="padding-left: 30px;">That is, if <strong>tokudb_analyze_time = 5</strong>, and your table has <strong>4</strong> indexes (including <strong>PRIMARY</strong>) and <strong>7</strong> partitions, then the total runtime is limited to <strong>5*4*7 = 140</strong> seconds.</p>
+<p style="padding-left: 30px;">Default in <strong>7.1.0</strong>: <strong>5</strong> seconds</p>
+<ul>
+<li>
+<h4>tokudb_cache_size</h4>
+</li>
+</ul>
+<p style="padding-left: 30px;">Similar to <strong>innodb_buffer_pool_size</strong>, this variable sets the amount of memory allocated by TokuDB for caching pages. Like InnoDB the table is clustered within the index, so the cache includes pages for both indexes and data.</p>
+<p style="padding-left: 30px;">Default: <strong>50%</strong> of total memory</p>
+<ul>
+<li>
+<h4>tokudb_directio</h4>
+</li>
+</ul>
+<p style="padding-left: 30px;">Boolean, values are <strong>0/1</strong>. Setting <strong>tokudb_directio = 1</strong> is like specifying <strong>innodb_flush_method = O_DIRECT</strong>. Which in turn means the OS should not cache pages requested by TokuDB. Default: <strong>0</strong>.</p>
+<p style="padding-left: 30px;">Now here's the interesting part: we are used to tell InnoDB to get the most memory we can provide (because we want it to cache as much as it can) and to avoid OS caching (because that would mean a page would appear both in the buffer pool and in OS memory, which is a waste). So the following setup is common:<!--more--></p>
+<blockquote style="padding-left: 30px;">
+<pre style="padding-left: 30px;"><strong>innodb_buffer_pool_size</strong> = [as much as you can allocate while leaving room for connection memory]G
+<strong>innodb_flush_method</strong> = O_DIRECT</pre>
+</blockquote>
+<p style="padding-left: 30px;">And my first instinct was to do the same for TokuDB. But after speaking to Gerry Narvaja of Tokutek, I realized it was not that simple. The reason TokuDB's default memory allocation is <strong>50%</strong> and not, say, <strong>90%</strong>, is that OS cache caches the data in compressed form, while TokuDB cache caches data in uncompressed form. Which means if you limit the TokuDB cache, you allow for more cache to the OS, that is used to cache compressed data, which means <em>more data</em> (hopefully, pending duplicates) in memory.</p>
+<p style="padding-left: 30px;">I did try both options and did not see an obvious difference, but did not test this thoroughly. My current setup is:</p>
+<blockquote style="padding-left: 30px;">
+<pre style="padding-left: 30px;"><strong>#No setup. just keep to the default for both:</strong>
+#tokudb_cache_size
+#tokudb_directio</pre>
+</blockquote>
+<ul>
+<li>
+<h4>tokudb_commit_sync</h4>
+</li>
+</ul>
+<ul>
+<li>
+<h4>tokudb_fsync_log_period</h4>
+</li>
+</ul>
+<p style="padding-left: 30px;">These two variable are similar in essence to <strong>innodb_flush_log_at_trx_commit</strong>, but allow for finer tuning. With <strong>innodb_flush_log_at_trx_commit</strong> you choose between syncing the transaction log to disk upon each commit and once per second. With <strong>tokudb_commit_sync = 1</strong> (which is default) you get transaction log sync to disk per commit. When <strong>tokudb_commit_sync = 0</strong>, then <strong>tokudb_fsync_log_period</strong> dictates the interval between flushes. So a value of <strong>tokudb_fsync_log_period = 1000</strong> means once per second.</p>
+<p style="padding-left: 30px;">Since our original InnoDB installation used <strong>innodb_flush_log_at_trx_commit = 2</strong>, our TokuDB setup is:</p>
+<blockquote style="padding-left: 30px;">
+<pre style="padding-left: 30px;"><strong>tokudb_commit_sync</strong> = 0
+<strong>tokudb_fsync_log_period</strong> = 1000</pre>
+</blockquote>
+<ul>
+<li>
+<h4>tokudb_load_save_space</h4>
+</li>
+</ul>
+<p style="padding-left: 30px;">Turned on (value <strong>1</strong>) by default as of TokuDB <strong>7.1.0</strong>, this parameter decides whether temporary file created on bulk load operations (e.g. ALTER TABLE) are compressed or uncompressed. Do yourself a big favour (why? <a href="http://code.openark.org/blog/mysql/converting-an-olap-database-to-tokudb-part-2-the-process-of-migration">read here</a>) and keep it on. Our setup is:</p>
+<blockquote>
+<pre><strong>tokudb_load_save_space</strong> = 1</pre>
+</blockquote>
+<p>TokuDB's general recommendation is: don't change the variables; the engine should work well right out of the box. I like the approach (by MySQL <strong>5.5</strong> I already lost count of InnoDB variables that can have noticeable impact; with <strong>5.6</strong> I'm all but lost). The complete list of configuration variables is found in <a href="http://www.tokutek.com/wp-content/uploads/2013/10/mysql-5.5.30-tokudb-7.1.0-users-guide.pdf">TokuDB's Users Guide</a>.</p>

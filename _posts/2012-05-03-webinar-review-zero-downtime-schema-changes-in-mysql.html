@@ -1,0 +1,38 @@
+---
+title: 'Webinar review: Zero-Downtime Schema Changes In MySQL'
+date: 2012-05-03 16:17:19.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- openark kit
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Yesterday I attended the <a href="http://www.percona.com/webinars/2012-05-02-zero-downtime-schema-changes-in-mysql/">Zero-Downtime Schema Changes In MySQL</a> webinar by Baron Schwartz, Percona (<em>do you say "attended" for something you listened to from your home office?</em>)</p>
+<p>I was keen to learn about possible enhancements and improvements of <a href="http://www.percona.com/doc/percona-toolkit/2.1/pt-online-schema-change.html">pt-online-schema-change</a> over <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-online-alter-table.html">oak-online-alter-table</a>. Here are my impressions:</p>
+<p>The base logic of <em>pt-online-schema-change</em> is essentially the same as of <em>oak-online-alter-table</em>. You create a ghost/shadow table, create complex triggers, copy in chunks, freeze and swap. Both work on any type of <strong>PRIMARY KEY</strong> (<em>oak-online-alter-table</em> can work with any <strong>UNIQUE KEY</strong>, I'm not sure about <em>pt-online-schema-change</em> on this), be it an <strong>INTEGER</strong>, other type, or a multi column one.</p>
+<p>However, <em>pt-online-schema-change</em> also adds the following:</p>
+<ul>
+<li>It supports <strong>FOREIGN KEY</strong>s (to some extent). This is something I've wanted to do with <em>oak-online-alter-table</em> but never got around to it. Foreign keys are very tricky, as Baron noted. With child-side keys, things are reasonably manageable. With parent-side this becomes a nightmare, sometimes unsolvable (when I say "unsolvable", I mean that under the constraint of having the operation run in a non-blocking, transparent way).</li>
+<li>Chunk size is auto-calculated by the script. This is a cool addition. Instead of letting the user throwing out numbers like <strong>1,000</strong> rows per chunk, in the hope that this is neither too small nor too large, the tool monitors the time it takes a chunk to complete, then adjusts the size of next chunk accordingly. Hopefully this leads to a more optimized run, where locks are only held for very short periods, yet enough rows are being processed at a time.</li>
+<li>The tool looks into replicating slaves to verify they're up to the job. If the slave lags too far, the tool slows down the work. This is an excellent feature, and again, one that I always wanted to have. Great work!</li>
+</ul>
+<p>So the three bullets above are what I understand to be the major advantages of Percona's tool over <em>oak-online-alter-table</em>.</p>
+<h4>Q &amp; A</h4>
+<p>The presentation itself was very good, and Baron answered some questions. There was one question he did not answer during the webinar, nor here, and I though I may pop in and answer it. Although I can't speak for the coders of <em>pt-online-schema-change</em>, I safely assume that since the logic follows that of <em>oak-online-alter-table</em>, the same answer applies in the case of Percona's toolkit.<!--more--></p>
+<p>But, first, a background question (asked and answered during the webinar):</p>
+<p><strong>Q</strong>: What if my table already has <strong>AFTER TRIGGER</strong>s?</p>
+<p><strong>A</strong>: Then this can't work out. The table must not have triggers.</p>
+<p>Which led to the next question:</p>
+<p><strong>Q</strong>: Can't the tool use <strong>BEFORE TRIGGER</strong>s instead?</p>
+<p>Imagine a <strong>MyISAM</strong> table being altered to <strong>InnoDB</strong> (this is a major task for which my tool was built). Suppose we used a <strong>BEFORE</strong> trigger on an <strong>INSERT</strong>, but the <strong>INSERT</strong> failed. That would make the shadow table inconsistent with the original table. Which is the reason why the trigger must be an <strong>AFTER</strong> trigger.</p>
+<p>With <strong>InnoDB</strong> this should not be an issue, since triggers and actions all play within the same transaction, so all succeed or all fail. I have this nagging feeling at the back of my head which says I've already had thoughts on this and have found a problem with <strong>InnoDB</strong> tables as well. I can't put my finger on it now, so no comment on this one at this stage.</p>

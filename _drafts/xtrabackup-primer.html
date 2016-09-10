@@ -1,0 +1,60 @@
+---
+layout: post
+title: xtrabackup primer
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>123</p>
+<ul>
+<li>It provides a consistent backup with point in time (binary log file + position) recognition.</li>
+<li>It makes a hot backup of InnoDB tables</li>
+<li>It also copies the <strong>.frm</strong> files. An assumption is made that table definition is not changed during the time of backup.</li>
+<li>It does backup MyISAM as well: at the end of the process of copying the InnoDB tables, <em>innobackupex</em> issues a <strong>FLUSH TABLES WITH READ LOCK</strong>, and copies all MyISAM tables, if any (recall that the <strong>mysql</strong> database consists of MyISAM tables). The lock is gained for purpose of <strong>SHOW MASTER STATUS</strong>, unless disabled by <strong>--no-lock</strong>.</li>
+</ul>
+<p>Make a backup:</p>
+<p>./innobackupex-1.5.1 --ibbackup=/data/tmp/xtrabackup-1.2/bin/xtrabackup /mnt/backup/</p>
+<blockquote>
+<pre>-rw-r--r-- 1 root root      356 2010-08-18 06:49 backup-my.cnf
+drwx------ 2 root root       43 2010-08-18 06:50 d2
+-rw-r--r-- 1 root root 52428800 2010-08-18 06:49 ibdata1
+drwxr-xr-x 2 root root     4096 2010-08-18 06:50 mysql
+-rw-r--r-- 1 root root        0 2010-08-18 06:49 mysql-stderr
+-rw-r--r-- 1 root root      373 2010-08-18 06:50 mysql-stdout
+drwx------ 2 root root       43 2010-08-18 06:50 test
+-rw-r--r-- 1 root root       23 2010-08-18 06:50 xtrabackup_binlog_info
+-rw-r--r-- 1 root root       56 2010-08-18 06:50 xtrabackup_checkpoints
+-rw-r--r-- 1 root root     2560 2010-08-18 06:50 xtrabackup_logfile
+</pre>
+</blockquote>
+<p>./innobackupex-1.5.1 --ibbackup=/data/tmp/xtrabackup-1.2/bin/xtrabackup --apply-log /mnt/backup/2010-08-18_06-49-35/</p>
+<blockquote>
+<pre>-rw-r--r-- 1 root root       356 2010-08-18 06:49 backup-my.cnf
+drwx------ 2 root root        43 2010-08-18 06:50 d2
+-rw-r--r-- 1 root root  52428800 2010-08-18 06:58 ibdata1
+-rw-r--r-- 1 root root 134217728 2010-08-18 06:58 ib_logfile0
+-rw-r--r-- 1 root root 134217728 2010-08-18 06:58 ib_logfile1
+drwxr-xr-x 2 root root      4096 2010-08-18 06:50 mysql
+-rw-r--r-- 1 root root         0 2010-08-18 06:49 mysql-stderr
+-rw-r--r-- 1 root root       373 2010-08-18 06:50 mysql-stdout
+drwx------ 2 root root        43 2010-08-18 06:50 test
+-rw-r--r-- 1 root root        23 2010-08-18 06:50 xtrabackup_binlog_info
+-rw-r--r-- 1 root root        56 2010-08-18 06:58 xtrabackup_checkpoints
+-rw-r--r-- 1 root root   2097152 2010-08-18 06:58 xtrabackup_logfile
+</pre>
+</blockquote>
+<p>123</p>
+<p>innobackupex-1.5.1 --ibbackup=/data/tmp/xtrabackup-1.2/bin/xtrabackup --stream=tar /mnt/backup/ | gzip &gt; /mnt/backup/backup.tar.gz</p>
+<p>123</p>

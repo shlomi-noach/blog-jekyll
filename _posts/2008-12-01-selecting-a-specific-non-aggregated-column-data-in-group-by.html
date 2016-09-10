@@ -1,0 +1,113 @@
+---
+title: Selecting a specific non aggregated column data in GROUP BY
+date: 2008-12-01 18:16:51.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- SQL
+- Syntax
+meta:
+  _edit_last: '2'
+  _oembed_8f4fbb4d3dec277260ae6b278a9161ba: '{{unknown}}'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+excerpt: "In a GROUP BY query, MySQL may allow specifying non aggregated columns.
+  For example, using MySQL's world database, I can get the number of countries per
+  continent, along with a \"sample\" country.\r\nWhat if I want to choose that \"sample\"
+  country? For example, for each continent, I wish to show the country with the largest
+  population. To simply see the largest population, I would use MAX(Population). But
+  which country is referred? I wish to provide a solution which does not involve sub-queries,
+  HAVING or JOINs."
+---
+<p>In a GROUP BY query, MySQL may allow specifying non aggregated columns. For example, using <a title="Setting up the world database" href="http://dev.mysql.com/doc/world-setup/en/world-setup.html">MySQL's world database</a>, I wish to get the number of countries per continent, along with a "sample" country:</p>
+<blockquote>
+<pre><strong>SELECT </strong>Continent, <strong>COUNT</strong>(*), Name
+<strong>FROM </strong>`Country` <strong>GROUP BY </strong>Continent
+
++---------------+----------+----------------+
+| Continent     | COUNT(*) | Name           |
++---------------+----------+----------------+
+| Asia          |       51 | Afghanistan    |
+| Europe        |       46 | Albania        |
+| North America |       37 | Aruba          |
+| Africa        |       58 | Angola         |
+| Oceania       |       28 | American Samoa |
+| Antarctica    |        5 | Antarctica     |
+| South America |       14 | Argentina      |
++---------------+----------+----------------+</pre>
+</blockquote>
+<p>What if I want to choose that "sample" country? For example, for each continent, I wish to show the country with the largest population. To simply see the largest population, I would use MAX(Population). But which country is referred? I wish to provide a solution which does not involve sub-queries, HAVING or JOINs.<!--more--></p>
+<p>We begin by observing MySQL's GROUP_CONCAT() fcuntion:</p>
+<blockquote>
+<pre><strong>SELECT </strong>Continent, <strong>COUNT</strong>(*), <strong>GROUP_CONCAT</strong>(Name)
+<strong>FROM </strong>`Country` <strong>GROUP BY </strong>Continent
+
++---------------+----------+-------------------------------+
+| Continent     | COUNT(*) | GROUP_CONCAT(Name)            |
++---------------+----------+-------------------------------+
+| Asia          |       51 | Sri Lanka,South Korea,Mald... |
+| Europe        |       46 | Iceland,Faroe Islands,Fran... |
+| North America |       37 | Martinique,Mexico,Puerto R... |
+| Africa        |       58 | Zambia,South Africa,Nigeri... |
+| Oceania       |       28 | Tokelau,American Samoa,Sam... |
+| Antarctica    |        5 | South Georgia and the Sout... |
+| South America |       14 | Suriname,Argentina,Ecuador... |
++---------------+----------+-------------------------------+</pre>
+</blockquote>
+<p>Mmmm. The order by which the names are presented does not seem to be of use to me. Didn't we say we want to see the country with the largest population? It just so happens that GROUP_CONCAT allows for ORDER BY:</p>
+<blockquote>
+<pre><strong>SELECT </strong>Continent, <strong>COUNT</strong>(*),
+  <strong>GROUP_CONCAT</strong>(Name <strong>ORDER BY </strong>Population <strong>DESC</strong>)
+<strong>FROM </strong>`Country` <strong>GROUP BY </strong>Continent
+
++---------------+----------+-------------------------------------------------------+
+| Continent     | COUNT(*) | GROUP_CONCAT(Name ORDER BY Population DESC)           |
++---------------+----------+-------------------------------------------------------+
+| Asia          |       51 | China,India,Indonesia,Pakistan,Bangladesh,Japan,Vi... |
+| Europe        |       46 | Russian Federation,Germany,United Kingdom,France,I... |
+| North America |       37 | United States,Mexico,Canada,Guatemala,Cuba,Dominic... |
+| Africa        |       58 | Nigeria,Egypt,Ethiopia,Congo, The Democratic Repub... |
+| Oceania       |       28 | Australia,Papua New Guinea,New Zealand,Fiji Island... |
+| Antarctica    |        5 | Heard Island and McDonald Islands,Antarctica,Bouve... |
+| South America |       14 | Brazil,Colombia,Argentina,Peru,Venezuela,Chile,Ecu... |
++---------------+----------+-------------------------------------------------------+</pre>
+</blockquote>
+<p>Good progress! We can now see our desired countries first in list. What's next? We want to isolate the first country for each continent. SUBSTRING_INDEX() comes to the rescue. Finally, we reach the following query:</p>
+<blockquote>
+<pre><strong>SELECT </strong>Continent, <strong>COUNT</strong>(*),
+  <strong>SUBSTRING_INDEX</strong>(
+    <strong>CONCAT</strong>(
+      <strong>GROUP_CONCAT</strong>(Name <strong>ORDER BY </strong>Population <strong>DESC</strong>),
+      ','),
+    ',', 1) <strong>AS </strong>largest_country
+<strong>FROM </strong>`Country` <strong>GROUP BY </strong>Continent
+
++---------------+----------+-----------------------------------+
+| Continent     | COUNT(*) | largest_country                   |
++---------------+----------+-----------------------------------+
+| Asia          |       51 | China                             |
+| Europe        |       46 | Russian Federation                |
+| North America |       37 | United States                     |
+| Africa        |       58 | Nigeria                           |
+| Oceania       |       28 | Australia                         |
+| Antarctica    |        5 | Heard Island and McDonald Islands |
+| South America |       14 | Brazil                            |
++---------------+----------+-----------------------------------+</pre>
+</blockquote>
+<p>This query provides us with the right answer. No sub-selects, no joins required. Granted, it's not too pretty, and it's not clean SQL (it's not even <em>standard</em> SQL) - but it just may save some query time: there's an index to add which will cause this query to run "using index":</p>
+<blockquote>
+<pre><strong>ALTER TABLE </strong>Country <strong>ADD INDEX </strong>`Continent_Name_Population` (`Continent`,`name`,`Population`)</pre>
+</blockquote>
+<h4>Notes</h4>
+<ul>
+<li>The above assumes the comma (',') does not appear in the text of the column. Otherwise, you can choose your own delimiter in GROUP_CONCAT().</li>
+<li>The concatenated string can grow long if many rows are aggregated per group. Check out <a title="MySQL docs" href="http://dev.mysql.com/doc/refman/5.0/en/server-system-variables.html#sysvar_group_concat_max_len">group_concat_max_len</a>, which limits the length of the GROUP_CONCAT string. Also see<code class="literal"> max_allowed_packet</code>, or read the whole deal on the <a title="MySQL docs" href="http://dev.mysql.com/doc/refman/5.0/en/group-by-functions.html#function_group-concat">MySQL online documentation</a>.</li>
+</ul>
+<p>[<strong>UPDATE</strong>: Turns out an anonymous comment to <a href="http://kristiannielsen.livejournal.com/6745.html">Kristian Nielsen's post</a> suggested the same solution, about a week ago. Moreover, it suggests that the CONCAT() part in the above solution is not required, as SUBSTRING_INDEX does not require the delimiter to be present]</p>

@@ -1,0 +1,49 @@
+---
+layout: post
+title: 'Converting an OLAP database to TokuDB, part 3: how well does it perform?'
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>To recap, we have converted a <strong>4TB</strong> (<strong>2TB</strong> COMPRESSED) InnoDB based MySQL DWH to TokuDB, resulting in <strong>200GB</strong> worth of files.</p>
+<p>This is an OLAP setup. We do not have many concurrent reads and next to no concurrent writes. I was interested in reading Vadim's <a href="http://www.mysqlperformanceblog.com/2013/09/05/tokudb-vs-innodb-timeseries-insert-benchmark/">TokuDB vs InnoDB in timeseries INSERT benchmark</a>. Our use case is completely different, though. Our requirements were:</p>
+<ul>
+<li>Solve space issues (solved)</li>
+<li>Get comparable performance to InnoDB on replicating slave</li>
+<li>Get comparable performance to InnoDB for reporting queries</li>
+</ul>
+<p>So, basically, see if this new slave replicates as well (lag-wise) as other InnoDB slaves, and see if queries issued against this slave run as fast as on other InnoDB slaves.</p>
+<h4>Apples vs. oranges</h4>
+<p>The comparison is not entirely fair. Our InnoDB setup has extensive MONTHly partitioning scheme, which did not run well (crashed, actually) under TokuDB, where we chose to use YEARly partitioning. Nevertheless this is what we ended up with, and this is what we have for comparison.</p>
+<h4>Slave lag</h4>
+<p>Almost immediately we noticed an unreasonably disproportionate slave lag on our TokuDB slave (red line in chart below) as compared to other slaves.</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2013/09/tokudb-slave-lag.png"><img class="size-full wp-image-6554 alignnone" alt="tokudb-slave-lag" src="{{ site.baseurl }}/assets/tokudb-slave-lag.png" width="700" height="329" /></a></p></blockquote>
+<p>Quick investigation led to the fact that, coincidentally, a manual heavy-duty operation was just taking place, which updated some year's worth of data retroactively. OK, but why so slow on TokuDB? Another quick investigation led to our apples vs. oranges problem: the query was relying on the MONTHly partitioning to do reasonable pruning: a <strong>WHERE</strong> condition on a date column did the right partition pruning; but where on InnoDB that would filter <strong>1</strong> month's worth of data, on TokuDB it would filter <strong>1</strong> <em>year</em>.</p>
+<p>Wasn't it suggested that TokuDB has online table operations? I decided to give it a shot, and add a proper index on our date column (I actually created a compound index, but irrelevant).</p>
+<p>It took <strong>13</strong> minutes to add an index on a <strong>1GB</strong> TokuDB table (approx. <strong>20GB</strong> InnoDB uncompressed equivalent):</p>
+<ul>
+<li>The <strong>ALTER</strong> was non blocking: table was unlocked at that duration</li>
+<li>The client issuing the <strong>ALTER</strong> <em>was</em> blocked (I thought it would happen completely in the background) -- but who cares?</li>
+<li>I would say <strong>13</strong> minutes is fast</li>
+</ul>
+<p>Not surprisingly adding the index eliminated the problem altogether.</p>
+<h4>Slave lag on LOAD DATA INFILE</h4>
+<p>We are still experiencing longer delay on replicating large <strong>LOAD DATA INFILE</strong> operations. The TokuDB slave performance is indeterministic: it sometimes lags far more than InnoDB slaves, sometimes comparable or even lower.</p>
+<p>Here, again, we have our apples vs. oranges: the TokuDB partitions are so much larger! I'm not sure how it would look like on MONTHly partitioning with TokuDB, although you may recall on part 1 of this series that <strong>LOAD DATA INFILE</strong> was <strong>30%</strong> slower on TokuDB even for comparable table size.</p>
+<p>Query performance time</p>
+<p>Configuration</p>
+<p>optimize: doubles space; alter PK: doubles space... -- solution: ENGIEN=TokuDB ROW_FORMAT=TokuDB_SMALL (the latter is the important one!)</p>
+<p>ALTER TABLE DROP PRIMAR KEY, ADD PRIMARY KEY - takes two weeks -- does not use the bulk loader. But CREATE TABLE LIKE '...', INSERT INTO new SELECT * FROM old, RENAME... <em>does</em> use the bulk loader and works just fine.</p>
+<p>123</p>

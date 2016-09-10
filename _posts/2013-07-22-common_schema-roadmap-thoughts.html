@@ -1,0 +1,53 @@
+---
+title: common_schema roadmap thoughts
+date: 2013-07-22 14:36:08.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- community
+- Development
+- Open Source
+- QueryScript
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I'm happy with <strong><a href="https://code.google.com/p/common-schema/">common_schema</a></strong>; it is in fact a tool I use myself on an almost daily basis. I'm also happy to see that it gains traction; which is why I'm exposing a little bit of my thoughts on general future development. I'd love to get feedback.</p>
+<h4>Supported versions</h4>
+<p>At this moment, <em>common_schema</em> supports MySQL &gt;= <strong>5.1</strong>, all variants. This includes <strong>5.5</strong>, <strong>5.6</strong>, MySQL, Percona Server &amp; MariaDB.</p>
+<p><strong>5.1</strong> is today past end of line, and I'm really missing the <strong>SIGNAL</strong>/<strong>RESIGNAL</strong> syntax that I would like to use; I can do in the meanwhile with version-specific code such as <strong>/*!50500 ... */</strong>. Nevertheless, I'm wondering whether I will eventually have to:</p>
+<ul>
+<li>Support different branches of <em>common_schema</em> (one that supports <strong>5.1</strong>, one that supports &gt;= <strong>5.5</strong>)</li>
+<li>Stop support for <strong>5.1</strong></li>
+</ul>
+<p>Of course community-wise, the former is preferred; but I have limited resources, so I would like to make a quick poll here:</p>
+<p>[poll id="3"]</p>
+<p>I'll use the poll's results as a <em>vague idea of what people use and want</em>. Or please use comments below to sound your voice!</p>
+<h4>rdebug</h4>
+<p>This was a crazy jump at providing a <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/rdebug.html">stored routine debugger and debugging API</a>. From some talk I made I don't see this getting traction. For the time being, I don't see that I will concentrate my efforts on this. Actually it is almost complete. You can step-into, step-out, step-over, set breakpoints, read variables, modify variables -- it's pretty cool.<!--more--></p>
+<p>But someone will eventually have to write a GUI front-end for this (eclipse/IntelliJ/whatever); I know not many will use a command line approach for a debugger. I also know I'm not going to write the GUI front-end. So the API is there, let's see how it rolls.</p>
+<h4>QueryScript</h4>
+<p>I will keep on improving <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script.html"><strong>QueryScript</strong></a>, and in particular split, error handling, and otherwise simplification of common tasks. I have no doubt QueryScript goes the right way: I just see how easy it is to solve complex problems with a QueryScript one-liner. Other bullets on my TODO for QueryScript:</p>
+<ul>
+<li>Script tracking (a semi-debugging mechanism, which allows one to recognize status of script)</li>
+<li>Message passing to scripts (again, a semi-debugger approach)</li>
+<li>Error recovery; ability to resume script from point of failure or point of suspension. I have plenty use cases for that.</li>
+</ul>
+<h4>performance_schema</h4>
+<p>I will most probably include parts of Mark Leith's <a href="http://www.markleith.co.uk/ps_helper/"><strong>ps_helper</strong></a>, which is released under <a href="http://www.wtfpl.net/">a permissive license</a>, and otherwise draw ideas from his work. I'm happy to learn parts of <em>ps_helper</em> were influenced by <em>common_schema</em> itself.</p>
+<h4>Hosting</h4>
+<p><em>common_schema</em> will most probably move out of Google Code; by Jan 2014 there will no longer be a "Downloads" section, and I really, <em>really</em>, want there to be a <em>"Downloads"</em> section.</p>
+<p>I could go LaunchPad, GitHub, BitBucket (they don't have <em>"Downloads"</em> sections, either, do they?), other; any advice?</p>
+<h4>World domination</h4>
+<p>Yep. This is still <em>common_schema</em>'s goal. More seriously, I would want to see it installed on every single MySQL server instance. Then I would control your fate. bwahahaha!</p>
+<p>Even more seriously, if you are a happy user, please do pass the word. I can only blog so much and present so much; there are no financing resources for this project, and I need all the help I can get in promoting <em>common_schema</em>. Thank you!</p>

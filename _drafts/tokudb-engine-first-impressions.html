@@ -1,0 +1,30 @@
+---
+layout: post
+title: TokuDB engine first impressions
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags:
+- Open Source
+- TokuDB
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Highpages: startup and shutdown</p>
+<p>This is an unconventional behavior, though not unlike InnoDB failing to load on non-matching transaction log files.</p>
+<p>Naming conventions</p>
+<p>Using MySQL internal names for tables, which makes incomprehensible file names (cannot deduce table name from file name) and need INFORMATION_SCHEMA tables to map table names to file names</p>
+<p>File locations</p>
+<p>All in the datadir. I would love to see table+index files placed within related schemas/directories</p>
+<p>Compression</p>
+<p>Anti-compression?!</p>
+<p>You have normal compression and aggressive compression. Aggressive compression at about twice as space efficient than normal compression. However: when ALTER TABLE ENGINE=TokuDB and then ALTER TABLE ENGINE=TokuDB ROW_FORMAT=..., table size on disk does not decrease. So go directly from InnoDB to aggressive compression.</p>
