@@ -79,7 +79,7 @@ analytics:
 author:
   name             : "Shlomi Noach"
   avatar           : "shlomi-noach.png"
-  bio              : "Engineering & Database geek"
+  bio              : "Software engineer & database geek"
   location         :
   email            :
   uri              :
@@ -220,7 +220,6 @@ jekyll-archives:
   permalinks:
     category: /categories/:name/
     tag: /tags/:name/
-
 
 # HTML Compression
 # - http://jch.penibelst.de/
