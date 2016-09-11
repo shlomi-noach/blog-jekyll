@@ -1,0 +1,29 @@
+---
+title: Reducing locks by narrowing primary key
+date: 2010-05-04 08:46:01.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Indexing
+- InnoDB
+- Performance
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: seun.osewa@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>In a period of two weeks, I had two cases with the exact same symptoms.</p>
+<p>Database users were experiencing low responsiveness. DBAs were seeing locks occurring on seemingly normal tables. In particular, looking at Innotop, it seemed that <strong>INSERT</strong>s were causing the locks.</p>
+<p>In both cases, tables were InnoDB. In both cases, there was a <strong>PRIMARY KEY</strong> on the combination of all <strong>5</strong> columns. And in both cases, there was no clear explanation as for why the <strong>PRIMARY KEY</strong> was chosen as such.</p>
+<h4>Choosing a proper PRIMARY KEY</h4>
+<p>Especially with InnoDB, which uses clustered index structure, the <strong>PRIMARY KEY</strong> is of particular importance. Besides the fact that a bloated <strong>PRIMARY KEY</strong> bloats the entire clustered index and secondary keys (see: <a href="http://code.openark.org/blog/mysql/the-depth-of-an-index-primer">The depth of an index: primer</a>), it is also a source for locks. It's true that any <strong>UNIQUE KEY</strong> can serve as a <strong>PRIMARY KEY</strong>. But not all such keys are good candidates.<!--more--></p>
+<h4>Reducing the locks</h4>
+<p>In both described cases, the solution was to add an <strong>AUTO_INCREMENT</strong> column to serve as the <strong>PRIMARY KEY</strong>, and have that <strong>5</strong> column combination under a secondary <strong>UNIQUE KEY</strong>. The impact was immediate: no further locks on that table were detected, and query responsiveness turned very high.</p>

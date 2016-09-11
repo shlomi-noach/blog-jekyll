@@ -1,0 +1,102 @@
+---
+title: 'mycheckpoint (rev. 190): HTTP server; interactive charts'
+date: 2010-09-07 07:53:01.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Monitoring
+- mycheckpoint
+- Open Source
+- python
+- scripts
+- Web
+meta:
+  _edit_last: '2'
+  _wp_old_slug: ''
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Revision <strong>190</strong> of <a href="../../forge/mycheckpoint">mycheckpoint</a>, a MySQL monitoring solution, has  been released. New and updated in this revision:</p>
+<ul>
+<li><strong>HTTP server</strong>: <em>mycheckpoint</em> can now act as a web server. Point your browser and start browsing through HTML reports. See mock up <a href="http://code.openark.org/forge/wp-content/uploads/2010/09/r190/mcp_sql00/sv_report_html_brief.html"><strong>demo</strong></a>.</li>
+<li><strong>Interactive charts</strong>: HTML line charts are now interactive, presenting with accurate data as you move over them. See <a href="http://code.openark.org/forge/wp-content/uploads/2010/09/r190/mcp_sql00_samples/sv_report_html_brief.html"><strong>sample</strong></a>.</li>
+<li><strong>Enhanced auto-deploy</strong>: now auto-recognizing failed upgrades.</li>
+<li><strong>Reduced footprint</strong>: much code taken out of the views, leading to faster loading times.</li>
+<li><strong>Better configuration file use</strong>: now supporting all command line options in config file.</li>
+<li><strong>Remote host monitoring accessibility</strong>: now supporting complete configurable accessibility details.</li>
+<li><strong>Bug fixes</strong>: thanks to the bug reporters!</li>
+</ul>
+<p><em>mycheckpoint</em> is free, simple, easy to use (now easier with HTTP server) and <strong>useful</strong>. I encourage you to try it out: even compared with other existing and emerging monitoring tools, I believe you will find it a breeze; it's low impact and lightness appealing; it's alerts mechanism assuring; its geeky SQL-based nature with ability to drill down to fine details -- geeky-kind-of-attractive.</p>
+<p>&lt;/encouragement&gt;</p>
+<h4>HTTP server</h4>
+<p>You can now run <em>mycheckpoint</em> in <em>http</em> mode:</p>
+<blockquote>
+<pre>bash$ <strong>mycheckpoint http</strong></pre>
+</blockquote>
+<p><em>mycheckpoint</em> will listen on port <strong>12306</strong>, and will present you with easy browsing through the reports of your <em>mycheckpoint</em> databases.<!--more--></p>
+<p>The <em>http</em> server automatically detects those schemata used by mycheckpoint, and utilizes the existing HTML views, integrating them into the greater web framework.</p>
+<p>While in <em>http</em> mode, mycheckpoint does nothing besides serving web pages. It does not actively exercise monitoring: you must still use the usual cron jobs or other scheduled tasks by which you invoke <em>mycheckpoint</em> for monitoring.</p>
+<p>The http server is directed at a single MySQL server, as with the following example:</p>
+<blockquote>
+<pre>bash$ <strong>mycheckpoint --host=slave1.localdomain --port=3306 --http-port=12306 http</strong></pre>
+</blockquote>
+<p>It is assumed that this server has the monitoring schemata.</p>
+<p>See mock up <a href="http://code.openark.org/forge/wp-content/uploads/2010/09/r190/mcp_sql00/sv_report_html_brief.html"><strong>demo</strong></a>. The demo uses presents with real output from a mycheckpoint HTTP server; I haven't got the means to put up a live demo.</p>
+<h4>Interactive charts</h4>
+<p>The <em>openark line charts</em>, used in the HTML reports, are now interactive. As you scroll over, the legend presents you with series values.</p>
+<p>No more <em>"I have this huge spike once every 4 hours, which reduces all other values to something that looks like zero but is actually NOT"</em>. Hover, and see the real values.</p>
+<p>See <a href="http://code.openark.org/forge/wp-content/uploads/2010/09/r190/mcp_sql00_samples/sv_report_html_brief.html"><strong>sample</strong></a>.</p>
+<h4>Enhanced auto-deploy</h4>
+<p>The idea with mycheckpoint is that it should know how to self upgrade the schema on version upgrade (much like automatic WordPress upgrades). mycheckpoint does bookkeeping of installed versions within the database, and upgrades by simple comparison.</p>
+<p>It now, following a couple of reported bugs, also recognizes failure of partial, failed upgrades. This adds to the automation of <em>mycheckpoint</em>'s installation.</p>
+<h4>Reduced footprint</h4>
+<p>Some of <em>mycheckpoint</em>'s views are complicated, and lead to a large amount of code in view declaration. This leads to increased table definition size (large <strong>.frm</strong> files). There has been some work to reduce this size where possible. Work is still ongoing, but some 30% has been taken off already. This leads to faster table (view) load time.</p>
+<h4>Better configuration file use</h4>
+<p>Any argument supported on the command line is now also supported in the config style. Much like is handled with MySQL. For example, one can issue:</p>
+<blockquote>
+<pre>mycheckpoint --monitored-host=sql02.mydb.com  --monitored-user=monitor --monitored-password=123456</pre>
+</blockquote>
+<p>But now also:</p>
+<blockquote>
+<pre>mycheckpoint</pre>
+</blockquote>
+<p>With the following in <strong>/etc/mycheckpoint.cnf</strong>:</p>
+<blockquote>
+<pre>[mycheckpoint]
+monitored_host     = sql02.mydb.com
+monitored_user     = monitor
+monitored_password = 123456
+</pre>
+</blockquote>
+<p>Rules are:</p>
+<ul>
+<li>If an option is specified on command line, it takes precedence over anything else.</li>
+<li>Otherwise, if it's specified in the configuration file, value is read from file.</li>
+<li>Otherwise use default value is used.</li>
+<li>On command line, option format is<strong> xxx-yyy-zzz</strong>: words split with dash/minus character.</li>
+<li>On configuration file, option format is <strong>xxx_yyy_zzz</strong>: words split with underscore. Unlike MySQL configuration format, dashes cannot be used.</li>
+<li>If an option is specified multiple times on configuration file -- well -- I have the answer, but I won't tell. Just don't do it. It's bad for your health.</li>
+</ul>
+<h4>Future plans</h4>
+<p>Work is going on. These are the non-scheduled future tasks I see:</p>
+<ul>
+<li>Monitoring InnoDB Plugin &amp; XtraDB status.</li>
+<li>A proper <em>man</em> page.</li>
+<li>Anything else that interests me &amp; the users.</li>
+</ul>
+<h4>Try it out</h4>
+<p>Try out <em>mycheckpoint</em>. It’s a different kind of monitoring   solution. Simple monitoring (charting) is immediate. For more interesting results you will need basic SQL skills, and in return you’ll get a lot   of power under your hands.</p>
+<ul>
+<li>Download mycheckpoint <a href="https://code.google.com/p/mycheckpoint/">here</a></li>
+<li>Visit the project’s <a href="../../forge/mycheckpoint">homepage</a></li>
+<li>Browse the <a href="../../forge/mycheckpoint/documentation">documentation</a></li>
+<li>Report <a href="https://code.google.com/p/mycheckpoint/issues/list">bugs</a></li>
+</ul>
+<p><em>mycheckpoint</em> is released under the <a href="http://www.opensource.org/licenses/bsd-license.php">New BSD  License</a>.</p>

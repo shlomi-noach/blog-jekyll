@@ -1,0 +1,100 @@
+---
+title: Finding CURRENT_USER for any user
+date: 2011-08-09 13:19:10.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- Security
+- SQL
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>A MySQL account is a user/host combination. A MySQL connection is done by a user connecting from some host.</p>
+<p>However, the user/host from which the connection is made are not the same as the user/host as specified in the account. For example, the account may be created thus:</p>
+<blockquote>
+<pre>CREATE USER 'temp'@'10.0.0.%' IDENTIFIED BY '123456';</pre>
+</blockquote>
+<p>The host as specified in the above account is a wildcard host. A connection by the <strong>'temp'</strong> user from <strong>'10.0.0.3'</strong> can map into that account. It thus happens that the connected user is <strong>'temp'@'10.0.0.3'</strong>, yet the assigned account is <strong>'temp'@'10.0.0.%'</strong>.</p>
+<p>MySQL provides with the <strong>USER()</strong> and <strong>CURRENT_USER()</strong> which map to the connected user and the assigned account, respectively, and which lets the current session identify the relation between the two. Read more on this on the <a href="http://dev.mysql.com/doc/refman/5.1/en/account-activity-auditing.html">MySQL docs</a>.</p>
+<h4>The problem</h4>
+<p>And the trouble is: MySQL only provides this functionality for the <em>current session</em>. Surprisingly, given a user/host combination, I cannot get MySQL to tell me which account matches those details.</p>
+<h4>The inconsistency</h4>
+<p>And I care because there is an inconsistency. Namely, when I do <strong>SHOW PROCESSLIST</strong> MySQL tells me the user &amp; host from which the connection is made. It does <em>not</em> tell me the account for which the process is assigned.<!--more--></p>
+<blockquote>
+<pre>root@mysql-5.1.51&gt; SHOW PROCESSLIST;
++----+------+----------------+---------------+---------+------+-------+------------------+
+| Id | User | Host           | db            | Command | Time | State | Info             |
++----+------+----------------+---------------+---------+------+-------+------------------+
+| 16 | temp | 10.0.0.3:54142 | common_schema | Query   |    0 | NULL  | SELECT id, ...   |
++----+------+----------------+---------------+---------+------+-------+------------------+</pre>
+</blockquote>
+<p>The absurdness is that a super user, the manager of a MySQL server, has the full listing of connections, yet is unable to map those connections to accounts.</p>
+<p>I got into this because of a suggestion by <a href="http://forge.mysql.com/people/person.php?id=340">Matthew Montgomery</a> to include a <a href="http://forge.mysql.com/tools/tool.php?id=106">tool</a> of his into <a href="http://code.openark.org/forge/common_schema">common_schema</a>.The tool says "Kill all slow queries which are not executed by users with the SUPER privilege".</p>
+<p>Great idea! But then, how do you identify such users?</p>
+<p>The tool attempts to find an exact match between <strong>INFORMATION_SCHEMA.PROCESSLIST</strong>'s user/host and <strong>INFORMATION_SCHEMA.USER_PRIVILEGES</strong>'s user/host. This will do well when the account is <strong>'root'@'localhost'</strong>, but less so when it is <strong>'maatkit'@'%.mydomain'</strong>.</p>
+<p>Unfortunately, many things fall under <strong>SUPER</strong>'s attention, and such accounts as monitoring, backup, management may require that privilege.</p>
+<h4>Account matching</h4>
+<p>Matching is achievable, but not completely trivial. If you're not aware of this, you should note that <strong>'temp'@'10.0.0.3'</strong> can match any of the following:</p>
+<blockquote>
+<pre>+------+----------+
+| temp | 10.0.%   |
+| %    | 10.0.0.3 |
+| temp | 10.0.0.3 |
+| temp | 10.0.0.% |
++------+----------+</pre>
+</blockquote>
+<p>And the rule is we must match by most specific host first, then by most specific user. The order of matching should be this:</p>
+<blockquote>
+<pre>+------+----------+
+| temp | 10.0.0.3 |
+| %    | 10.0.0.3 |
+| temp | 10.0.0.% |
+| temp | 10.0.%   |
++------+----------+</pre>
+</blockquote>
+<p>The first row to match our connection's user/host is the matched account.</p>
+<h4>The good news</h4>
+<p>This means the problem is reduced to an ORDER BY and to regular expressions. Easy enough to do with SQL. We prefer hosts with no wildcard to those with; we prefer more subdomains, we prefer no wildcard for users.</p>
+<h4>The code</h4>
+<p>The following query assumes you have two session variables: <strong>@connection_user</strong> and <strong>@connection_host</strong>.</p>
+<blockquote>
+<pre>SELECT
+  user, host
+FROM
+  mysql.user
+WHERE
+  @connection_user RLIKE
+    CONCAT('^',
+      REPLACE(
+        user,
+        '%', '.*'),
+      '$')
+  AND SUBSTRING_INDEX(@connection_host, ':', 1) RLIKE
+    CONCAT('^',
+      REPLACE(
+      REPLACE(
+        host,
+        '.', '\.'),
+        '%', '.*'),
+      '$')
+ORDER BY
+  CHAR_LENGTH(host) - CHAR_LENGTH(REPLACE(host, '%', '')) ASC,
+  CHAR_LENGTH(host) - CHAR_LENGTH(REPLACE(host, '.', '')) DESC,
+  host ASC,
+  CHAR_LENGTH(user) - CHAR_LENGTH(REPLACE(user, '%', '')) ASC,
+  user ASC
+LIMIT 1
+;</pre>
+</blockquote>
+<p>There is still a slight fine-tuning to do for the above, but it should work for the majority of security setups.</p>
+<p>The above (in rewritten form) and derivative work will, of course, be part of the next <a href="../../forge/common_schema">common_schema</a> release, expected early September.</p>

@@ -1,0 +1,129 @@
+---
+layout: post
+title: MySQL security audit, a QueryScript test case
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags:
+- common_schema
+- Open Source
+- openark kit
+- QueryScript
+- scripts
+- Security
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Following <a href="http://code.openark.org/blog/mysql/common_schema-over-traditional-scripts">common_schema over traditional scripts</a>, I was interested in yet another aspect of server side rewriting of Python code. <em>openark kit</em> introduced <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-security-audit.html">oak-security-audit</a>: a security audit of your MySQL server, checking up on accounts, passwords and general settings, resulting with a nice report.</p>
+<p>I wanted to take this as a test case for <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script.html">QueryScript</a>. How easy would it be to convert the well-working python script into <em>QueryScript</em> code?</p>
+<p>I was surprised and pleased by the result. Numbers-wise, the audit (which is not identical, but nearly so), was reduced from <strong>448</strong> down to <strong>188</strong> lines of code. And Python code is quite compact. So where did I save up?</p>
+<p>Naturally, all the connection stuff is gone, since I'm running from within the server. All the cursor stuff is gone. All the preparation of statements is gone. And, apparently <em>QueryScript</em>'s syntax does something right, since I managed to do most stuff very easily.</p>
+<p>Lines of code are not everything, of course. Sometimes they're not <em>anything</em>. The code has to be clear, right? Then consider:</p>
+<blockquote>
+<pre><strong>report h1</strong> <span style="color: #000080;">'Checking for non-local root accounts'</span>;
+<strong>set</strong> @loop_counter := 0;
+<strong>foreach</strong> ($user, $host: <strong>select</strong> user, host <strong>from</strong> mysql.user <strong>where</strong> user=<span style="color: #000080;">'root'</span> <strong>and</strong> host <strong>not</strong> <strong>in</strong> (<span style="color: #000080;">'127.0.0.1'</span>, <span style="color: #000080;">'localhost'</span>))
+{
+  <strong>if</strong> ((@loop_counter := @loop_counter+1) = 1) {
+    <strong>report</strong> <span style="color: #000080;">'Recommendation: limit following root accounts to local machines'</span>;
+  }
+  <strong>report code</strong> <span style="color: #000080;">'rename '</span>, mysql_grantee($user, $host), <span style="color: #000080;">' to '</span>, quote($user), <span style="color: #000080;">'@'</span>, quote(<span style="color: #000080;">'localhost'</span>); 
+}
+<strong>otherwise</strong>
+  <strong>report</strong> 'OK';</pre>
+</blockquote>
+<p>My guess is that even if this is the first time you encounter <em>QueryScript</em>, you can easily figure out the above code. If not, that means I have more work to do :)</p>
+<p>A sample security audit report looks like this:</p>
+<blockquote>
+<pre>mysql&gt; <strong>CALL</strong> security_audit();
++------------------------------------------------------------------------------+
+| report                                                                       |
++------------------------------------------------------------------------------+
+|                                                                              |
+| Checking for non-local root accounts                                         |
+| ====================================                                         |
+| Recommendation: limit following root accounts to local machines              |
+| &gt; rename 'root'@'central' to 'root'@'localhost'                              |
+|                                                                              |
+| Checking for anonymous users                                                 |
+| ============================                                                 |
+| OK                                                                           |
+|                                                                              |
+| Looking for accounts accessible from any host                                |
+| =============================================                                |
+| Recommendation: limit following accounts to specific hosts/subnet            |
+| &gt; rename user 'apps'@'%' to 'apps'@'&lt;specific host&gt;'                         |
+| &gt; rename user 'world_user'@'%' to 'world_user'@'&lt;specific host&gt;'             |
+|                                                                              |
+| Checking for accounts with empty passwords                                   |
+| ==========================================                                   |
+| Recommendation: set a decent password to these accounts.                     |
+| &gt; set password for 'apps'@'%' = PASSWORD(...)                                |
+| &gt; set password for 'world_user'@'localhost' = PASSWORD(...)                  |
+| &gt; set password for 'wu'@'localhost' = PASSWORD(...)                          |
+|                                                                              |
+| Looking for accounts with identical (non empty) passwords                    |
+| =========================================================                    |
+| Different users should not share same password.                              |
+| Recommendation: Change passwords for accounts listed below.                  |
+|                                                                              |
+| The following accounts share the same password:                              |
+| 'temp'@'10.0.%'                                                              |
+| 'temp'@'10.0.0.%'                                                            |
+| 'gromit'@'localhost'                                                         |
+|                                                                              |
+| The following accounts share the same password:                              |
+| 'replication'@'10.0.0.%'                                                     |
+| 'shlomi'@'localhost'                                                         |
+|                                                                              |
+| The following accounts share the same password:                              |
+| 'shlomi'@'127.0.0.1'                                                         |
+| 'monitoring_user'@'localhost'                                                |
+|                                                                              |
+| Looking for (non-root) accounts with admin privileges                        |
+| =====================================================                        |
+| Normal users should not have admin privileges, such as                       |
+| SUPER, SHUTDOWN, RELOAD, PROCESS, CREATE USER, REPLICATION CLIENT.           |
+| Recommendation: limit privileges to following accounts.                      |
+| &gt; GRANT &lt;non-admin-privileges&gt; ON *.* TO 'monitoring_user'@'localhost'       |
+| &gt; GRANT &lt;non-admin-privileges&gt; ON *.* TO 'shlomi'@'localhost'                |
+|                                                                              |
+| Looking for (non-root) accounts with global DDL privileges                   |
+| ==========================================================                   |
+| OK                                                                           |
+|                                                                              |
+| Looking for (non-root) accounts with global DML privileges                   |
+| ==========================================================                   |
+| OK                                                                           |
+|                                                                              |
+| Testing sql_mode                                                             |
+| ================                                                             |
+| Server's sql_mode does not include NO_AUTO_CREATE_USER.                      |
+| This means users can be created with empty passwords.                        |
+| Recommendation: add NO_AUTO_CREATE_USER to sql_mode,                         |
+| both in config file as well as dynamically.                                  |
+| &gt; SET @@global.sql_mode := CONCAT(@@global.sql_mode, ',NO_AUTO_CREATE_USER') |
+|                                                                              |
+| Testing old_passwords                                                        |
+| =====================                                                        |
+| OK                                                                           |
+|                                                                              |
+| Checking for `test` database                                                 |
+| ============================                                                 |
+| `test` database has been found.                                              |
+| `test` is a special database where any user can create, drop and manipulate  |
+| table data. Recommendation: drop it                                          |
+| &gt; DROP DATABASE `test`                                                       |
+| ---                                                                          |
+| Report generated on '2012-09-21 11:49:52                                     |
++------------------------------------------------------------------------------+</pre>
+</blockquote>

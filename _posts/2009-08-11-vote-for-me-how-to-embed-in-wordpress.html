@@ -1,0 +1,41 @@
+---
+title: '"Vote for me..." how to embed in WordPress'
+date: 2009-08-11 06:55:14.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Planet
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>[<strong>Clarification</strong>: <em>I'm not actually asking you to vote for me :D, the title just follows a previous post</em>]</p>
+<p>Diego Medina has <a href="http://fmpwizard.blogspot.com/2009/08/vote-for-me-widget-for-your-blog.html?showComment=1249965433072#c6520785617042085252">published</a> a JavaScript code that can be embedded in your blog posts, and which allows for voting on Planet MySQL from within your blog.</p>
+<p>Shared below is how to set this up for WordPress users. This is <em>not</em> a WordPress plugin, mind you. You'll need to manually edit the WordPress template files (can be done from the <strong>Dashboard</strong>-&gt;<strong>Appearance</strong>-&gt;<strong>Editor</strong>-&gt;<strong>Single post</strong>).</p>
+<p>The page you're likely to edit is <strong>single.php</strong>, but depending on your template this can change. The explanation below assumes a single post page. This can also be worked out for your blog's home page, which lists several entries.</p>
+<p>Since there is no point in presenting the Planet MySQL voting widget for entries which do not relate to MySQL, the code verifies that the post is in the <strong>'MySQL'</strong> category. You need to change this if your categorization differs. Mind that the category's name is case sensitive.<!--more--></p>
+<blockquote>
+<pre>&lt;?php if ( in_category( 'MySQL' )) { ?&gt;
+        &lt;script language="JavaScript"&gt;&lt;!--
+        var planet = "http://planet.mysql.com/entry/vote/?apivote=1&amp;";
+        var lk=encodeURIComponent(document.location);
+        var thumb_up="&lt;img src=\"http://planet.mysql.com/images/thumbs_up_blue.jpg\" border=\"0\" /&gt;";
+        var thumb_down="&lt;img src=\"http://planet.mysql.com/images/thumbs_down_blue.jpg\" border=\"0\" /&gt;";
+        document.write('Vote on the &lt;br /&gt;&lt;a href=\"http://planet.mysql.com/\" &gt;Planet MySQL&lt;/a&gt;&lt;br /&gt;');
+        document.write('&lt;a title=\"Vote me Up on the Planet MySQL\" href=\"' + planet + 'vote=1&amp;url=' + lk  +  '\"&gt;' + thumb_up + '&lt;/a&gt;');
+        document.write('&amp;nbsp;');
+        document.write('&lt;a title=\"Vote me Down on the Planet MySQL\" href=\"' + planet + 'vote=-1&amp;url=' + lk  +  '\"&gt;' + thumb_down + '&lt;/a&gt;');
+        // --&gt;&lt;/script&gt;
+&lt;?php } ?&gt;</pre>
+</blockquote>
+<p>The <strong>in_category( 'MySQL' )</strong> function determines if the current post is relevant. You may also choose to show the widget based on tags, in which case you'll need to use <strong>get_the_tags()</strong>, and verify your MySQL tag is in the resulting array.</p>
+<p>I chose to embed this just before the comments area.</p>
+<p>Good luck</p>

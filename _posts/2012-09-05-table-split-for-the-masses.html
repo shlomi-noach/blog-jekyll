@@ -1,0 +1,128 @@
+---
+title: Table split(...) for the masses
+date: 2012-09-05 07:04:05.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- Indexing
+- INFORMATION_SCHEMA
+- QueryScript
+- scripts
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>(pun intended)</p>
+<p><em>common_schema</em>'s new <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_split.html"><strong>split</strong></a> statement (see <a href="http://code.openark.org/blog/mysql/common_schema-1-1-released-split-try-catch-killall-profiling">release announcement</a>) auto-splits complex queries over large tables into smaller ones: instead of issuing one huge query, <em>split</em> breaks one's query into smaller queries, each working on a different set of rows (a chunk).</p>
+<p>Thus, it is possible to avoid holding locks for long times, allowing for smaller transactions. It also makes for breathing space for the RDBMS, at times boosting operation speed, and at times prolonging operation speed at will.</p>
+<p>In this post I show how <em>split</em> exposes itself to the user, should the user wish so.</p>
+<p><em>split</em> can manage queries of the following forms:</p>
+<ul>
+<li>DELETE FROM table_name [WHERE]...</li>
+<li>DELETE FROM table_name USING &lt;multi table syntax&gt; [WHERE]...</li>
+<li>UPDATE table_name SET ... [WHERE]...</li>
+<li>UPDATE &lt;multiple tables&gt; SET ... [WHERE]...</li>
+<li>INSERT INTO some_table SELECT ... FROM &lt;single or multiple tables&gt; [WHERE]...</li>
+<li>REPLACE INTO some_table SELECT ... FROM &lt;single or multiple tables&gt; [WHERE]...</li>
+<li>SELECT ... FROM &lt;multiple tables&gt; [WHERE]...</li>
+</ul>
+<p>The latter being a non-obvious one at first sight.</p>
+<h4>Basically, it' automatic</h4>
+<p>You just say:</p>
+<blockquote>
+<pre><strong>split</strong> (UPDATE sakila.inventory SET last_update = last_update + INTERVAL 6 HOUR)
+  throttle 2;</pre>
+</blockquote>
+<p>And <em>split</em> identifies <strong>sakila.inventory</strong> as the table which needs to be split, and injects appropriate conditions so as to work on a subset of the rows, in multiple steps.</p>
+<p>By the way, here's <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_execution.html">how to execute a QueryScript code</a> like the above.<!--more--></p>
+<h4>But you can drive in manual mode</h4>
+<p>You can use the following syntax:</p>
+<blockquote>
+<pre><strong>split</strong> (sakila.inventory)
+{
+  -- No action taken, but this block of code
+  -- is executed per chunk of the table.
+  -- I wonder what can be done here?
+}</pre>
+</blockquote>
+<p><em>split</em> provides with <em>magic variables</em>, which you can use in the action block. These are:</p>
+<ul>
+<li><strong>$split_step</strong>: <strong>1</strong>-based loop counter</li>
+<li><strong>$split_rowcount</strong>: number of rows affected in current chunk operation</li>
+<li><strong>$split_total_rowcount</strong>: total number of rows affected during this <em>split</em> statement</li>
+<li><strong>$split_total_elapsed_time</strong>: number of seconds elapsed since beginning of this <em>split</em> operation.</li>
+<li><strong>$split_clause</strong>: <em>the</em> magic variable: the filtering condition limiting rows to current chunk.</li>
+<li><strong>$split_table_schema</strong>: the explicit or inferred schema of split table</li>
+<li><strong>$split_table_name</strong>: the explicit or inferred table being split</li>
+</ul>
+<p>To illustrate, consider the following script:</p>
+<blockquote>
+<pre><strong>split</strong> (sakila.inventory)
+{
+  select <strong>$split_step</strong> as step, <strong>$split_clause</strong> as clause;
+}</pre>
+</blockquote>
+<p>The output is this:</p>
+<blockquote>
+<pre>+------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| step | clause                                                                                                                                                                    |
++------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|    1 | ((((`inventory`.`inventory_id` &gt; '1')) OR ((`inventory`.`inventory_id` = '1'))) AND (((`inventory`.`inventory_id` &lt; '1000')) OR ((`inventory`.`inventory_id` = '1000')))) |
++------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
++------+--------------------------------------------------------------------------------------------------------------------------------------+
+| step | clause                                                                                                                               |
++------+--------------------------------------------------------------------------------------------------------------------------------------+
+|    2 | ((((`inventory`.`inventory_id` &gt; '1000'))) AND (((`inventory`.`inventory_id` &lt; '2000')) OR ((`inventory`.`inventory_id` = '2000')))) |
++------+--------------------------------------------------------------------------------------------------------------------------------------+
+
++------+--------------------------------------------------------------------------------------------------------------------------------------+
+| step | clause                                                                                                                               |
++------+--------------------------------------------------------------------------------------------------------------------------------------+
+|    3 | ((((`inventory`.`inventory_id` &gt; '2000'))) AND (((`inventory`.`inventory_id` &lt; '3000')) OR ((`inventory`.`inventory_id` = '3000')))) |
++------+--------------------------------------------------------------------------------------------------------------------------------------+
+
++------+--------------------------------------------------------------------------------------------------------------------------------------+
+| step | clause                                                                                                                               |
++------+--------------------------------------------------------------------------------------------------------------------------------------+
+|    4 | ((((`inventory`.`inventory_id` &gt; '3000'))) AND (((`inventory`.`inventory_id` &lt; '4000')) OR ((`inventory`.`inventory_id` = '4000')))) |
++------+--------------------------------------------------------------------------------------------------------------------------------------+
+
++------+--------------------------------------------------------------------------------------------------------------------------------------+
+| step | clause                                                                                                                               |
++------+--------------------------------------------------------------------------------------------------------------------------------------+
+|    5 | ((((`inventory`.`inventory_id` &gt; '4000'))) AND (((`inventory`.`inventory_id` &lt; '4581')) OR ((`inventory`.`inventory_id` = '4581')))) |
++------+--------------------------------------------------------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>So you can get yourself a nice present: the SQL clause which filters the distinct chunks.</p>
+<h4>A simple demo: what can the user do with "manual mode"?</h4>
+<p>Normally, I would expect the user to use the automated version of <em>split</em>. Let it do the hard work! But sometimes, you may wish to take control into your hands.</p>
+<p>Consider an example: I wish to export a table into CSV file, but in chunks. <a href="http://www.percona.com/doc/percona-toolkit/2.1/pt-archiver.html">pt-archiver</a> does that. But it is also easily achievable with <em>split</em>:</p>
+<blockquote>
+<pre><strong>split</strong> (sakila.inventory) {
+  var <strong>$file_name</strong> := QUOTE(CONCAT('/tmp/inventory_chunk_', <strong>$split_step</strong>, '.csv'));
+  select * from sakila.inventory WHERE <strong>:${split_clause}</strong> INTO OUTFILE <strong>:${file_name}</strong>;
+}</pre>
+</blockquote>
+<p>This script uses the powerful <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_variables.html">variable expansion</a> feature of QueryScript: it extracts the text behind <strong></strong><strong>:${split_clause}</strong> and plants it as part of the query. It does the same for <strong></strong><strong>:${file_name}</strong>, making a variable possible where MySQL would normally disallow one (the <strong>INTO OUTFILE</strong> clause only accepts a constant string).</p>
+<p>What do we get as result?</p>
+<blockquote>
+<pre><strong>bash:/tmp$ ls -s1 inventory_chunk_*</strong>
+32 inventory_chunk_1.csv
+32 inventory_chunk_2.csv
+32 inventory_chunk_3.csv
+32 inventory_chunk_4.csv
+20 inventory_chunk_5.csv</pre>
+</blockquote>
+<h4>Conclusion</h4>
+<p>During the past months, and even as I developed <em>split</em> for <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script.html">QueryScript</a>, I found myself using it more and more for my own purposes. As it evolved I realized how much more simple it makes these complex operations. Heck, it beats <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-chunk-update.html">oak-chunk-update</a> in its ease of use. They both have their place, but <em>split</em> is so much more intuitive and easy to write. And, no external scripts, no package dependencies.</p>
+<p>I suggest that <em>split</em> is a major tool for server side scripting, server maintenance, developer operations. <a href="http://code.google.com/p/common-schema/">Check it out</a>!</p>

@@ -1,0 +1,79 @@
+---
+title: 'mylvmbackup HOWTO: minimal privileges & filesystem copy'
+date: 2010-08-17 19:42:40.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Backup
+- Linux
+- Open Source
+- scripts
+- Security
+meta:
+  _edit_last: '2'
+  _wp_old_slug: ''
+  _sg_subscribe-to-comments: dover999@msn.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This HOWTO discusses two (unrelated) issues with <a href="http://www.lenzg.net/mylvmbackup/"><em>mylvmbackup</em></a>:</p>
+<ul>
+<li>The minimal privileges required to take MySQL backups with <em>mylvmbackup.</em></li>
+<li>Making (non compressed) file system copy of one's data files.</li>
+</ul>
+<h4>Minimal privileges</h4>
+<p>Some just give <em>mylvmbackup</em> the root account, which is far too permissive. We now consider what the minimal requirements of <em>mylvmbackup</em> are.</p>
+<p>The queries <em>mylvmbackup</em> issues are:</p>
+<ul>
+<li><strong>FLUSH TABLES</strong></li>
+<li><strong>FLUSH TABLES WITH READ LOCK</strong></li>
+<li><strong>SHOW MASTER STATUS</strong></li>
+<li><strong>SHOW SLAVE STATUS</strong></li>
+<li><strong>UNLOCK TABLES</strong></li>
+</ul>
+<p>Both <strong>SHOW MASTER STATUS</strong> &amp; <strong>SHOW SLAVE STATUS</strong> require either the <strong>SUPER</strong> or <strong>REPLICATION CLIENT</strong> privilege. Since <strong>SUPER</strong> is more powerful, we choose <strong>REPLICATION CLIENT</strong>.</p>
+<p>The <strong>FLUSH TABLES</strong> * and <strong>UNLOCK TABLES</strong> require the <strong>RELOAD</strong> privilege.</p>
+<p>However, we are not done yet. <em>mylvmbackup</em> connects to the <strong>mysql</strong> database, which means we must also have some privilege there, too. We choose the <strong>SELECT</strong> privilege.</p>
+<p><!--more-->Finally, here are the commands to create a <em>mylvmbackup</em> user with minimal privileges:</p>
+<blockquote>
+<pre>CREATE USER 'mylvmbackup'@'localhost' IDENTIFIED BY '12345';
+GRANT RELOAD, REPLICATION CLIENT ON *.* TO 'mylvmbackup'@'localhost';
+GRANT SELECT ON mysql.* TO 'mylvmbackup'@'localhost';
+</pre>
+</blockquote>
+<p>In the <strong>mylvmbackup.conf</strong> file, the correlating rows are:</p>
+<blockquote>
+<pre>[mysql]
+user=mylvmbackup
+password=12345
+host=localhost
+</pre>
+</blockquote>
+<h4>Filesystem copy</h4>
+<p>By default, <em>mylvmbackup</em> creates a <strong>.tar.gz</strong> compressed backup file of your data. This is good if the reason you're running <em>mylvmbackup</em> is to, well, make a backup. However, as with all backups, one may be making the backup so as to create a replication server. But in this case you don't really want compressed data: you want the data extracted on the replication server, just as it is on the original host.</p>
+<p><em>mylvmbackup</em> supports backing up the files using <em>rsync</em>.</p>
+<p>To copy MySQL data to a remote host, configure the following in the mylvmbackup.conf file:</p>
+<blockquote>
+<pre>[fs]
+backupdir=shlomi@backuphost:/data/backup/mysql
+[misc]
+backuptype=rsync
+</pre>
+</blockquote>
+<p>You may be prompted to enter password, unless you have the user's public key stored on the remote host.</p>
+<p>Normally, <em>rsync</em> is considered as <strong>r</strong>emote-<strong>sync</strong>, but it also works on local file systems. If you have a remote directory mounted on your file system (e.g. with <em>nfs</em>), you can use the fact that <em>rsync</em> works just as well with local file systems:</p>
+<blockquote>
+<pre>[fs]
+backupdir=/mnt/backup/mysql
+[misc]
+backuptype=rsync
+</pre>
+</blockquote>
+<p>Voila! Your backup is complete.</p>

@@ -1,0 +1,103 @@
+---
+title: Two storage engines; different plans, Part I
+date: 2008-11-01 18:36:29.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Execution plan
+- Indexing
+- InnoDB
+- MyISAM
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>A popping question is: "Can an execution plan change for different storage engines?"</p>
+<p>The answer is "Yes". I will present two such cases, where the MySQL optimizer will choose different execution plans, based on our choice of storage engine.</p>
+<p>We will consider MyISAM and InnoDB, the two most popular engines. The two differ in many respects, and in particular, the way they implement indexes and statistics: two major players in the optimizer's point of view.<!--more--></p>
+<p>Let's start with the famous <em>world </em>database, available from <a title="http://dev.mysql.com/doc/world-setup/en/world-setup.html" href="http://dev.mysql.com/doc/world-setup/en/world-setup.html">dev.mysql.com</a>. All tables in this schema are defined as MyISAM. We will alter them between MyISAM and InnoDB as we go along.</p>
+<p>A peek at the Country table reveals:</p>
+<p><strong><code>mysql&gt; SHOW CREATE TABLE Country \G<br />
+*************************** 1. row ***************************<br />
+Table: Country<br />
+Create Table: CREATE TABLE `Country` (<br />
+`Code` char(3) NOT NULL default '',<br />
+`Name` char(52) NOT NULL default '',<br />
+`Continent` enum('Asia','Europe','North America','Africa','Oceania','Antarctica','South America') NOT NULL default 'Asia',<br />
+...<br />
+PRIMARY KEY  (`Code`)<br />
+) ENGINE=MyISAM DEFAULT CHARSET=latin1<br />
+1 row in set (0.00 sec)</code></strong></p>
+<p>To see the first example of execution plan difference, we will add an index on the Country table:</p>
+<p><strong><code>ALTER TABLE Country ADD INDEX (Continent);</code></strong></p>
+<p>And run the following query to find European country codes:</p>
+<p><strong><code>mysql&gt; SELECT Code FROM Country WHERE Continent = 'Europe';<br />
++------+<br />
+| Code |<br />
++------+<br />
+| NLD  |<br />
+| ALB  |<br />
+| AND  |<br />
+| BEL  |<br />
+| BIH  |<br />
+| GBR  |<br />
+...</code></strong></p>
+<p>But how is this query executed?</p>
+<p><strong><code>mysql&gt; EXPLAIN SELECT Code FROM Country WHERE Continent = 'Europe'\G<br />
+*************************** 1. row ***************************<br />
+id: 1<br />
+select_type: SIMPLE<br />
+table: Country<br />
+type: ref<br />
+possible_keys: Continent<br />
+key: Continent<br />
+key_len: 1<br />
+ref: const<br />
+rows: 37<br />
+Extra: Using where<br />
+1 row in set (0.00 sec)</code></strong></p>
+<p>Simple enough: we asked for European countries only. MySQL has found the index on Continent to be appropriate. However, to get the actual Code, a table row read was necessary.</p>
+<p>InnoDB will provide a different plan, though:</p>
+<p><strong><code>mysql&gt; ALTER TABLE Country ENGINE=InnoDB;<br />
+Query OK, 239 rows affected (0.18 sec)<br />
+Records: 239  Duplicates: 0  Warnings: 0</code></strong></p>
+<p><strong><code>mysql&gt; EXPLAIN SELECT Code FROM Country WHERE Continent = 'Europe'\G<br />
+*************************** 1. row ***************************<br />
+id: 1<br />
+select_type: SIMPLE<br />
+table: Country<br />
+type: ref<br />
+possible_keys: Continent<br />
+key: Continent<br />
+key_len: 1<br />
+ref: const<br />
+rows: 46<br />
+Extra: Using where; Using index<br />
+1 row in set (0.00 sec)</code></strong></p>
+<p>Can you spot the difference? The "Extra" column now indicates "Using index" (The numbers of expected rows also differ, but that's another issue).</p>
+<p>The reason for this change lies with the way MyISAM and InnoDB implement indexes. MyISAM takes the approach where the table data resides in its own space (and in fact, its own file), and all indexes refer to rows in that space. MyISAM is using nonclustered indexes.</p>
+<p>InnoDB, however, uses a clustered index on the PRIMARY KEY. That is, for every table there is always a PRIMARY KEY index (even if we never defined one), and table data is aggregated withing the index' structure. And so, to access table rows, one must first traverse the PRIMARY KEY index. This type of index is called a "clustered index". The Code column is the primary key, and therefore the data is clustered on the Code column.</p>
+<p>InnoDB's secondary indexes behave altogether differently. A secondary index does not refer to the table rows directly, but instead refer to the PRIMARY KEY value, which relates to those rows. A table look up using a secondary key involves a search on that key, only to get a PRIMARY KEY value, and search on that clustered index as well. A side effect is that a secondary index includes the values of the PRIMARY KEY. Each secondary index, like the one we created on Continent, is somewhat a compound index, like on (Continent, Code). This is the reason that for our query, a search on the index was enough. There was no need to access table data, since all relevant data could be found within the index.</p>
+<p>I say "somewhat", because in contrast with an index on (Continent, Code), the index does not necessarily store the PRIMARY KEY values in any particular order. To prove this, let's ask the following:</p>
+<p><strong><code>mysql&gt; EXPLAIN SELECT Code FROM Country WHERE Continent = 'Europe' ORDER BY Code\G<br />
+*************************** 1. row ***************************<br />
+id: 1<br />
+select_type: SIMPLE<br />
+table: Country<br />
+type: ref<br />
+possible_keys: Continent<br />
+key: Continent<br />
+key_len: 1<br />
+ref: const<br />
+rows: 46<br />
+Extra: Using where; Using index; Using filesort<br />
+1 row in set (0.00 sec)</code></strong></p>
+<p>There's a "Using filesort" comment in the "Extra" column, which would not be there had we used a compound index on (Continent, Code).</p>

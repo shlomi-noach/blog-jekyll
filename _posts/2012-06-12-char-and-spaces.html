@@ -1,0 +1,59 @@
+---
+title: CHAR and spaces
+date: 2012-06-12 07:28:08.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Data Types
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: mysql@myname.nl
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I know about it, I knew about it all along, but... it's so easy to fall for it; there's just so much absurdity!</p>
+<p>A <strong>CHAR</strong> type has a known number of characters. For example, the column:</p>
+<blockquote>
+<pre>CountryCode CHAR(3) CHARSET ascii NOT NULL</pre>
+</blockquote>
+<p>- is known to have exactly three characters. These could be <strong>'USA'</strong>, <strong>'FRA'</strong>, etc.</p>
+<p>What happens with spaces? A SQL <strong>CHAR</strong> type ignores any trailing spaces; thus, the code <strong>'GB '</strong> (the characters <strong>'G'</strong>, <strong>'B'</strong>, and the space <strong>' '</strong>) is interpreted as <strong>'GB'</strong>. Trailing spaces are not regarded as part of the text. Want to see some absurdity?</p>
+<blockquote>
+<pre>CREATE TABLE `c_test` (
+  `c` char(1) DEFAULT NULL
+);
+INSERT INTO c_test VALUES ('a');
+INSERT INTO c_test VALUES ('b');
+INSERT INTO c_test VALUES (' ');
+
+SELECT c, LENGTH(c), c = 'a', c = 'b', c = ' ', LENGTH(' ') FROM c_test;
++------+-----------+---------+---------+---------+-------------+
+| c    | LENGTH(c) | c = 'a' | c = 'b' | c = ' ' | LENGTH(' ') |
++------+-----------+---------+---------+---------+-------------+
+| a    |         1 |       1 |       0 |       0 |           1 |
+| b    |         1 |       0 |       1 |       0 |           1 |
+|      |         0 |       0 |       0 |       1 |           1 |
++------+-----------+---------+---------+---------+-------------+</pre>
+</blockquote>
+<p><!--more-->Note that <strong>LENGTH(c)</strong> is zero on third row, but nevertheless it equals the space character (<strong>c = ' '</strong>). Although, the length of the space character is... <strong>1</strong> (and this is because the constant <strong>' '</strong> is interpreted as <strong>VARCHAR)</strong>.</p>
+<p>To emphasize the absurdity, now take a closer look:</p>
+<blockquote>
+<pre>SELECT c, LENGTH(c), c = ' ', LENGTH(' '), c = '', LENGTH('') FROM c_test;
++------+-----------+---------+-------------+--------+------------+
+| c    | LENGTH(c) | c = ' ' | LENGTH(' ') | c = '' | LENGTH('') |
++------+-----------+---------+-------------+--------+------------+
+| a    |         1 |       0 |           1 |      0 |          0 |
+| b    |         1 |       0 |           1 |      0 |          0 |
+|      |         0 |       1 |           1 |      1 |          0 |
++------+-----------+---------+-------------+--------+------------+</pre>
+</blockquote>
+<p>I add a comparison with the empty string <strong>''</strong>, and it turns out the space character equals both a space character and the empty string, though their lengths do not agree.</p>
+<p>Now, I usually don't bother with <strong>CHAR</strong> types, and prefer the <strong>VARCHAR</strong> or <strong>TEXT</strong> types, but every once in a while I do use it. Most recently, in a stored routine code in <a href="http://code.google.com/p/common-schema">common_schema</a>, I iterate &amp; parse some text. I iterated the text char by char, and declared a local<strong> CHAR(1)</strong> variable to assign iterated value to. It sure bit me when I got to a space character which insisted it was the empty text (indicating end of iteration).</p>
+<p>Of course the immediate and correct solution was to change the local variable's type to <strong>VARCHAR(1)</strong> instead. But the time it consumed to find the problem... Be warned and be aware!</p>

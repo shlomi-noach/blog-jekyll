@@ -1,0 +1,152 @@
+---
+title: 'Views: better performance with condition pushdown'
+date: 2010-05-20 07:17:05.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Execution plan
+- Performance
+- SQL
+- Stored routines
+- Syntax
+meta:
+  _edit_last: '2'
+  _syntaxhighlighter_encoded: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Justin's <a href="http://www.mysqlperformanceblog.com/2010/05/19/a-workaround-for-the-performance-problems-of-temptable-views/">A workaround for the performance problems of TEMPTABLE views</a> post on <a href="http://www.mysqlperformanceblog.com/">mysqlperformanceblog.com</a> reminded me of a solution I once saw on a customer's site.</p>
+<p>The customer was using nested views structure, up to depth of some 8-9 views. There were a lot of aggregations along the way, and even the simplest query resulted with a LOT of subqueries, temporary tables, and vast amounts of data, even if only to return with a couple of rows.</p>
+<p>While we worked to solve this, a developer showed me his own trick. His trick is now impossible to implement, but there's a hack around this.</p>
+<p>Let's use the world database to illustrate. Look at the following view definition:<!--more--></p>
+<blockquote><p>[sql]<br />
+CREATE<br />
+  ALGORITHM=TEMPTABLE<br />
+VIEW country_languages AS<br />
+  SELECT<br />
+    Country.CODE, Country.Name AS country,<br />
+    GROUP_CONCAT(CountryLanguage.Language) AS languages<br />
+  FROM<br />
+    world.Country<br />
+    JOIN world.CountryLanguage ON (Country.CODE = CountryLanguage.CountryCode)<br />
+  GROUP BY<br />
+    Country.CODE;<br />
+[/sql]</p></blockquote>
+<p>The view presents with a list of spoken languages per country. The execution plan for querying this view looks like this:</p>
+<blockquote>
+<pre>mysql&gt; EXPLAIN SELECT * FROM country_languages;
++----+-------------+-----------------+--------+---------------+---------+---------+-----------------------------------+------+----------------------------------------------+
+| id | select_type | table           | type   | possible_keys | key     | key_len | ref                               | rows | Extra                                        |
++----+-------------+-----------------+--------+---------------+---------+---------+-----------------------------------+------+----------------------------------------------+
+|  1 | PRIMARY     | &lt;derived2&gt;      | ALL    | NULL          | NULL    | NULL    | NULL                              |  233 |                                              |
+|  2 | DERIVED     | CountryLanguage | index  | PRIMARY       | PRIMARY | 33      | NULL                              |  984 | Using index; Using temporary; Using filesort |
+|  2 | DERIVED     | Country         | eq_ref | PRIMARY       | PRIMARY | 3       | world.CountryLanguage.CountryCode |    1 |                                              |
++----+-------------+-----------------+--------+---------------+---------+---------+-----------------------------------+------+----------------------------------------------+
+</pre>
+</blockquote>
+<p>And, even if we only want to filter out a single country, we still get the same plan:</p>
+<blockquote>
+<pre>mysql&gt; EXPLAIN SELECT * FROM country_languages WHERE Code='USA';
++----+-------------+-----------------+--------+---------------+---------+---------+-----------------------------------+------+----------------------------------------------+
+| id | select_type | table           | type   | possible_keys | key     | key_len | ref                               | rows | Extra                                        |
++----+-------------+-----------------+--------+---------------+---------+---------+-----------------------------------+------+----------------------------------------------+
+|  1 | PRIMARY     | &lt;derived2&gt;      | ALL    | NULL          | NULL    | NULL    | NULL                              |  233 | Using where                                  |
+|  2 | DERIVED     | CountryLanguage | index  | PRIMARY       | PRIMARY | 33      | NULL                              |  984 | Using index; Using temporary; Using filesort |
+|  2 | DERIVED     | Country         | eq_ref | PRIMARY       | PRIMARY | 3       | world.CountryLanguage.CountryCode |    1 |                                              |
++----+-------------+-----------------+--------+---------------+---------+---------+-----------------------------------+------+----------------------------------------------+
+</pre>
+</blockquote>
+<p>So, we need to scan the entire country_language and country tables in order to return results for just one row.</p>
+<h4>A non-working solution</h4>
+<p>The solution offered by the developer was this:</p>
+<blockquote><p>[sql]<br />
+CREATE<br />
+  ALGORITHM=MERGE<br />
+  VIEW country_languages_non_working AS<br />
+  SELECT<br />
+    Country.CODE, Country.Name AS country,<br />
+    GROUP_CONCAT(CountryLanguage.Language) AS languages<br />
+  FROM<br />
+    world.Country<br />
+    JOIN world.CountryLanguage ON<br />
+      (Country.CODE = CountryLanguage.CountryCode)<br />
+  WHERE<br />
+    Country.CODE = @country_code<br />
+  GROUP BY Country.CODE;<br />
+[/sql]</p></blockquote>
+<p>And follow by:</p>
+<blockquote>
+<pre>mysql&gt; SET @country_code='USA';
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&gt; SELECT * FROM country_languages_2;
++------+---------------+----------------------------------------------------------------------------------------------------+
+| CODE | country       | languages                                                                                          |
++------+---------------+----------------------------------------------------------------------------------------------------+
+| USA  | United States | Chinese,English,French,German,Italian,Japanese,Korean,Polish,Portuguese,Spanish,Tagalog,Vietnamese |
++------+---------------+----------------------------------------------------------------------------------------------------+
+</pre>
+</blockquote>
+<p>So, pushdown a <strong>WHERE</strong> condition into the view's definition. The session variable @country_code is used to filter rows. In the above simplified code the value is assumed to be set; tweak it as you see fit (using <strong>IFNULL</strong>, for example, or <strong>OR</strong> statements) to allow for full scan in case the variable is undefined.</p>
+<p>This doesn't work. It used to work a couple years back; but today you cannot create a view which uses session variables or parameters. It is a restriction imposed by views.</p>
+<h4>A workaround</h4>
+<p>Justin showed a workaround using an additional table. There is another workaround which does not involve tables, but rather stored routines. Now, this is a patch, and an ugly one. It may not work in future versions of MySQL for all I know. But, here it goes:</p>
+<blockquote><p>[sql]<br />
+DELIMITER $$<br />
+CREATE DEFINER=`root`@`localhost` FUNCTION `get_session_country`() RETURNS CHAR(3)<br />
+    NO SQL<br />
+    DETERMINISTIC<br />
+BEGIN<br />
+  RETURN @country_code;<br />
+END $$<br />
+DELIMITER ;</p>
+<p>CREATE<br />
+  ALGORITHM=MERGE<br />
+  VIEW country_languages_2 AS<br />
+  SELECT<br />
+    Country.CODE, Country.Name AS country,<br />
+    GROUP_CONCAT(CountryLanguage.Language) AS languages<br />
+  FROM<br />
+    world.Country<br />
+    JOIN world.CountryLanguage ON<br />
+      (Country.CODE = CountryLanguage.CountryCode)<br />
+  WHERE<br />
+    Country.CODE = get_session_country()<br />
+  GROUP BY Country.CODE;<br />
+[/sql]</p></blockquote>
+<p>And now:</p>
+<blockquote>
+<pre>mysql&gt; SET @country_code='USA';
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&gt; SELECT * FROM country_languages_2;
++------+---------------+----------------------------------------------------------------------------------------------------+
+| CODE | country       | languages                                                                                          |
++------+---------------+----------------------------------------------------------------------------------------------------+
+| USA  | United States | Chinese,English,French,German,Italian,Japanese,Korean,Polish,Portuguese,Spanish,Tagalog,Vietnamese |
++------+---------------+----------------------------------------------------------------------------------------------------+
+1 row in set, 1 warning (0.00 sec)
+
+mysql&gt; EXPLAIN SELECT * FROM country_languages_2;
++----+-------------+-----------------+--------+---------------+---------+---------+------+------+--------------------------+
+| id | select_type | table           | type   | possible_keys | key     | key_len | ref  | rows | Extra                    |
++----+-------------+-----------------+--------+---------------+---------+---------+------+------+--------------------------+
+|  1 | PRIMARY     | &lt;derived2&gt;      | system | NULL          | NULL    | NULL    | NULL |    1 |                          |
+|  2 | DERIVED     | Country         | const  | PRIMARY       | PRIMARY | 3       |      |    1 |                          |
+|  2 | DERIVED     | CountryLanguage | ref    | PRIMARY       | PRIMARY | 3       |      |    8 | Using where; Using index |
++----+-------------+-----------------+--------+---------------+---------+---------+------+------+--------------------------+
+</pre>
+</blockquote>
+<p>Since views are allowed to call stored routines (Justing used this to call upon <strong>CONNECTION_ID()</strong>), and since stored routines can use session variables, we can take advantage and force the view into filtering out irrelevant rows before these accumulate to temporary tables and big joins.</p>
+<p>Back in the customer's office, we witnessed, what with their real data and multiple views, a reduction of query times from ~30 minutes to a few seconds.</p>
+<h4>Another kind of use</h4>
+<p>Eventually we worked to make better view definitions and query splitting, resulting in clearer code and fast queries, but this solution plays nicely into another kind of problem:</p>
+<p>Can we force different customers to see different parts of a given table? e.g., only those rows that relate to the customers?</p>
+<p>There can be many solutions: different tables; multiple views (one per customer), stored procedures, what have you. The above provides a solution, and I've seen it in use.</p>

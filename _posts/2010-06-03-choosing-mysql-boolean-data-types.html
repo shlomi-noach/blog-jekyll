@@ -1,0 +1,73 @@
+---
+title: Choosing MySQL boolean data types
+date: 2010-06-03 07:24:11.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Data Types
+- SQL
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: alimadadi@outlook.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>How do you implement <strong>True</strong>/<strong>False</strong> columns?</p>
+<p>There are many ways to do it, each with its own pros and cons.</p>
+<h4>ENUM</h4>
+<p>Create you column as <strong>ENUM('F', 'T')</strong>, or <strong>ENUM('N','Y')</strong> or <strong>ENUM('0', '1')</strong>.</p>
+<p>This is the method used in the <strong>mysql</strong> tables (e.g. <strong>mysql.user</strong> privileges table). It's very simple and intuitive. It truly restricts the values to just two options, which serves well. It's compact (just one byte).</p>
+<p>A couple disadvantages to this method:</p>
+<ol>
+<li>Enums are represented by numerical values (which is good) and start with <strong>1</strong> instead of <strong>0</strong>. This means <strong>'F'</strong> is <strong>1</strong>, and <strong>'T'</strong> is <strong>2</strong>, and they both translate to <strong>True</strong> when directly used in a booleanic expression (e.g. <strong>IF(val, 'True', 'False')</strong> always yields <strong>'True'</strong>)</li>
+<li>There's no real convention. Is it <strong>'Y'/'N'</strong>? <strong>'T'/'F'</strong>? <strong>'P'/'N'</strong>? <strong>'1'/'0'</strong>?</li>
+</ol>
+<h4>CHAR(1)</h4>
+<p>Simple again. Proposed values are, as before, <strong>'F'</strong>, <strong>'T'</strong> etc. This time there's no way to limit the range of values. You cannot (in MySQL, unless using triggers) prevent an 'X'.</p>
+<p>Watch out for the charset! If it's <strong>utf8</strong> you pay with 3 bytes instead of just 1. And, again, <strong>'T'</strong>, <strong>'F'</strong>, <strong>'Y'</strong>, <strong>'N'</strong> values all evaluate as <strong>True</strong>. It is possible to use the zero-valued character, but it defeats the purpose of using <strong>CHAR</strong>.<!--more--></p>
+<h4>CHAR(0)</h4>
+<p>Many are unaware that it's even valid to make this definition. What does it mean? Take a look at the following table:</p>
+<blockquote>
+<pre>CREATE TABLE `t1` (
+ `bval` char(0) DEFAULT NULL
+);
+mysql&gt; INSERT INTO t1 VALUES ('');
+mysql&gt; INSERT INTO t1 VALUES ('');
+mysql&gt; INSERT INTO t1 VALUES (NULL);
+
+mysql&gt; SELECT * FROM t1;
++------+
+| bval |
++------+
+|      |
+|      |
+| NULL |
++------+
+</pre>
+</blockquote>
+<p>NULLable columns cause for an additional storage per row. There's one bit per NULLable column which notes down whether the column's value is NULL or not. If you only have one NULLable column, you must pay for this bit with 1 byte. If you have two NULLable columns, you still only pay with 1 byte.</p>
+<p>Furthermore:</p>
+<blockquote>
+<pre>mysql&gt; SELECT bval IS NOT NULL FROM t1;
++------------------+
+| bval IS NOT NULL |
++------------------+
+|                1 |
+|                1 |
+|                0 |
++------------------+
+</pre>
+</blockquote>
+<p>So this plays somewhat nicely into booleanic expressions.</p>
+<p>However, this method is unintuitive and confusing. I personally don't use it.</p>
+<h4>TINYINT</h4>
+<p>With integer values, we can get down to <strong>0</strong> and <strong>1</strong>. With <strong>TINYINT</strong>, we only pay with 1 byte of storage. As with <strong>CHAR(1)</strong>, we cannot prevent anyone from INSERTing other values. But that doesn't really matter, if we're willing to accept that 0 evaluates as <strong>False</strong>, and <em>all other values</em> as <strong>True</strong>. In this case, boolean expressions work very well with your column values.</p>
+<h4>BOOL/BOOLEAN</h4>
+<p>These are just synonyms to <strong>TINYINT</strong>. I like to define my boolean values as such. Alas, when issuing a <strong>SHOW CREATE TABLE</strong> the definition is just a normal <strong>TINYINT</strong>. Still, it is clearer to look at if you're storing your table schema under your version control.</p>

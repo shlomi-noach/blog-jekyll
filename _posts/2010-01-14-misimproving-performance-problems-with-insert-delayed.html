@@ -1,0 +1,28 @@
+---
+title: Misimproving performance problems with INSERT DELAYED
+date: 2010-01-14 20:58:36.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Performance
+- SQL
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><a href="http://dev.mysql.com/doc/refman/5.1/en/insert-delayed.html">INSERT DELAYED</a> may come in handy when using MyISAM tables. It may in particular be useful for log tables, where one is required to issue frequent INSERTs on one hand, but does not usually want or need to wait for DB response on the other hand.</p>
+<p>It may even offer some performance boost, by aggregating such frequent INSERTs in a single thread.</p>
+<p>But it is <strong>NOT</strong> a performance solution.</p>
+<p>That is, in a case I've seen, database performance was poor. INSERTs were taking a very long time. Lot's of locks were involved. The solution offered was to change all slow INSERTs to INSERT DELAYED. Voila! All INSERT queries now completed in no time.</p>
+<p>But the database performance remained poor. Just as poor as before, with the additional headache: nobody knew what caused the low performance.</p>
+<p>Using INSERT DELAYED to improve overall INSERT performance is like sweeping the dust under the carpet. It's still there, only you can't actually see it. When your queries are slow to return, you know which queries or which parts of your application are the immediate suspects. When everything happens in the background you lose that feeling.</p>
+<p>The slow query log, fortunately, still provides with the necessary information, and all the other metrics are just as before. Good. But it now takes a deeper level of analysis to find a problem that was previously in plain sight.</p>
+<p>So: use INSERT DELAYED carefully, don't just throw it at your slow queries like a magic potion.</p>

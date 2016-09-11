@@ -1,0 +1,88 @@
+---
+title: 'SQL: forcing single row tables integrity'
+date: 2010-06-22 06:58:51.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Indexing
+- SQL
+meta:
+  _edit_last: '2'
+  _syntaxhighlighter_encoded: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Single row tables are used in various cases. Such tables can be used for "preferences" or "settings"; for managing counters (e.g. summary tables), for general-purpose administration tasks (e.g. heartbeat table) etc.</p>
+<p>The problem with single row tables is that, well, they must have s single row. And the question is: <em>how can you force them to have just one row?</em></p>
+<h4>The half-baked solution</h4>
+<p>The common solution is to create a <strong>PRIMARY KEY</strong> and always use the same value for that key. In addition, using <strong>REPLACE</strong> or <strong>INSERT INTO ON DUPLICATE KEY UPDATE</strong> helps out in updating the row. For example:</p>
+<blockquote><p>[sql]<br />
+CREATE TABLE heartbeat (<br />
+ id int NOT NULL PRIMARY KEY,<br />
+ ts datetime NOT NULL<br />
+ );<br />
+[/sql]</p></blockquote>
+<p>The above table definition is taken from <a href="http://www.maatkit.org/doc/mk-heartbeat.html">mk-heartbeat</a>. It should be noted that <em>mk-heartbeat</em> in itself does not require that the table has a single row, so it is not the target of this post. I'm taking the above table definition as a very simple example.</p>
+<p>So, we assume we want this table to have a single row, for whatever reasons we have. We would usually do:</p>
+<blockquote><p>[sql]<br />
+REPLACE INTO heartbeat (id, ts) VALUES (1, NOW());<br />
+[/sql]</p></blockquote>
+<p>or</p>
+<blockquote><p>[sql]<br />
+INSERT INTO heartbeat (id, ts) VALUES (1, NOW()) ON DUPLICATE KEY UPDATE ts = NOW();<br />
+[/sql]</p></blockquote>
+<p>Why is the above a <em>"half baked solution"</em>? Because it is up to the application to make sure it reuses the same <strong>PRIMARY KEY</strong> value. There is nothing in the database to prevent the following:<!--more--></p>
+<blockquote><p>[sql]<br />
+REPLACE INTO heartbeat (id, ts) VALUES (73, NOW()); -- Ooops<br />
+[/sql]</p></blockquote>
+<p>One may claim that <em>"my application has good integrity"</em>. That may be the case; but I would then raise the question: <em>why, then, would you need <strong>FOREIGN KEY</strong>s</em>? Of course, many people don't use <strong>FOREIGN KEY</strong>s, but I think the message is clear.</p>
+<h4>A heavyweight solution</h4>
+<p>Triggers <a href="http://code.openark.org/blog/mysql/triggers-use-case-compilation-part-i">can help out</a>. But really, this is an overkill.</p>
+<h4>A solution</h4>
+<p>I purpose a solution where, much like <strong>FOREIGN KEY</strong>s, the database will force the integrity of the table; namely, have it contain <em>at most one row</em>.</p>
+<p>For this solution to work, we will need a strict <strong>sql_mode</strong>. I'll show later what happens when using a relaxed <strong>sql_mode</strong>:</p>
+<blockquote><p>[sql]<br />
+SET sql_mode='STRICT_ALL_TABLES'; -- Session scope for the purpose of this article<br />
+[/sql]</p></blockquote>
+<p>Here's a new table definition:</p>
+<blockquote><p>[sql]<br />
+CREATE TABLE heartbeat (<br />
+ integrity_keeper ENUM('') NOT NULL PRIMARY KEY,<br />
+ ts datetime NOT NULL<br />
+);<br />
+[/sql]</p></blockquote>
+<p>Let's see what happens now:</p>
+<blockquote><p>[sql]<br />
+mysql&gt; INSERT INTO heartbeat (ts) VALUES (NOW());<br />
+Query OK, 1 row affected (0.00 sec)</p>
+<p>mysql&gt; INSERT INTO heartbeat (ts) VALUES (NOW());<br />
+ERROR 1062 (23000): Duplicate entry '' for key 'PRIMARY'<br />
+mysql&gt; INSERT INTO heartbeat (integrity_keeper, ts) VALUES ('', NOW());<br />
+ERROR 1062 (23000): Duplicate entry '' for key 'PRIMARY'<br />
+mysql&gt; INSERT INTO heartbeat (integrity_keeper, ts) VALUES (0, NOW());<br />
+ERROR 1265 (01000): Data truncated for column 'integrity_keeper' at row 1<br />
+mysql&gt; INSERT INTO heartbeat (integrity_keeper, ts) VALUES (1, NOW());<br />
+ERROR 1062 (23000): Duplicate entry '' for key 'PRIMARY'</p>
+<p>mysql&gt; REPLACE INTO heartbeat (ts) VALUES (NOW());<br />
+Query OK, 2 rows affected (0.00 sec)</p>
+<p>mysql&gt; INSERT INTO heartbeat (ts) VALUES (NOW()) ON DUPLICATE KEY UPDATE ts = NOW();<br />
+Query OK, 0 rows affected (0.00 sec)</p>
+<p>mysql&gt; SELECT * FROM heartbeat;<br />
++------------------+---------------------+<br />
+| integrity_keeper | ts                  |<br />
++------------------+---------------------+<br />
+|                  | 2010-06-15 09:12:19 |<br />
++------------------+---------------------+<br />
+[/sql]</p></blockquote>
+<p>So the trick is to create a <strong>PRIMARY KEY</strong> column which is only allowed a single value.</p>
+<p>The above shows I cannot force another row into the table: the schema will prevent me from doing so. Mission accomplished.</p>
+<h4>Further thoughts</h4>
+<p>The <strong>CHECK</strong> keyword is the real solution to this problem (and other  problems). However, it is ignored by MySQL.</p>
+<p>It is interesting to note that with a relaxed <strong>sql_mode</strong>, the <strong>INSERT INTO heartbeat (integrity_keeper, ts) VALUES (0, NOW());</strong> query succeeds. Why? The default <strong>ENUM</strong> value is <strong>1</strong>, and, being in relaxed mode, <strong>0</strong> is allowed in, even though it is not a valid value (Argh!).</p>

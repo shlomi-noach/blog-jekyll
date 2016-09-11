@@ -1,0 +1,94 @@
+---
+title: 'mycheckpoint (Rev. 118): alerts, email notifications and more'
+date: 2010-03-25 08:26:34.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Monitoring
+- mycheckpoint
+- python
+meta:
+  _edit_last: '2'
+  _syntaxhighlighter_encoded: '1'
+  _sg_subscribe-to-comments: jacob.elder@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Revision <strong>118</strong> of <a href="http://code.openark.org/forge/mycheckpoint">mycheckpoint</a> has been released. New and updated in this revision:</p>
+<ul>
+<li>Conditional alerts</li>
+<li>Email notifications</li>
+<li>Revised HTML reports, including 24/7 reports.</li>
+<li>Updated documentation</li>
+</ul>
+<p>With this new revision mycheckpoint turns into a <em>monitoring solution</em> for MySQL. One can now:</p>
+<ul>
+<li>Store measure metrics</li>
+<li>Query for raw, aggregated or digested metrics</li>
+<li>Generate charts for selected metrics</li>
+<li>View HTML reports for selecetd metrics</li>
+<li>Define alerts conditions, query for pending alerts</li>
+<li>Be notified via <em>email</em> on <em>raised</em> or <em>resolved</em> alerts.</li>
+</ul>
+<h4>Conditional alerts</h4>
+<p><em>mycheckpoint</em> is <em>SQL oriented</em>. As such, it allows for creation of alert conditions, which are nothing more than SQL conditions.</p>
+<p><!--more-->For example, we wish to raise an alerts when the slave stops replicating (just ping us with an email one this happens):</p>
+<blockquote><p>[sql]INSERT INTO alert_condition (condition_eval, description, alert_delay_minutes)<br />
+  VALUES ('seconds_behind_master IS NULL', 'Slave not replicating', 0);[/sql]</p></blockquote>
+<p>Or is too far behind (but since we do maintenance work during the night, it's OK on those hours). We only want to be notified if this goes on for <strong>10</strong> minutes:</p>
+<blockquote><p>[sql]INSERT INTO alert_condition (condition_eval, description, alert_delay_minutes)<br />
+  VALUES ('(seconds_behind_master &gt; 60) AND (HOUR(ts) NOT BETWEEN 2 AND 4)', 'Slave lags too far behind', 10);[/sql]</p></blockquote>
+<p>We want to be notified when the <strong>datadir</strong> mount point disk quota exceeds 95% usage. Oh, and please keep nagging us about this, as long as it is unresolved:</p>
+<blockquote><p>[sql]INSERT INTO alert_condition (condition_eval, description, repetitive_alert)<br />
+  VALUES ('os_datadir_mountpoint_usage_percent &gt; 95', 'datadir mount point is over 95%', 1);[/sql]</p></blockquote>
+<p>There's much more to alert conditions. You can generate a pending alerts report, get a textual presentation of raised and pending alerts, view the query which determines what alerts are currently raised, and more.</p>
+<p>Read more on the <a href="http://code.openark.org/forge/mycheckpoint/documentation/alerts">alerts documentation page</a>.</p>
+<h4>Email notifications</h4>
+<p>Introducing email notifications, <em>mycheckpoint</em> now:</p>
+<ul>
+<li>Sends email notification on alert conditions meeting. See <a href="http://code.openark.org/forge/wp-content/uploads/2010/03/mycheckpoint-alerts-email-sample-113.jpeg">sample email screenshot</a>.</li>
+<li>Sends email notification when it is unable to access the database.</li>
+<li>Sends report via mail. Currently only HTML brief report is supported. Report is attached as HTML file in email message.</li>
+</ul>
+<p>Alert notifications are automatically sent by mail (once SMTP configuration is in place, see following) when an alert is <em>raised</em> (alert condition becomes <strong>true</strong>) or <em>resolved</em> (alert condition turns <strong>false</strong>).</p>
+<p>Email notifications require simple configuration for SMTP host, SMTP-from-address, SMTP-to-address. These can be made in the <a href="http://code.openark.org/forge/mycheckpoint/documentation/usage#defaults_file">defaults file</a> (revised), or through the command line. The following example shows how one can manually send an HTML brief report:</p>
+<blockquote>
+<pre>mycheckpoint --defaults-file=/etc/mycheckpoint.cnf <strong>--smtp-from</strong>=monitor@my-server-company.com <strong>--smtp-to</strong>=dba@my-server-company.com <strong>--smtp-host</strong>=mail.my-server-company.com <strong>email_brief_report</strong></pre>
+</blockquote>
+<p>One should generally set up these parameters in the configuration file (aka <em>defaults file</em>) and forget all about it. mycheckpoint now has a default for the defaults file, which is <strong>/etc/mycheckpoint.cnf</strong>.</p>
+<p>Read more on the <a href="http://code.openark.org/forge/mycheckpoint/documentation/emails">emails documentation page</a>.</p>
+<h4>Revised HTML reports</h4>
+<ul>
+<li>The brief HTML reports has been updated, see <a href="http://code.openark.org/forge/wp-content/uploads/2010/03/mycheckpoint-brief-report-sample-113.html">sample</a>.</li>
+<li>An HTML 24/7 report as been added, see <a href="../../forge/wp-content/uploads/2010/03/mycheckpoint-24-7-report-sample-107.html">sample</a>. This report shows the distribution of popular metrics throughout the weekdays and hours.</li>
+</ul>
+<p>Full HTML reports remain slow to load. I'm putting some work into this, but I'm not sure I can work around the optimizer's limitations of using indexes for GROUPing through views.</p>
+<h4>Updated documentation</h4>
+<p>The documentation has been revised, with more details put into the pages. Since <em>mycheckpoint</em> gains more and more features, I saw fit to write a <a href="http://code.openark.org/forge/mycheckpoint/documentation/quick-howto">Quick HOWTO</a> page which gets you up to speed, no fuss around, with <em>mycheckpoint</em>'s usage and features.</p>
+<p>Read the mycheckpoint <a href="http://code.openark.org/forge/mycheckpoint/documentation/quick-howto">Quick HOWTO</a> here.</p>
+<h4>Future plans</h4>
+<p>Work is going on. These are the non-scheduled future tasks I see:</p>
+<ul>
+<li>Custom monitoring + notifications. See my <a href="http://code.openark.org/blog/mysql/things-to-monitor-on-mysql-the-users-perspective">earlier post</a>.</li>
+<li>Monitoring InnoDB Plugin &amp; XtraDB status.</li>
+<li>PROCESSLIST dump on alerts.</li>
+<li>Interactive charts. See my <a href="http://code.openark.org/blog/mysql/static-charts-vs-interactive-charts">earlier post</a>.</li>
+<li>A proper <em>man</em> page...</li>
+</ul>
+<h4>Try it out</h4>
+<p>Try out <em>mycheckpoint</em>. It's a different kind of monitoring solution. It does not require to to have a web server or complicated dependencies. To the experienced DBA it can further provide with valuable, raw or digested information in the form of SQL accessible data. I have used it to find anomalies in passing months, doing SQL search for periods of time where several conditions applied -- it really gives you some extra power.</p>
+<ul>
+<li>Download mycheckpoint <a href="https://code.google.com/p/mycheckpoint/">here</a></li>
+<li>Visit the project's <a href="http://code.openark.org/forge/mycheckpoint">homepage</a></li>
+<li>Browse the <a href="http://code.openark.org/forge/mycheckpoint/documentation">documentation</a></li>
+<li>Report <a href="https://code.google.com/p/mycheckpoint/issues/list">bugs</a></li>
+</ul>
+<p><em>mycheckpoint</em> is released under the <a href="http://www.opensource.org/licenses/bsd-license.php">New BSD License</a>.</p>
+<div id="_mcePaste" style="overflow: hidden; position: absolute; left: -10000px; top: 855px; width: 1px; height: 1px;">http://code.openark.org/forge/mycheckpoint/documentation/quick-howto</div>

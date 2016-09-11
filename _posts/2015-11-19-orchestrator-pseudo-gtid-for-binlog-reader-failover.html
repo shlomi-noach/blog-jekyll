@@ -1,0 +1,57 @@
+---
+title: Orchestrator & Pseudo-GTID for binlog reader failover
+date: 2015-11-19 10:52:16.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Failover
+- orchestrator
+- Pseudo GTID
+- Replication
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>One of our internal apps at <strong>Booking.com</strong> audits changes to our tables on various clusters. We used to use <em>tungsten replicator</em>, but have since migrated onto our own solution.</p>
+<p>We have a binlog reader (uses <a href="https://github.com/zendesk/open-replicator">open-replicator</a>) running on a slave. It expects Row Based Replication, hence our slave runs with <strong>log-slave-updates</strong>, <strong>binlog-format='ROW'</strong>, to translate from the master's Statement Based Replication. The binlog reader reads what it needs to read, audits what it needs to audit, and we're happy.</p>
+<h3>However what happens if that slave dies?</h3>
+<p>In such case we need to be able to point our binlog reader to another slave, and it needs to be able to pick up auditing from the same point.</p>
+<p>This sounds an awful lot like slave repointing in case of master/intermediate master failure, and indeed the solutions are similar. However our binlog reader is not a real MySQL server and does not understands replication. It does not really replicate, it just parses binary logs.</p>
+<p>We're also not using GTID. But we <em>are</em> using Pseudo-GTID. As it turns out, the failover solution is already built in by <a href="https://github.com/outbrain/orchestrator">orchestrator</a>, and this is how it goes:</p>
+<h3>Normal execution</h3>
+<p>Our binlog app reads entries from the binary log. Some are of interest for auditing purposes, some are not. An occasional Pseudo-GTID entry is found, and is being stored to ZooKeeper tagged as  "last seen and processed Pseudo-GTID".</p>
+<h3>Upon slave failure</h3>
+<p>We recognize the death of a slave; we have other slaves in the pool; we pick another. Now we need to find the coordinates from which to carry on.</p>
+<p>We read our "last seen and processed Pseudo-GTID". Say it reads:</p>
+<blockquote>
+<pre>drop view if exists `meta`.`_pseudo_gtid_hint__asc:56373F17:00000000012B1C8B:50EC77A1`</pre>
+</blockquote>
+<p>. We now issue:</p>
+<blockquote>
+<pre>$ orchestrator <strong>-c find-binlog-entry</strong> <strong>-i new.slave.fqdn.com</strong> --pattern='drop view if exists `meta`.`_pseudo_gtid_hint__asc:56373F17:00000000012B1C8B:50EC77A1`'</pre>
+</blockquote>
+<p>The output of such command are the binlog coordinates of that same entry as found in the new slave's binlogs:</p>
+<blockquote>
+<pre>binlog.000148:43664433</pre>
+</blockquote>
+<p>Pseudo-GTID entries are only injected once every few seconds (<strong>5</strong> in our case). Either:<!--more--></p>
+<ul>
+<li>We are OK to reprocess up to <strong>5</strong> seconds worth of data (and indeed we are, our mechanism is such that this merely overwrites our previous audit, no corruption happens)</li>
+<li>Or our binlog reader also keeps track of the number of events since the last processed Pseudo-GTID entry, skipping the same amount of events after failing over.</li>
+</ul>
+<h3>Planned failover</h3>
+<p>In case we plan to repoint our binlog reader to another slave, we can further use orchestrator's power in making an exact correlation between the binlog positions of two slaves. This has always been within its power, but only recently exposed as it own command. We can, at any stage:</p>
+<blockquote>
+<pre>$ sudo orchestrator <strong>-c correlate-binlog-pos</strong> -i current.instance.fqdn.com --binlog=binlog.002011:72656109 -d some.other.instance.fqdn.com</pre>
+</blockquote>
+<p>The output is the binlog coordinates in <strong>some.other.instance.fqdn.com</strong> that exactly correlate with <strong>binlog.002011:72656109</strong> in <strong>current.instance.fqdn.com</strong></p>
+<p>The case of failure of the binlog reader itself is also handled, but is not the subject of this blog post.</p>

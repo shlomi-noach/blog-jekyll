@@ -1,0 +1,36 @@
+---
+title: New features I'd like to see in MySQL 5.8
+date: 2015-10-07 10:02:16.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- operations
+- Opinions
+- Replication
+meta:
+  _wpas_done_all: '1'
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Following up on Morgan Tocker's <a href="http://www.tocker.ca/2015/09/14/what-would-you-like-to-see-in-mysql-5-8.html">What would you like to see in MySQL 5.8?</a>, having attended and participated at the <a href="https://www.percona.com/live/europe-amsterdam-2015/sessions/mysql-58-dreaming-and-brainstorming">brainstorming at Percona Live Amsterdam</a>, and publishing this post while failing to comply with any of Morgan's suggested media, these are the features I would like to see in MySQL <strong>5.8</strong>:</p>
+<ul>
+<li>Dynamicly enable/disable <strong>log-bin</strong> and <strong>log-slave-updates</strong><br />
+Today, when changing chef/puppet role of a server from a simple slave to an intermediate master and vice versa, a MySQL restart is required. This is a very big pain which makes replication automation complex, not to mention warmup times.</li>
+<li>"<strong><a href="http://man7.org/linux/man-pages/man1/nice.1.html">nice</a></strong>".<br />
+I want to be able to execute a query that is <em>nice, i.e</em> has lower priority; will not consume all resources; will stall/throttle so as to allow other queries to complete. Luis asked and I said this could be on a per statement basis, e.g. add a <strong>SQL_NICE</strong> query hint. But I'm unsure that would be the correct behavior. It also makes sense to do so on a per connection basis (perhaps provide connection attributed to hint <em>niceness</em>?).</li>
+<li>Online-<em>ier</em> <strong>ALTER TABLE</strong>. I would in particular want it to apply the <em>nice</em> feature, above. Otherwise throttle by user defined metrics.</li>
+<li>Online-<em>ier</em> <strong>ALTER TABLE</strong> in replication stream.  Can the slaves run the <strong>ALTER</strong> statement in parallel?</li>
+<li><strong>Re-Group Commit</strong>: in MTS, and when intermediate masters involved, copy+paste the group commit as applied on master as working downstream. I suspect this is easily achievable. The result: same parallelism for replicating slaves in all levels, whether they replicate directly from master or from 2nd, 3rd tier intermediate masters. Today parallelism decreases as we go downstream.</li>
+<li>Global user-defined-variables. I want to be able to define arbitrary (global) variables that I can later query via <strong>SELECT @@global.arbitrary</strong>. This would be similar to HTML <strong>5</strong>'s <strong>"data-*"</strong> attributes. I often wish I could tell &amp; ask MySQL my puppet role; or the server status (is it live? Is it offline? Does it belong to a specific pool? etc.). Similar to <strong>"loose-*"</strong> syntax, this could be a <strong>"data-*"</strong> or <strong>"user-*"</strong> name prefix system.</li>
+</ul>
+<p>I will follow up on new <em>statements</em> I would like to see in MySQL <strong>5.8</strong>.</p>
+<p>The brainstorming session at PerconaLive, I should note, was pure joy, and apart from getting two nice furry dolphins I enjoyed the engagement, the diversity of ideas, and the fact Oracle engineers (Mark in particular) were very busy taking notes or otherwise openly discussing the viability of some requested features.</p>
+<p>&nbsp;</p>

@@ -1,0 +1,34 @@
+---
+title: 'sql_mode: a suggestion'
+date: 2009-01-11 18:09:17.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- sql_mode
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I thought this deserves more than a comment on my <a title="Do we need sql_mode?" href="http://code.openark.org/blog/mysql/do-we-need-sql_mode">previous post</a> on the subject, in which I expressed the opinion that sql_mode is undesired.</p>
+<p>Back to reality: sql_mode is here right now. What else can be done?</p>
+<h4>Suggestion</h4>
+<p>Is there anything to do about sql_mode? I believe so: make it <em>strict</em> by default.</p>
+<p><!--more-->I wish to stress the following:</p>
+<ul>
+<li>sql_mode is empty by default (which means it is very permissive).</li>
+<li>It is not documented enough. Many DBAs don't really know anything about it.</li>
+<li>As a MySQL instructor, I have repeatedly witnessed the look of surprise on a student's face when he learns that in the default configuration, an overflowed value is silently truncated to match the data type. My personal observation: people don't like the default configuration.</li>
+<li>Stricter is better, if you code your application this way right from the start (naturally, trying to make changes after 3 years of development invites trouble).</li>
+</ul>
+<p>The fact that sql_mode is empty by default, and has been like that for the past years, means that many applications have been built which are not strict. The developers and DBAs never changed the sql_mode (remember they didn't know about sql_mode). Many of the applications would not work under stricter sql_mode.</p>
+<p>Please imagine the following: assume we keep the sql_mode feature as it is, but make it 'TRADITIONAL' by default. Now imagine we did that 5 years ago.</p>
+<p>Most, if not all of today's applications were strict. Those who would disable STRICT_TRANS_TABLES or ERROR_FOR_DIVISION_BY_ZERO would be the exception, and they would have to do it knowingly, understanding the impact of their actions.</p>
+<p>May I offer my suggestion, then, that future MySQL installations come with a strict sql_mode. At the very least allow the user (in the Windows installer, for example, or via ncurses, dpkg-reconfigure, other) to choose her level of strictess. The windows installer already asks about encodings and engines.</p>

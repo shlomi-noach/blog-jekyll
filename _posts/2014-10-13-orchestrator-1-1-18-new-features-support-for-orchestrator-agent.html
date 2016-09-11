@@ -1,0 +1,46 @@
+---
+title: 'orchestrator 1.1.18: new features, support for orchestrator-agent'
+date: 2014-10-13 15:00:35.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Open Source
+- orchestrator
+- Replication
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><a href="https://github.com/outbrain">Outbrain</a>'s <a href="https://github.com/outbrain/orchestrator"><strong>orchestrator 1.1.18</strong></a> is released:</p>
+<ul>
+<li>Support for <a href="https://github.com/outbrain/orchestrator-agent"><strong>orchestrator-agent</strong></a> (see <a href="http://code.openark.org/blog/mysql/announcing-orchestrator-agent">announcement</a>): agent pages, support for agent actions, initiation of seeds (provisioning of new/corrupted servers), auditing of seeds.</li>
+<li>Clusters dashboard</li>
+<li>Support for long query auditing</li>
+<li>SSL</li>
+<li>Proxy authentication (e.g. apache2 serving as reverse-proxy with LDAP)</li>
+<li>User control</li>
+<li>Better slave moving rules.</li>
+</ul>
+<p>Quick links:</p>
+<ul>
+<li>Get <a href="https://github.com/outbrain/orchestrator/releases/tag/v1.1.18"><strong>orchestrator 1.1.18</strong></a></li>
+<li>Read the <strong><a href="https://github.com/outbrain/orchestrator/wiki/Orchestrator-Manual">orchestrator manual</a></strong></li>
+<li>Check out <strong><a href="https://github.com/outbrain/orchestrator-agent">orchestrator-agent</a></strong></li>
+</ul>
+<p><em>orchestrator</em> now allows for seeding/provisioning of servers via <em>orchestrator-agent</em>. It communicates with agents executing on the MySQL hosts and coordinate transfer of data between them. orchestrator now supports invocation and auditing of seeding operations, and protects you from breaking your seeds. The <em>orchestrator-agent</em> is a solution to Outbrain's specific use case, and may not appeal to the greater crowd. Nonetheless it is extendible and is released as open source.<!--more--></p>
+<p>A nice overview of all topologies is provided in the <em>clusters &gt; dashboard</em> page. The dashboard points out the clusters, amount of servers per cluster, and amount and type of problems per cluster. It also provides configurable aliasing to your clusters, so you may name your <strong>mysql01.myservice.mydomain.com:3306</strong> as <strong>"customer db"</strong>.</p>
+<p>orchestrator will list each instance's long running queries in its own backend database, and will present the user with such data. It also provides with a "<strong>kill query"</strong> functionality (do note that polling for long running queries is done once per minute only).</p>
+<p>SSL is supported in agents communication.</p>
+<p><em>orchestrator</em> now accepts proxy authentication (configurable). This lets you put, for example, apache2 as reverse proxy, which communicates with LDAP and authenticates access. The authenticated user is then relayed to orchestrator. With this method of authentication you are now able to pre-define "power users". In this authentication mode orchestrator will limit user actions to read-only, unless the user is a power-user. Thus, viewing the topologies is open to everyone, but moving slaves around is limited to a smaller group of people. <a href="https://github.com/outbrain/orchestrator/wiki/Orchestrator-Manual#security">Read more</a>.</p>
+<p>You may now move up a slave if it's master is in stopped-slave state, which allows extracting good, healthy slaves from underneath busy, slow relay-slaves.</p>
+<p><em>orchestrator</em> is released by <a href="http://www.outbrain.com/">Outbrain</a> under the <a href="https://github.com/outbrain/orchestrator/blob/master/LICENSE">Apache 2.0 license</a>, and is free to use.</p>
+<p>&nbsp;</p>

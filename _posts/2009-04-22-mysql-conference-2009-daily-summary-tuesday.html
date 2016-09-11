@@ -1,0 +1,30 @@
+---
+title: 'MySQL Conference 2009 daily summary: Tuesday'
+date: 2009-04-22 15:44:55.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- mysqlconf
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Tuesday: day of the announcements and of numerous sessions. Busy day!</p>
+<p>The day started with the <a href="http://www.mysqlconf.com/mysql2009/public/schedule/detail/8233">State of the Dolphin</a> by Karen Padir (Sun Microsystems). She threw in some announcement, among which were MySQL 5.4, MySQL Cluster 7.0, better release cycles (matching the Enterprise), better code import from the community. Anyway, there is already a lot of talk about that.</p>
+<p>Later on, <a href="http://www.mysqlconf.com/mysql2009/public/schedule/detail/7996">This is Not a Web App: The Evolution of a MySQL Deployment at Google</a>, Mark Callaghan (Google) was a very interesting session, in which Mark described the needs for an enterprise database Google and (mysterious) others had, and the steps taken to modify MySQL in this direction. Mark explained the build &amp; test process they use at Google, teased the MySQL Query Analyzer guys ("it's amazing what you can do with sed &amp; awk, actually") - though expressed his appreciation of their work, and mentioned various contributors and collaborators. It was an interesting session, very wide in scope, I think.</p>
+<p>The rest of my schedule for the day was:<!--more--></p>
+<p><a href="http://www.mysqlconf.com/mysql2009/public/schedule/detail/7054">MySQL and Search at Craigslist</a> Jeremy Zawodny: a fast pace presented session, which described the growth challenges Craigslist were/are facing, and the MySQL solutions used. Jeremy spoke about the sphinx storage engine, and has discussed its many advantages. He also described the sharding solutions used and the master-slaves configurations.</p>
+<p><a href="http://www.mysqlconf.com/mysql2009/public/schedule/detail/7016">Starring Sakila: Data Warehousing Explained, Illustrated, and Subtitled</a> Roland Bouman, Matt Casters. In this presentation Roland explained the basics of data warehousing: he discussed the related buzzwords and then demonstrated, using the sakilla database, and example star schema building process. Matt took on from there to present the Kettle tool (and other kitchen stuff), and the way DWH can be graphically designed, and data generated. I was personally more interested in the first part, I have very little experience with DWH, and Roland did a good job of make a simple and clear enough starting point.</p>
+<p><a href="http://www.mysqlconf.com/mysql2009/public/schedule/detail/5781">Rethinking MySQL, Enter Drizzle</a> Brian Aker. That one was especially crowded. This was a session which presented Drizzle, the motivation behind it, what it consisted of, the decision making process, the community collaboration, the tools used in the project and more. It was a comprehensive "what drizzle is all about and what can be achieved with it" talk, and no doubt Brian Aker is a talented speaker, I'm not sure anyone were typing on their laptops during this talk...</p>
+<p><a href="http://www.mysqlconf.com/mysql2009/public/schedule/detail/6676">The PBXT Storage Engine: Meeting Future Challenges</a> Paul McCullagh. Another interesting talk! The creator of PBXT gave an overview of the storage engine, and discussed some of the internals. He let us peek into the developing process by presenting some of the latest performance improvements he made, and through that, discusses multi cores issues, SSDs and more. This takes me back to Mark Callaghan's session that morning, in which he praised the InnoDB performance, code, developers, but then added: "I thought I had the fastest storage engine, but then I tested PBXT..."</p>
+<p><a href="http://www.mysqlconf.com/mysql2009/public/schedule/detail/6891">Solving Common SQL Problems with the SeqEngine</a> Beat Vontobel: the SeqEngine is an idea for a storage engine which generates sequences. A simplified, incomplete - yet surprisingly potent -  implementation was presented. Beat has discussed various problems which could be solved with the SeqEngine. What was really nice about it is that it does not actually store data, but generates it on the fly, and yet, as far as MySQL is concerned, has a full blown indexing implementation. Finding table holes; generating sample data; normalizing (&lt;= 2NF) data were among the problems for which the SeqEngine provided solutions. I enjoyed this session very much. On one hand, it was a modest one (this is a small scale development, unlike the huge PBXT, Drizzle discussed earlier), and yet elegant. The problems presented were the common daily time consuming problems any DBA encounters, and so it was practical and to the point.</p>
+<p>In between all these, there was the Expo, ice creams, T-shirts and many good talks and interesting people - the last being the major reason to attend the conference. I mean, apart from the ice cream.</p>
+<p>I do hope to get to have some more chit chat during Wednesday.</p>

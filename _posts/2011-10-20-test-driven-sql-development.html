@@ -1,0 +1,71 @@
+---
+title: Test-driven SQL development
+date: 2011-10-20 19:55:04.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- Development
+- MySQL
+tags:
+- Ant
+- common_schema
+- Development
+- Linux
+- scripts
+- Stored routines
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: mysql@myname.nl
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I'm having a lot of fun writing <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, an SQL project which includes views, tables and stored routines.</p>
+<p>As the project grows (and it's taking some interesting directions, in my opinion) more dependencies are being introduced, and a change to one routine or view may affect many others. This is why I've turned the development on <em>common_schema</em> to be <em>test driven</em>.</p>
+<p>Now, just how do you test drive an SQL project?</p>
+<p>Well, much like the way you test any other project in your favorite programming language. If its functions you're testing, that's all too familiar: functions get some input and provide some output. Hmmm, they might be changing SQL data during that time. With procedures it's slightly more complex, since they do not directly return output but result sets.</p>
+<p>Here's the testing scheme I use:<!--more--></p>
+<ul>
+<li>Tests are divided to families. For example, there is a family of tests for the <em>eval()</em> function.</li>
+<li>Each test in a family is responsible for checking the simplest, most "atomic" issue. This means many small tests.</li>
+<li>Each test can have a <em>"pre-test"</em> step, which prepares the ground (for example, create a table and populate it)</li>
+<li>Likewise, a test can have a <em>"post-test"</em> step, which is typically just cleanup code (since the test is already complete by the time the post step is invoked).</li>
+<li>Each test is an SQL file: a set of commands to be executed.</li>
+<li>A test may have an <em>"expected output"</em> file.</li>
+</ul>
+<ul>
+<li>If no explicit <em>expected</em> exists, the test is expected to return <strong>"1"</strong> (just as the most basic <em>JUnit</em> test assumes an "assert true")</li>
+<li>A test family may also have <em>pre-</em> and <em>post-</em> steps.</li>
+<li>Any failure in any step fails the entire process. Failures may include:
+<ul>
+<li>Failure to prepare the grounds for a test or family of tests</li>
+<li>Failure in executing the test</li>
+<li>Mismatch between test's output and expected result.</li>
+<li>Failure in executing the <em>post-</em> step (may indicate yet invalid test result not intercepted by the test)</li>
+</ul>
+</li>
+</ul>
+<h4>An example</h4>
+<p>The following image presents a single test family: the <em>eval</em> family, testing the <em>eval()</em> routine.</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2011/10/test-driven-sql-development-01.png"><img class="size-full wp-image-4205 alignnone" title="test-driven-sql-development-01" src="{{ site.baseurl }}/assets/test-driven-sql-development-01.png" alt="Test driven SQL development - sample" width="198" height="258" /></a></p></blockquote>
+<ul>
+<li>In this family, there are two tests.</li>
+<li>In both tests, we have a <em>pre-test</em> step, and a test.</li>
+<li>We have no <em>post-test</em> here.</li>
+<li>Nor do we have an <em>expected-output</em> sample, which means the tests expect to return with <strong>"1"</strong>.</li>
+</ul>
+<h4>Implementation</h4>
+<p>But how are tests conducted? Via <em>mysql</em>, of course. While tests are plain SQL text file, they are being executed against a running MySQL server using the <em>mysql</em> client. It is given the test files as input, and its output is directed to file as well.</p>
+<p>This makes it very easy to code the test using a simple shell script. It takes a small measure of file iteration, process invocation, exit code check, and <em>diff</em> execution.</p>
+<p>For example, to test <em>eval()</em>'s <strong>01</strong> test, we first execute <em>mysql</em> with <strong>01/pre.sql</strong> as input. Assuming success, we execute <em>mysql</em> again, this time with <strong>01/test.sql</strong>. We capture the output of this execution, and compare it with <em>expected-output</em>, or with <strong>"1"</strong> when no <em>expected-output</em> specified.</p>
+<h4>Tests pass, or no code!</h4>
+<p>Some <strong>12</strong> years ago, I worked with a less-known version system called <a href="http://aegis.sourceforge.net/documents.html">aegis</a>. The thing I remember most from <em>aegis</em> was that it had a good tests infrastructure. Long before "test-driven development" was coined, or was even commonly practiced, <em>aegis</em> supported tests right into your version control. "Right into", in the sense that <em>you could not merge your code back to the baseline</em> if it didn't pass all of the tests.</p>
+<p>I work with SVN for <em>common_schema</em>, and I do not know of such an option in SVN. But I also use <em>ant</em> to build this project, and the dependency is clear there: <strong>ant dist</strong>, my target which creates the distribution files, is dependent on <strong>ant test</strong>, the target which works out the tests.</p>
+<p>That is, you cannot generate the distribution files when tests fail.</p>
+<h4>Further notes</h4>
+<p>Since I'm now retroactively patching tests for already existing functionality, calling it <em>test-driven</em> development is an overstatement; nevertheless new tests are already proving invaluable when I keep changing and improving existing code. Suddenly dependent functionality no longer works as expected. What fun!</p>
+<p><a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/tests/test_all.sh">The code</a> for the testing suite is actually much shorter than this blog post.</p>

@@ -1,0 +1,36 @@
+---
+title: Thoughts on using MySQL plugins
+date: 2012-04-03 13:05:42.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Opinions
+- plugin
+- Sphinx
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: awfief@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I'm giving thoughts on the viability of MySQL plugins. This is due to a particular experience I've had, which is thankfully solved. However, it left some bitter taste in my mouth.</p>
+<p>MySQL plugins are a tricky business. To create a plugin, you must compile it against the MySQL version you wish the users to use it with. Theoretically, you should compile it against any existing MySQL version, minors as well (I'm not sure whether it may sometimes or most times work across minor versions).</p>
+<p>But, most important, you must adapt your plugin to major versions.</p>
+<p>Another option for plugin makers, is to actually <em>not</em> recompile it, but rather provide with the source code, and let the end user compile it with her own MySQL version. But here, too, the code must be compatible with whatever changes the new MySQL version may have.</p>
+<h4>And if it doesn't compile with the new MySQL version?</h4>
+<p>That's what happened to me. The particular case at hand was SphinxSE, a plugin which serves as a bridge between MySQL and a <a href="http://sphinxsearch.com/">Sphinx Search</a> server. I've been using it for years and was happy about it. But, as it happened, it took well over a year for sphinx to compile with MySQL <strong>5,5</strong>. This meant I was unable to upgrade my <strong>5.1</strong> installation to <strong>5.5</strong>, a thing I was aiming to do for quite a while.<!--more--></p>
+<p>Even when fixed, not all features were included, and thankfully I was able to come up with <a href="http://code.openark.org/blog/mysql/sphinx-sphinx_snippets-mysql-5-5">my own patch</a>.</p>
+<p>Not complaining about this particular project -- I think Sphinx is <em>awesome</em>, with latest versions providing great features I'm putting into immediate use.</p>
+<p>However, how much am I willing to rely on 3rd party projects when planning my MySQL upgrades? I'm now thinking I shouldn't.</p>
+<h4>A central repository?</h4>
+<p>MariaDB does a great thing: it provides with several <a href="http://kb.askmonty.org/en/mariadb-versus-mysql-features">additional features</a> over standard MySQL, including a set of plugins. They turn into a debian-like repository, in which they maintain the plugins for their own distribution.</p>
+<p>[<em>Darn!</em> I just realized I should have looked at what they did with Sphinx in their <strong>5.5</strong> distribution! Need to do my monthly mental examination.]</p>
+<p>Anyway, this is something I would like to see outside MariaDB as well: a central repository where plugins are maintained and kept up to the latest releases.</p>
+<p>Thoughts, anyone?</p>

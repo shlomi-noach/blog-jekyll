@@ -1,0 +1,41 @@
+---
+title: 'From Percona Server to MySQL and back to Percona Server: beware of crash safe
+  replication info'
+date: 2014-05-27 07:50:55.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Replication
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>We're migrating some of our "vanilla" MySQL 5.5 servers to Percona Server 5.5. One of the major incentives is the <a href="http://www.percona.com/doc/percona-server/5.5/reliability/crash_resistant_replication.html">crash-safe replication</a> feature, allowing slaves to die (power failure) and resume replication without losing position in relay logs.</p>
+<p>Whether or not we will migrate all our servers depends on further benchmarking; so far we've noticed unexpected results, but these are still premature to publish.</p>
+<p>However the fact that we are using both MySQL &amp; Percona Server has led us into a peculiar situation which I'd like to share. We reseed our servers via LVM snapshots. If we need a new machine, or have a corrupted slave, we capture an image of a running slave and duplicate it, a process which takes the better part of a day. This duplicates not only the data, of course, but also the relay logs, the <strong>relay-log.info</strong> file, <strong>master.info</strong> file, implying the <em>position within the topology</em>.</p>
+<p>With crash safe replication this also means the transactional relay log position. Recap: crash safe replication writes, per transaction, the relay log status into <strong>ibdata1</strong> file. So the relay log info in <strong>ibdata1</strong> is in perfect alignment with your committed transactions. Upon server startup, Percona Server reads the info from <strong>ibdata1</strong> and overwrites <strong>relay-log.info</strong> file (it completely disregards whatever was in that file prior to startup).</p>
+<p>Can you guess what could get wrong here? Here's the scenario we had; the same problem can unfold in different scenarios.</p>
+<p>Take a look at the following topology:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/05/simple-topology.png"><img class="alignnone size-full wp-image-6869" src="{{ site.baseurl }}/assets/simple-topology.png" alt="simple topology" width="701" height="297" /></a></p></blockquote>
+<p>(this image is an actual online visualization of a replication topology; for purposes of this blog it's a sandbox topology on my laptop. Please stand by for some very cool open source release announcement shortly)</p>
+<p><!--more-->We copied <strong>srv-2</strong> (Percona Server) into <strong>srv-3</strong> (MySQL). They both run well. <em>A few days later</em> we added <strong>srv-4</strong> as Percona Server and (I'm cutting the story short here) reseeded it from <strong>srv-3</strong>. We started <strong>srv-4</strong>. Bam! Won't replicate since it can't find the required master logs.</p>
+<p>Why? It was reseeded from <strong>srv-3</strong> which was well replicating. It took less than 24 hours to complete the process and the master has 4 days of binary logs retention. Why would the new <strong>srv-4</strong> fail to find the required logs on the master?</p>
+<p>The catch here is that the Crash Safe Replication info residing in <strong>ibdata1</strong> was copied from <strong>srv-2</strong> to <strong>srv-3</strong>, where it was ignored (remember <strong>srv-3</strong> is plain old MySQL and is ignorant of this info). This turned the info on <strong>srv-3</strong> stale; it never got updated. Not only was it stale, it was also out of sync with <strong>srv-3</strong>'s execution. But when data was copied to <strong>srv-4</strong>, Crash Safe Replication info was copied along, and <strong>srv-4</strong> was happy to read this info upon strartup and use it to overwrite the perfectly valid <strong>relay-log.info</strong> file. By that time the master has long since purged the binary logs indicated in the newly rewritten <strong>relay-log.info</strong> file.</p>
+<p>To some respect we were lucky, because this gave us immediate feedback and insight on what went wrong. Had replication found the logs on the master, it would have probably executed for a while, then crash on some Duplicate Key error where it would be much more difficult to track the origin of the problem.</p>
+<p>Now that we are aware of the problem, we are more careful: you need to be careful once for each newly reseeded Percona Server instance, upon startup. We've added the following row to our <strong>/etc/init.d/mysql</strong> script, just before starting the server:</p>
+<blockquote>
+<pre>cp $datadir/relay-log.info $datadir/relay-log.info.pre-start</pre>
+</blockquote>
+<p>When we start a Percona Server for the first time we make sure to reset <strong>relay-log.info</strong> using <strong>relay-log.info.pre-start</strong>. We then go on with our lives. Until such time that all of our topology is composed of Percona Server, we have one more thing to be careful about.</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>

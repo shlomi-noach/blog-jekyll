@@ -1,0 +1,35 @@
+---
+title: More on variables ambiguities
+date: 2009-04-30 06:32:09.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Configuration
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: serg@mysql.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Continuing <a title="Link to Variables ambiguities in names and values" rel="bookmark" href="../mysql/variables-ambiguities-in-names-and-values">Variables ambiguities in names and values</a>, there are two more issues I wish to present.</p>
+<p>First, I've shown that variable values may be ambiguous. Thus, <strong>1</strong> and <strong>ON</strong> are interchangeable. But also <strong>1</strong> and <strong>YES</strong>.</p>
+<p>The important thing to note is that <em>it's not always like that</em>. You can't just swap <strong>1</strong> for <strong>ON</strong> or <strong>YES</strong> as you will: it depends on the variable. Thus, a specific variable (e.g. <strong>query_cache_type</strong>) may accept <strong>ON</strong> for <strong>1</strong> - but will not accept <strong>YES</strong>. Another may accept <strong>YES</strong> for <strong>1</strong> - bot not <strong>ON</strong>.</p>
+<p>Confused? Here's the second issue. This one is really a bug, as I see it. Take a look at the following:</p>
+<blockquote>
+<pre>mysql&gt; SHOW GLOBAL VARIABLES LIKE 'innodb_file_per_table';
++-----------------------+-------+
+| Variable_name         | Value |
++-----------------------+-------+
+| innodb_file_per_table | ON    |
++-----------------------+-------+</pre>
+</blockquote>
+<p>The <strong>ON</strong> value is actually <em>illegal</em>: if you try to set this value in your <strong>my.cnf</strong> file - you'll get a non-file-per-table behavior. The real value you should be using in <strong>my.cnf</strong> is <strong>1</strong> (or no value at all).</p>
+<p>And so in this latter example, <strong>1</strong> equals <strong>ON</strong>, but only one of them is valid in the <strong>my.cnf</strong> file, and yet only the other one is being reported.</p>
+<p>The behavior is documented <a href="http://dev.mysql.com/doc/refman/5.1/en/dynamic-system-variables.html">here</a>. But, if, like myself, you find it undesired, please comment on <a href="http://bugs.mysql.com/bug.php?id=44509">bug #44509</a>.</p>

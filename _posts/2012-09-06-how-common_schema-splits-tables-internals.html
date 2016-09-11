@@ -1,0 +1,182 @@
+---
+title: How common_schema split()s tables - internals
+date: 2012-09-06 07:25:07.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- Indexing
+- INFORMATION_SCHEMA
+- openark kit
+- QueryScript
+- scripts
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: rjames@yahoo-inc.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This post exposes some of the internals, and the SQL behind QueryScript's <em>split</em>. <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script.html">common_schema/QueryScript</a> <strong>1.1</strong> introduces the <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_split.html"><strong>split</strong></a> statement, which auto-breaks a "large" query (one which operates on large tables as a whole or without keys) into smaller queries, and executes them in sequence.</p>
+<p>This makes for easier transactions, less locks held, potentially (depending on the user) more idle time released back to the database. <em>split<strong></strong></em> has similar concepts to <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-chunk-update.html">oak-chunk-update</a> and <a href="http://www.percona.com/doc/percona-toolkit/2.1/pt-archiver.html">pt-archiver</a>, but works differently, and implemented entirely in SQL on server side.</p>
+<p>Take the following statement as example:</p>
+<blockquote>
+<pre><strong>split</strong> (<strong>UPDATE sakila.inventory SET last_update = last_update + INTERVAL 6 HOUR</strong>)
+  pass;</pre>
+</blockquote>
+<p>It yields with (roughly) the following statements:</p>
+<blockquote>
+<pre>UPDATE sakila.inventory SET last_update = last_update + INTERVAL 6 HOUR <strong>WHERE</strong> ((((`inventory`.`inventory_id` &gt; '1')) OR ((`inventory`.`inventory_id` = '1'))) AND (((`inventory`.`inventory_id` &lt; '1000')) OR ((`inventory`.`inventory_id` = '1000'))));
+UPDATE sakila.inventory SET last_update = last_update + INTERVAL 6 HOUR <strong>WHERE</strong> ((((`inventory`.`inventory_id` &gt; '1000'))) AND (((`inventory`.`inventory_id` &lt; '2000')) OR ((`inventory`.`inventory_id` = '2000'))));
+UPDATE sakila.inventory SET last_update = last_update + INTERVAL 6 HOUR <strong>WHERE</strong> ((((`inventory`.`inventory_id` &gt; '2000'))) AND (((`inventory`.`inventory_id` &lt; '3000')) OR ((`inventory`.`inventory_id` = '3000'))));
+UPDATE sakila.inventory SET last_update = last_update + INTERVAL 6 HOUR <strong>WHERE</strong> ((((`inventory`.`inventory_id` &gt; '3000'))) AND (((`inventory`.`inventory_id` &lt; '4000')) OR ((`inventory`.`inventory_id` = '4000'))));
+UPDATE sakila.inventory SET last_update = last_update + INTERVAL 6 HOUR <strong>WHERE</strong> ((((`inventory`.`inventory_id` &gt; '4000'))) AND (((`inventory`.`inventory_id` &lt; '4581')) OR ((`inventory`.`inventory_id` = '4581'))));</pre>
+</blockquote>
+<p>(I say "roughly" because internally there are user defined variables at play, but for convenience, I verbose the actual values as constants.)</p>
+<h4>How does that work?</h4>
+<p><em>common_schema</em> works on server side. There is no Perl script or anything. It must therefore use server-side operations to:</p>
+<ul>
+<li>Identify table to be split</li>
+<li>Analyze the table in the first place, deciding how to split it</li>
+<li>Analyze the query, deciding on how to rewrite it</li>
+<li>Split the table (logically) into unique and distinct chunks</li>
+<li>Work out the query on each such chunk</li>
+</ul>
+<p>Following is an internal look at how <em>common_schema</em> does all the above.<!--more--></p>
+<h4>Identifying the table</h4>
+<p>When query operates on a single table, <em>split</em> is able to parse the query's SQL and find out that table. When multiple tables are involved, <em>split</em> requires user instruction: which table is it that the query should be split by?</p>
+<h4>Analyzing the table</h4>
+<p>Table analysis is done via a <em>similar</em> method to <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/candidate_keys_recommended.html">candidate_keys_recommended</a>. It is almost identical, only it uses <a href="http://dev.mysql.com/doc/refman/5.1/en/information-schema-optimization.html">INFORMATION_SCHEMA optimizations</a> to make the query short and lightweight. Simulating the analysis using <strong>candidate_keys_recommended</strong>, we get:</p>
+<blockquote>
+<pre>mysql&gt; select * from candidate_keys_recommended where table_name='inventory' \G
+*************************** 1. row ***************************
+          table_schema: sakila
+            table_name: inventory
+recommended_index_name: PRIMARY
+          has_nullable: 0
+            is_primary: 1
+ count_column_in_index: 1
+          column_names: inventory_id</pre>
+</blockquote>
+<p>This is cool, simple and very easy to work with: we choose to split the table via the <strong>inventory_id</strong> column, which is conveniently an integer. We'll soon see <em>split</em> can handle complex cases as well.</p>
+<h4>Analyzing the query</h4>
+<p>This is done in part via Roland's <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_analysis_routines.html">query_analysis_routines</a>, and in part just parsing the query, looking for <strong>WHERE</strong>,<strong> GROUP BY</strong>, <strong>LIMIT</strong> etc. clauses.</p>
+<p>The nice part is injecting a <strong>WHERE</strong> condition, which didn't appear in the original query. That <strong>WHERE</strong> condition is what limits the query to a distinct chunk of rows.</p>
+<h4>Splitting the table</h4>
+<p>With a single <strong>INTEGER PRIMARY KEY</strong> this sounds simple, right? Take rows <strong>1..1,000</strong>, then <strong>1,001..2,000</strong>, then <strong>2,001..3,000</strong> etc.</p>
+<p>Wrong: even with this simple scenario, things are much more complex. Are the numbers successive? What if there are holes? What if there is a <strong>1,000,000</strong> gap between every two numbers? What if there are multiple holes of differing size and frequency?</p>
+<p>And if we have two columns in our <strong>UNIQUE KEY</strong>? What if one of them is textual, not an <strong>INTEGER</strong>, the other a <strong>TIMESTAMP</strong>, not an <strong>INTEGER</strong> either?</p>
+<p><em>split</em> doesn't work in that naive way. It makes no assumptions on the density of values. It only requires:</p>
+<ul>
+<li>some <strong>UNIQUE KEY</strong> to work with,</li>
+<li>which has no <strong>NULL</strong> values.</li>
+</ul>
+<p>Given the above, it uses <em>User Defined Variables</em> to setup the chunks. With our single <strong>INTEGER</strong> column, the minimum value is set like this:</p>
+<blockquote>
+<pre>select 
+  inventory_id 
+from 
+  `sakila`.`inventory` 
+order by 
+  inventory_id ASC 
+limit 1  
+into @_split_column_variable_min_1
+;</pre>
+</blockquote>
+<p>This sets the first value of the first chunk. What value terminates this chunk? It is calculated like this:</p>
+<blockquote>
+<pre>select 
+  inventory_id 
+from (
+  select 
+    inventory_id 
+  from 
+    `sakila`.`inventory` 
+  where 
+    (((`inventory`.`inventory_id` &gt; @_split_column_variable_range_start_1)) OR ((`inventory`.`inventory_id` = @_split_column_variable_range_start_1))) and (((`inventory`.`inventory_id` &lt; @_split_column_variable_max_1)) OR ((`inventory`.`inventory_id` = @_split_column_variable_max_1))) 
+  order by 
+    inventory_id ASC limit 1000 
+  ) sel_split_range  
+order by 
+  inventory_id DESC 
+limit 1  
+into @_split_column_variable_range_end_1
+;</pre>
+</blockquote>
+<p>Now there's a query you wouldn't want to work by hand, now would you?</p>
+<p>The cool part here is that the above works well for any type of column; this doesn't have to be an <strong>INTEGER</strong>. Dates, strings etc. are all just fine.</p>
+<p>The above also works well for multiple columns, where the query gets more complicated (see following).</p>
+<h4>Working out the query per chunk</h4>
+<p>This part is the easy one, now that all the hard work is done. We know ho to manipulate the query, we know the lower and upper boundaries of the chunk, so we just fill in the values and execute.</p>
+<h4>Multi-columns keys</h4>
+<p>Consider a similar query on <strong>sakila.film_actor</strong>, where the <strong>PRIMARY KEY</strong> is a compound of two columns:</p>
+<blockquote>
+<pre>split (UPDATE sakila.film_actor SET last_update = last_update + INTERVAL 6 HOUR)
+  throttle 2;</pre>
+</blockquote>
+<p>The chunked queries will look like this:</p>
+<blockquote>
+<pre>UPDATE sakila.film_actor SET last_update = last_update + INTERVAL 6 HOUR <strong>WHERE</strong> ((((`film_actor`.`actor_id` &gt; '1')) OR ((`film_actor`.`actor_id` = '1') AND (`film_actor`.`film_id` &gt; '1')) OR ((`film_actor`.`actor_id` = '1') AND (`film_actor`.`film_id` = '1'))) AND (((`film_actor`.`actor_id` &lt; '39')) OR ((`film_actor`.`actor_id` = '39') AND (`film_actor`.`film_id` &lt; '293')) OR ((`film_actor`.`actor_id` = '39') AND (`film_actor`.`film_id` = '293'))));
+UPDATE sakila.film_actor SET last_update = last_update + INTERVAL 6 HOUR <strong>WHERE</strong> ((((`film_actor`.`actor_id` &gt; '39')) OR ((`film_actor`.`actor_id` = '39') AND (`film_actor`.`film_id` &gt; '293'))) AND (((`film_actor`.`actor_id` &lt; '76')) OR ((`film_actor`.`actor_id` = '76') AND (`film_actor`.`film_id` &lt; '234')) OR ((`film_actor`.`actor_id` = '76') AND (`film_actor`.`film_id` = '234'))));
+UPDATE sakila.film_actor SET last_update = last_update + INTERVAL 6 HOUR <strong>WHERE</strong> ((((`film_actor`.`actor_id` &gt; '76')) OR ((`film_actor`.`actor_id` = '76') AND (`film_actor`.`film_id` &gt; '234'))) AND (((`film_actor`.`actor_id` &lt; '110')) OR ((`film_actor`.`actor_id` = '110') AND (`film_actor`.`film_id` &lt; '513')) OR ((`film_actor`.`actor_id` = '110') AND (`film_actor`.`film_id` = '513'))));
+UPDATE sakila.film_actor SET last_update = last_update + INTERVAL 6 HOUR <strong>WHERE</strong> ((((`film_actor`.`actor_id` &gt; '110')) OR ((`film_actor`.`actor_id` = '110') AND (`film_actor`.`film_id` &gt; '513'))) AND (((`film_actor`.`actor_id` &lt; '146')) OR ((`film_actor`.`actor_id` = '146') AND (`film_actor`.`film_id` &lt; '278')) OR ((`film_actor`.`actor_id` = '146') AND (`film_actor`.`film_id` = '278'))));
+UPDATE sakila.film_actor SET last_update = last_update + INTERVAL 6 HOUR <strong>WHERE</strong> ((((`film_actor`.`actor_id` &gt; '146')) OR ((`film_actor`.`actor_id` = '146') AND (`film_actor`.`film_id` &gt; '278'))) AND (((`film_actor`.`actor_id` &lt; '183')) OR ((`film_actor`.`actor_id` = '183') AND (`film_actor`.`film_id` &lt; '862')) OR ((`film_actor`.`actor_id` = '183') AND (`film_actor`.`film_id` = '862'))));
+UPDATE sakila.film_actor SET last_update = last_update + INTERVAL 6 HOUR <strong>WHERE</strong> ((((`film_actor`.`actor_id` &gt; '183')) OR ((`film_actor`.`actor_id` = '183') AND (`film_actor`.`film_id` &gt; '862'))) AND (((`film_actor`.`actor_id` &lt; '200')) OR ((`film_actor`.`actor_id` = '200') AND (`film_actor`.`film_id` &lt; '993')) OR ((`film_actor`.`actor_id` = '200') AND (`film_actor`.`film_id` = '993'))));</pre>
+</blockquote>
+<p>View the complete command to realize just how much more complex each query is, and how much more complex the chunking becomes. Here's how I evaluate the chunk's "next range end" variables:</p>
+<blockquote>
+<pre>select 
+  actor_id, film_id 
+from (
+  select 
+    actor_id, film_id 
+  from 
+    `sakila`.`film_actor` 
+  where 
+    (((`film_actor`.`actor_id` &gt; @_split_column_variable_range_start_1)) OR ((`film_actor`.
+`actor_id` = @_split_column_variable_range_start_1) AND (`film_actor`.`film_id` &gt; @_split_column_variable_range_start_2))) and (((`film_actor`.`actor_id` &lt; @_split_column_variable_max_1)) OR ((`film_actor`.`actor_id` = @_split_column_variable_max_1) AND (`film_actor`.`film_id` &lt; @_split_column_variable_max_2)) OR ((`film_actor`.`actor_id` = @_split_column_variable_max_1) AND (`film_actor`.`film_id` = @_split_column_variable_max_2))) 
+  order by 
+    actor_id ASC, film_id ASC 
+  limit 1000 
+  ) sel_split_range  
+order by 
+  actor_id DESC, film_id DESC 
+limit 1  
+into @_split_column_variable_range_end_1, @_split_column_variable_range_end_2
+;</pre>
+</blockquote>
+<p>By the way, you may recall that everything is done server side. The <strong>WHERE</strong> condition for the chunked queries is in itself generated via SQL statement, and not too much by programmatic logic. Here's <em>part</em> of the query which computes the limiting condition:</p>
+<blockquote>
+<pre>  select
+    group_concat('(', partial_comparison, ')' order by n separator ' OR ') as comparison
+  from (
+    select 
+      n,
+      group_concat('(', column_name, ' ', if(is_last, comparison_operator, '='), ' ', variable_name, ')' order by column_order separator ' AND ') as partial_comparison
+    from (
+      select 
+        n, CONCAT(mysql_qualify(split_table_name), '.', mysql_qualify(column_name)) AS column_name,
+        case split_variable_type
+          when 'range_start' then range_start_variable_name
+          when 'range_end' then range_end_variable_name
+          when 'max' then max_variable_name
+        end as variable_name,
+        _split_column_names_table.column_order, _split_column_names_table.column_order = n as is_last 
+      from 
+        numbers, _split_column_names_table 
+      where 
+        n between _split_column_names_table.column_order and num_split_columns 
+      order by n, _split_column_names_table.column_order
+    ) s1
+    group by n
+  ) s2
+  into return_value
+  ;</pre>
+</blockquote>
+<p>There is a lot of complexity to <em>split</em> to make it able to provide with as clean a syntax for the user as possible.</p>

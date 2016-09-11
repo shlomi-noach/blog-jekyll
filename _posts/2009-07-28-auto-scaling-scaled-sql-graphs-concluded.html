@@ -1,0 +1,454 @@
+---
+title: Auto scaling, scaled SQL graphs concluded
+date: 2009-07-28 14:38:08.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Graphs
+- SQL
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: jeremy@jcole.us
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I wasn't sure I was to go this far. After catching breath the following have been added to <a href="http://code.openark.org/blog/mysql/generic-auto-scaling-scaled-sql-graphs">Generic, auto scaling, scaled SQL graphs</a>, and these will conclude my current hacks:</p>
+<ul>
+<li>Displaying X-axis min/max values.</li>
+<li>Support for Y-axis values precision.</li>
+<li>Support for pre-defined scale range.</li>
+</ul>
+<p>The addition of the above makes for presentable, usable graphs. See also sample graphs at the end of this post.</p>
+<h4>Step 8: adding X-axis values</h4>
+<p>I add minimum/maximum X-scale values to the graph. What was just <strong>ordering_column</strong> before, now turns to be the <strong>x</strong> in the <strong>y = f(x)</strong> function.<!--more--></p>
+<blockquote>
+<pre>SELECT
+  y_scale,
+  horizontal_bar
+  FROM
+  (
+  SELECT
+    @row_number := @row_number+1,
+    CASE @row_number
+      WHEN 1 THEN ROUND(max_value)
+      WHEN (@graph_rows+1)/2 THEN ROUND((max_value+min_value)/2)
+      WHEN @graph_rows THEN ROUND(min_value)
+      ELSE '~'
+    END AS y_scale,
+    horizontal_bar,
+    <strong>@bar_length := IFNULL(@bar_length, CHAR_LENGTH(horizontal_bar))</strong>
+  FROM
+    (SELECT @row_number := 0) AS select_row
+    INNER JOIN
+    (
+    SELECT
+      min_value,
+      max_value,
+      value_column,
+      GROUP_CONCAT(SUBSTRING(graph_bar, tinyint_asc.value, 1) ORDER BY ordering_column SEPARATOR '') AS horizontal_bar
+    FROM
+      (SELECT @row_number := 0) AS select_row,
+      tinyint_asc
+    INNER JOIN (
+      SELECT
+        ordering_column,
+        @min_value AS min_value,
+        @max_value AS max_value,
+        value_column,
+        @scaled_value := CONVERT((value_column-@min_value)*(@graph_rows-1)/(@max_value-@min_value), UNSIGNED) AS scaled_value,
+        CONCAT(REPEAT('-',@scaled_value),'#',REPEAT('-',(@graph_rows-1)-@scaled_value)) AS graph_bar
+      FROM
+        (
+        SELECT
+          @min_value := LEAST(IFNULL(@min_value, value_column), value_column) AS min_value,
+          @max_value := GREATEST(IFNULL(@max_value, value_column), value_column) AS max_value,
+          <strong>@min_range := LEAST(IFNULL(@min_range, ordering_column), ordering_column) AS min_range</strong>,
+          <strong>@max_range := GREATEST(IFNULL(@max_range, ordering_column), ordering_column) AS max_range</strong>,
+          ordering_column,
+          value_column
+        FROM
+          (
+            SELECT id AS ordering_column, val AS value_column
+            FROM sample_values LIMIT 100
+          ) AS value_select,
+          (SELECT @min_value := NULL) AS select_min,
+          (SELECT @max_value := NULL) AS select_max,
+          <strong>(SELECT @min_range := NULL) AS select_min_range</strong>,
+          <strong>(SELECT @max_range := NULL) AS select_max_range</strong>,
+          <strong>(SELECT @bar_length := NULL) AS select_bar_length</strong>,
+          (SELECT @graph_rows := 15) AS select_graph_rows
+        ) AS select_range
+      ) AS select_vertical
+    WHERE
+      tinyint_asc.value BETWEEN 1 AND CHAR_LENGTH(graph_bar)
+    GROUP BY
+      tinyint_asc.value
+    ORDER BY
+      tinyint_asc.value DESC
+    ) AS select_horizontal
+  ) AS select_horizontal_untitled
+<strong>UNION ALL</strong>
+<strong>SELECT '', CONCAT('v', REPEAT(':', @bar_length-2), 'v')</strong>
+<strong>UNION ALL</strong>
+<strong>SELECT '', CONCAT(@min_range, REPEAT(' ', @bar_length-CHAR_LENGTH(@min_range)-CHAR_LENGTH(@max_range)), @max_range)</strong>
+;
++---------+------------------------------------------------------------------------------------------------------+
+| y_scale | horizontal_bar                                                                                       |
++---------+------------------------------------------------------------------------------------------------------+
+| 2       | ------------########-------------------------------------------------------########----------------- |
+| ~       | ----------##--------###-------------------------------------------------###--------###-------------- |
+| ~       | -------###-------------##---------------------------------------------##--------------##------------ |
+| ~       | ------#------------------##------------------------------------------#------------------##---------- |
+| ~       | ----##---------------------#---------------------------------------##---------------------#--------- |
+| ~       | ---#------------------------##-----------------------------------##------------------------##------- |
+| ~       | -##---------------------------#---------------------------------#----------------------------#------ |
+| 1       | #------------------------------##------------------------------#------------------------------#----- |
+| ~       | ---------------------------------#---------------------------##--------------------------------##--- |
+| ~       | ----------------------------------##------------------------#------------------------------------#-- |
+| ~       | ------------------------------------#---------------------##--------------------------------------## |
+| ~       | -------------------------------------##-----------------##------------------------------------------ |
+| ~       | ---------------------------------------##-------------##-------------------------------------------- |
+| ~       | -----------------------------------------###-------###---------------------------------------------- |
+| 0       | --------------------------------------------#######------------------------------------------------- |
+|         | v::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::v |
+|         | 0                                                                                                 99 |
++---------+------------------------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>The X-axis range is <strong>[0..99]</strong>, displayed below. The code does not limit us to <strong>INTEGER</strong>. We may as well have <strong>FLOAT</strong>, <strong>DATE</strong>, <strong>TIMESTAMP</strong> etc. (examples follow).</p>
+<h4>Step 9: adding precision</h4>
+<p>The <strong>0,1,2</strong> Y-axis values play nicely here. But if my generic query is:</p>
+<blockquote>
+<pre>SELECT id AS ordering_column, val/3 AS value_column FROM sample_values LIMIT 100</pre>
+</blockquote>
+<p>The resulting graph looks like:</p>
+<blockquote>
+<pre>+---------+------------------------------------------------------------------------------------------------------+
+| y_scale | horizontal_bar                                                                                       |
++---------+------------------------------------------------------------------------------------------------------+
+| 1       | ------------#########------------------------------------------------------#########---------------- |
+| ~       | --------####---------###-----------------------------------------------####---------###------------- |
+| ~       | ------##----------------###------------------------------------------##----------------###---------- |
+| ~       | ----##---------------------##-------------------------------------###---------------------##-------- |
+| ~       | -###-------------------------##---------------------------------##--------------------------##------ |
+| 0       | #------------------------------##-----------------------------##------------------------------##---- |
+| ~       | ---------------------------------##-------------------------##----------------------------------##-- |
+| ~       | -----------------------------------##---------------------##--------------------------------------## |
+| ~       | -------------------------------------###----------------##------------------------------------------ |
+| ~       | ----------------------------------------###---------####-------------------------------------------- |
+| 0       | -------------------------------------------#########------------------------------------------------ |
+|         | v::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::v |
+|         | 0                                                                                                 99 |
++---------+------------------------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>And the <strong>0,0,1</strong> values are completely inappropriate. We will now introduce precision:</p>
+<blockquote>
+<pre>SELECT
+  y_scale,
+  horizontal_bar
+  FROM
+  (
+  SELECT
+    @row_number := @row_number+1,
+    CASE @row_number
+      WHEN 1 THEN <strong>ROUND(max_value * POW(10, @value_precision))/POW(10, @value_precision)</strong>
+      WHEN (@graph_rows+1)/2 THEN <strong>ROUND((max_value+min_value)*POW(10, @value_precision)/2)/POW(10, @value_precision)</strong>
+      WHEN @graph_rows THEN <strong>ROUND(min_value*POW(10, @value_precision))/POW(10, @value_precision)</strong>
+      ELSE '~'
+    END AS y_scale,
+    horizontal_bar,
+    @bar_length := IFNULL(@bar_length, CHAR_LENGTH(horizontal_bar))
+  FROM
+    (SELECT @row_number := 0) AS select_row
+    INNER JOIN
+    (
+    SELECT
+      min_value,
+      max_value,
+      value_column,
+      GROUP_CONCAT(SUBSTRING(graph_bar, tinyint_asc.value, 1) ORDER BY ordering_column SEPARATOR '') AS horizontal_bar
+    FROM
+      (SELECT @row_number := 0) AS select_row,
+      tinyint_asc
+    INNER JOIN (
+      SELECT
+        ordering_column,
+        @min_value AS min_value,
+        @max_value AS max_value,
+        value_column,
+        @scaled_value := CONVERT((value_column-@min_value)*(@graph_rows-1)/(@max_value-@min_value), UNSIGNED) AS scaled_value,
+        CONCAT(REPEAT('-',@scaled_value),'#',REPEAT('-',(@graph_rows-1)-@scaled_value)) AS graph_bar
+      FROM
+        (
+        SELECT
+          @min_value := LEAST(IFNULL(@min_value, value_column), value_column) AS min_value,
+          @max_value := GREATEST(IFNULL(@max_value, value_column), value_column) AS max_value,
+          @min_range := LEAST(IFNULL(@min_range, ordering_column), ordering_column) AS min_range,
+          @max_range := GREATEST(IFNULL(@max_range, ordering_column), ordering_column) AS max_range,
+          ordering_column,
+          value_column
+        FROM
+          (
+            SELECT id AS ordering_column, val/3 AS value_column
+            FROM sample_values LIMIT 100
+          ) AS value_select,
+          (SELECT @min_value := NULL) AS select_min,
+          (SELECT @max_value := NULL) AS select_max,
+          (SELECT @min_range := NULL) AS select_min_range,
+          (SELECT @max_range := NULL) AS select_max_range,
+          (SELECT @bar_length := NULL) AS select_bar_length,
+          <strong>(SELECT @value_precision := 2) AS select_value_precision,</strong>
+          (SELECT @graph_rows := 15) AS select_graph_rows
+        ) AS select_range
+      ) AS select_vertical
+    WHERE
+      tinyint_asc.value BETWEEN 1 AND CHAR_LENGTH(graph_bar)
+    GROUP BY
+      tinyint_asc.value
+    ORDER BY
+      tinyint_asc.value DESC
+    ) AS select_horizontal
+  ) AS select_horizontal_untitled
+UNION ALL
+SELECT '', CONCAT('v', REPEAT(':', @bar_length-2), 'v')
+UNION ALL
+SELECT '', CONCAT(@min_range, REPEAT(' ', @bar_length-CHAR_LENGTH(@min_range)-CHAR_LENGTH(@max_range)), @max_range)
+;
++---------+------------------------------------------------------------------------------------------------------+
+| y_scale | horizontal_bar                                                                                       |
++---------+------------------------------------------------------------------------------------------------------+
+| 0.67    | ------------########-------------------------------------------------------########----------------- |
+| ~       | ----------##--------###-------------------------------------------------###--------###-------------- |
+| ~       | -------###-------------##---------------------------------------------##--------------##------------ |
+| ~       | ------#------------------##------------------------------------------#------------------##---------- |
+| ~       | ----##---------------------#---------------------------------------##---------------------#--------- |
+| ~       | ---#------------------------##-----------------------------------##------------------------##------- |
+| ~       | -##---------------------------#---------------------------------#----------------------------#------ |
+| 0.33    | #------------------------------##------------------------------#------------------------------#----- |
+| ~       | ---------------------------------#---------------------------##--------------------------------##--- |
+| ~       | ----------------------------------##------------------------#------------------------------------#-- |
+| ~       | ------------------------------------#---------------------##--------------------------------------## |
+| ~       | -------------------------------------##-----------------##------------------------------------------ |
+| ~       | ---------------------------------------##-------------##-------------------------------------------- |
+| ~       | -----------------------------------------###-------###---------------------------------------------- |
+| 0       | --------------------------------------------#######------------------------------------------------- |
+|         | v::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::v |
+|         | 0                                                                                                 99 |
++---------+------------------------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>Watch the <strong>0.33, 0.67</strong> values generated here. This is much better.</p>
+<h4>Step 10: setting fixed scale range</h4>
+<p>When we compare two graphs, it's best if they are scaled the same way. So far, our graphs have scaled automatically according to min/max values. What we add now is a way to predefine the range. For example, dealing with <strong>per-cent</strong> values, I may always wish to scale <strong>[0..100]</strong>, regardless of min/max values.</p>
+<p>The code below defines a scale of <strong>[-1, 1]</strong>. It <em>automatically extends</em> if the range is actually insufficient, so it's safe to use. Let's see the same last graph again:</p>
+<blockquote>
+<pre>SELECT
+  y_scale,
+  horizontal_bar
+  FROM
+  (
+  SELECT
+    @row_number := @row_number+1,
+    CASE @row_number
+      WHEN 1 THEN ROUND(max_value * POW(10, @value_precision))/POW(10, @value_precision)
+      WHEN (@graph_rows+1)/2 THEN ROUND((max_value+min_value)*POW(10, @value_precision)/2)/POW(10, @value_precision)
+      WHEN @graph_rows THEN ROUND(min_value*POW(10, @value_precision))/POW(10, @value_precision)
+      ELSE '~'
+    END AS y_scale,
+    horizontal_bar,
+    @bar_length := IFNULL(@bar_length, CHAR_LENGTH(horizontal_bar))
+  FROM
+    (SELECT @row_number := 0) AS select_row
+    INNER JOIN
+    (
+    SELECT
+      min_value,
+      max_value,
+      value_column,
+      GROUP_CONCAT(SUBSTRING(graph_bar, tinyint_asc.value, 1) ORDER BY ordering_column SEPARATOR '') AS horizontal_bar
+    FROM
+      (SELECT @row_number := 0) AS select_row,
+      tinyint_asc
+    INNER JOIN (
+      SELECT
+        ordering_column,
+        @min_value AS min_value,
+        @max_value AS max_value,
+        value_column,
+        @scaled_value := CONVERT((value_column-@min_value)*(@graph_rows-1)/(@max_value-@min_value), UNSIGNED) AS scaled_value,
+        CONCAT(REPEAT('-',@scaled_value),'#',REPEAT('-',(@graph_rows-1)-@scaled_value)) AS graph_bar
+      FROM
+        (
+        SELECT
+          @min_value := LEAST(<strong>IFNULL(@min_scale_value, value_column),</strong> IFNULL(@min_value, value_column), value_column) AS min_value,
+          @max_value := GREATEST(<strong>IFNULL(@max_scale_value, value_column),</strong> IFNULL(@max_value, value_column), value_column) AS max_value,
+          @min_range := LEAST(IFNULL(@min_range, ordering_column), ordering_column) AS min_range,
+          @max_range := GREATEST(IFNULL(@max_range, ordering_column), ordering_column) AS max_range,
+          ordering_column,
+          value_column
+        FROM
+          (
+            SELECT id AS ordering_column, val/3 AS value_column FROM sample_values LIMIT 100
+          ) AS value_select,
+          (SELECT @min_value := NULL) AS select_min,
+          (SELECT @max_value := NULL) AS select_max,
+          (SELECT @min_range := NULL) AS select_min_range,
+          (SELECT @max_range := NULL) AS select_max_range,
+          (SELECT @bar_length := NULL) AS select_bar_length,
+          <strong>(SELECT @min_scale_value := -1) AS select_min_scale,</strong>
+          <strong>(SELECT @max_scale_value := 1) AS select_max_scale,</strong>
+          (SELECT @value_precision := 2) AS select_value_precision,
+          (SELECT @graph_rows := 15) AS select_graph_rows
+        ) AS select_range
+      ) AS select_vertical
+    WHERE
+      tinyint_asc.value BETWEEN 1 AND CHAR_LENGTH(graph_bar)
+    GROUP BY
+      tinyint_asc.value
+    ORDER BY
+      tinyint_asc.value DESC
+    ) AS select_horizontal
+  ) AS select_horizontal_untitled
+UNION ALL
+SELECT '', CONCAT('v', REPEAT(':', @bar_length-2), 'v')
+UNION ALL
+SELECT '', CONCAT(@min_range, REPEAT(' ', @bar_length-CHAR_LENGTH(@min_range)-CHAR_LENGTH(@max_range)), @max_range)
+;
++---------+------------------------------------------------------------------------------------------------------+
+| y_scale | horizontal_bar                                                                                       |
++---------+------------------------------------------------------------------------------------------------------+
+| 1       | ---------------------------------------------------------------------------------------------------- |
+| ~       | ---------------------------------------------------------------------------------------------------- |
+| ~       | ------------########-------------------------------------------------------########----------------- |
+| ~       | ------######--------#######------------------------------------------######--------#######---------- |
+| ~       | -#####---------------------####---------------------------------#####---------------------####------ |
+| ~       | #------------------------------#####------------------------####------------------------------####-- |
+| ~       | ------------------------------------#####-------------######--------------------------------------## |
+| 0       | -----------------------------------------#############---------------------------------------------- |
+| ~       | ---------------------------------------------------------------------------------------------------- |
+| ~       | ---------------------------------------------------------------------------------------------------- |
+| ~       | ---------------------------------------------------------------------------------------------------- |
+| ~       | ---------------------------------------------------------------------------------------------------- |
+| ~       | ---------------------------------------------------------------------------------------------------- |
+| ~       | ---------------------------------------------------------------------------------------------------- |
+| -1      | ---------------------------------------------------------------------------------------------------- |
+|         | v::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::v |
+|         | 0                                                                                                 99 |
++---------+------------------------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>Values are still in range <strong>[0..0.667]</strong>, but are presented on a wider scale.</p>
+<h4>Showcase</h4>
+<p>Here are some nice graphs generated, to show off.</p>
+<blockquote>
+<pre>+---------+----------------------------------------------------------------------------------+
+| y_scale | horizontal_bar                                                                   |
++---------+----------------------------------------------------------------------------------+
+| 14.17   | ----------------------------------------------------------------------###------- |
+| ~       | ---------------------------------------------------------------------#---#------ |
+| ~       | --------------------------------------------------------------------#-----#----- |
+| ~       | -------------------------------------------------------##----------------------- |
+| ~       | -----------------------------------------------------##--#---------#-------#---- |
+| ~       | ----------------------------------------------------#-----#--------------------- |
+| ~       | ---------------------------------------###-----------------#------#------------- |
+| 7.09    | -------------------------------------##---#--------#------------------------#--- |
+| ~       | ------------------------------------#------#----------------#------------------- |
+| ~       | -----------------------####--------#--------#-----#--------------#-----------#-- |
+| ~       | ---------------------##----#-----------------#---#-----------#------------------ |
+| ~       | --------------------#-------##----#-----------------------------#--------------- |
+| ~       | --------#####-----##----------#--#------------#-#-------------#---------------#- |
+| ~       | ----####-----##--#-------------##----------------------------------------------# |
+| 0       | ####-----------##------------------------------#---------------#---------------- |
+|         | v::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::v |
+|         | 2009-07-25 21:43:27                                          2009-07-29 06:02:27 |
++---------+----------------------------------------------------------------------------------+</pre>
+</blockquote>
+<blockquote>
+<pre>+---------+---------------------------------------------------------------------------------+
+| y_scale | horizontal_bar                                                                  |
++---------+---------------------------------------------------------------------------------+
+| 0.99    | ##----------------------------------------------------------------------------- |
+| ~       | --##--------------------------------------------------------------------------- |
+| ~       | ----#-------------------------------------------------------------------------- |
+| ~       | -----##------------------------------------------------------------------------ |
+| ~       | -------#----------------------------------------------------------------------- |
+| ~       | --------#---------------------------------------------------------------------- |
+| ~       | ---------#--------------------------------------------------------------------- |
+| 0.39    | ----------#-------------------------------------------------------------------- |
+| ~       | -----------#------------------------------------------------------------------- |
+| ~       | ------------#------------------------------------------------------------------ |
+| ~       | -------------#--------------------########------------------------------------- |
+| ~       | --------------#----------------###--------#####---------------################- |
+| ~       | ---------------##-----------###----------------#####----######----------------# |
+| ~       | -----------------##------###------------------------####----------------------- |
+| -0.22   | -------------------######------------------------------------------------------ |
+|         | v:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::v |
+|         | 2009-07-25 21:43:27                                         2009-07-29 06:02:27 |
++---------+---------------------------------------------------------------------------------+</pre>
+</blockquote>
+<blockquote>
+<pre>+---------+---------------------------------------------------------------------------------+
+| y_scale | horizontal_bar                                                                  |
++---------+---------------------------------------------------------------------------------+
+| -0      | --------------------######################------------------------------------- |
+| ~       | ------------########----------------------#######--------------------------#### |
+| ~       | --------####-------------------------------------#####-----------------####---- |
+| ~       | ------##----------------------------------------------##------------###-------- |
+| ~       | ----##--------------------------------------------------##---------#----------- |
+| ~       | ---#------------------------------------------------------#------##------------ |
+| ~       | --#--------------------------------------------------------#------------------- |
+| -2.39   | -#----------------------------------------------------------#---#-------------- |
+| ~       | ---------------------------------------------------------------#--------------- |
+| ~       | #------------------------------------------------------------#----------------- |
+| ~       | ------------------------------------------------------------------------------- |
+| ~       | ------------------------------------------------------------------------------- |
+| ~       | ------------------------------------------------------------------------------- |
+| ~       | ------------------------------------------------------------------------------- |
+| -4.78   | --------------------------------------------------------------#---------------- |
+|         | v:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::v |
+|         | 0                                                                          3.95 |
++---------+---------------------------------------------------------------------------------+</pre>
+</blockquote>
+<blockquote>
+<pre>+---------+----------------------------------------------------------------------------------+
+| y_scale | horizontal_bar                                                                   |
++---------+----------------------------------------------------------------------------------+
+| 110.82  | ---------------------------------------------------oooooo----------------------- |
+| ~       | ------------------------------------------------ooooooooooo--------------------- |
+| ~       | ----------------------------------------------oooooooooooooo-------------------- |
+| ~       | --------------------------------------------oooooooooooooooooo------------------ |
+| ~       | ----------------------------------oooo----ooooooooooooooooooooo----------------- |
+| ~       | o------------------------------ooooooooooooooooooooooooooooooooo---------------- |
+| ~       | o----------------------------ooooooooooooooooooooooooooooooooooo---------------- |
+| ~       | oo--------------------------ooooooooooooooooooooooooooooooooooooo--------------- |
+| ~       | oo-------------------------ooooooooooooooooooooooooooooooooooooooo-------------- |
+| ~       | ooo-----------------------ooooooooooooooooooooooooooooooooooooooooo------------- |
+| ~       | oooo--------------------oooooooooooooooooooooooooooooooooooooooooooo------------ |
+| ~       | oooo-------------------ooooooooooooooooooooooooooooooooooooooooooooo------------ |
+| 85.93   | ooooo-----------------ooooooooooooooooooooooooooooooooooooooooooooooo----------- |
+| ~       | oooooo---------------ooooooooooooooooooooooooooooooooooooooooooooooooo---------- |
+| ~       | ooooooo-------------oooooooooooooooooooooooooooooooooooooooooooooooooo---------- |
+| ~       | oooooooo-----------oooooooooooooooooooooooooooooooooooooooooooooooooooo--------- |
+| ~       | ooooooooo--------ooooooooooooooooooooooooooooooooooooooooooooooooooooooo-------- |
+| ~       | ooooooooooo----oooooooooooooooooooooooooooooooooooooooooooooooooooooooooo------- |
+| ~       | ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo------- |
+| ~       | oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo------ |
+| ~       | ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo----- |
+| ~       | oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo---- |
+| ~       | ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo--- |
+| ~       | oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo-- |
+| 61.04   | oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo |
+|         | v::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::v |
+|         | 93                                                                           172 |
++---------+----------------------------------------------------------------------------------+</pre>
+</blockquote>
+<h4>Why?</h4>
+<p>Why go for all this trouble? Isn't this nothing but a cool hack?</p>
+<p>Is this stuff useful? Practical?</p>
+<p>I have some agenda with this, which I'll be happy to share when comes into being. I think there are very practical uses for SQL-based graphs. I'm sure many readers can think of interesting uses, other than the ones I have in mind.</p>
+<h4>Conclusion</h4>
+<p>There are many more possibilities and featured which can be built into the graphs. I'm going to stop here, before this becomes too picky. I hope I have shown that some very nice graphs can be produced with SQL alone.</p>

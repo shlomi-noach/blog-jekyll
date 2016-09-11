@@ -1,0 +1,861 @@
+---
+title: MySQL eval()
+date: 2011-09-06 09:02:42.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- SQL
+- Stored routines
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I've just implemented an <strong>eval()</strong> call for MySQL. It is implemented with SQL, using a stored procedure. So this is not some plugin: you can use it from within your normal database server.</p>
+<h4>Just what is an eval() call?</h4>
+<p>In some programming languages it would mean: get some text, and execute it as though it were complied code. So, dynamic coding.</p>
+<p>In SQL: get the text of query which generates SQL statements in itself (either DML or DDL), and invoke those implied SQL statements.</p>
+<h4>A simple example</h4>
+<p>Best if I present <a href="http://www.mysqlperformanceblog.com/2009/05/21/mass-killing-of-mysql-connections/">Mass killing of MySQL Connections</a> by Peter Zaitsev. The thing is to execute a query, typically on <strong>INFORMATION_SCHEMA</strong>, which uses metadata so as to generate SQL queries/commands. Peter's example is:</p>
+<blockquote>
+<pre>select concat('KILL ',id,';') from information_schema.processlist where user='root'</pre>
+</blockquote>
+<p>The above query generates <strong>KILL</strong> commands for all users called <strong>'root'</strong>. I do many such queries in <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>: like <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/sql_show_grants.html">creating the <strong>GRANT</strong> statements</a> for accounts, the <strong>DROP KEY</strong> statements for <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/redundant_keys.html">redundant keys</a>, the <strong>ADD</strong> and <strong>DROP</strong> statements for <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/sql_foreign_keys.html">foreign keys</a> etc.</p>
+<p>So the problem is you have to export those statements to file, then execute them from file: either using <strong>SOURCE</strong>, as in Peter's example, or from shell prompt, piping file contents into <strong>mysql</strong> client.</p>
+<h4>You can now eval()</h4>
+<p>I've been on family holiday for a couple of weeks, which meant no need to think of work. Which means <a href="http://code.openark.org/blog/mysql/you-know-youve-been-doing-too-much-sql-when">more time to think of SQL</a> (darn!). And I've found the way to do it completely within the server (no external files required).<!--more--></p>
+<p>A usage example of <strong>eval()</strong> is this:</p>
+<blockquote>
+<pre>CALL eval('select concat(
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre>root@mysql-5.1.51&gt; SHOW PROCESSLIST;
++----+------+-----------+---------------+---------+------+------------+---------------------+
+| Id | User | Host      | db            | Command | Time | State      | Info                |
++----+------+-----------+---------------+---------+------+------------+---------------------+
+|  2 | root | localhost | common_schema | Query   |    0 | NULL       | SHOW PROCESSLIST    |
+| 43 | apps | localhost | NULL          | Query   |   28 | User sleep | select sleep(10000) |
++----+------+-----------+---------------+---------+------+------------+---------------------+
+2 rows in set (0.00 sec)
+
+root@mysql-5.1.51&gt; <strong>CALL eval('SELECT CONCAT(
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+KILL 
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre wp-pre-tag-2></pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+,id) from information_schema.processlist where user=
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre wp-pre-tag-2></pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+root
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre wp-pre-tag-2></pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+');</pre>
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre wp-pre-tag-2></pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+KILL 
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+KILL 
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre wp-pre-tag-2></pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+,id) from information_schema.processlist where user=
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre wp-pre-tag-2></pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+root
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre wp-pre-tag-2></pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+');</pre>
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre wp-pre-tag-2></pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+,id) FROM INFORMATION_SCHEMA.PROCESSLIST WHERE TIME &gt; 20');</strong>
+Query OK, 0 rows affected (0.01 sec)
+
+root@mysql-5.1.51&gt; SHOW PROCESSLIST;
++----+------+-----------+---------------+---------+------+-------+------------------+
+| Id | User | Host      | db            | Command | Time | State | Info             |
++----+------+-----------+---------------+---------+------+-------+------------------+
+|  2 | root | localhost | common_schema | Query   |    0 | NULL  | SHOW PROCESSLIST |
++----+------+-----------+---------------+---------+------+-------+------------------+
+1 row in set (0.00 sec)</pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+KILL 
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre>root@mysql-5.1.51&gt; SHOW PROCESSLIST;
++----+------+-----------+---------------+---------+------+------------+---------------------+
+| Id | User | Host      | db            | Command | Time | State      | Info                |
++----+------+-----------+---------------+---------+------+------------+---------------------+
+|  2 | root | localhost | common_schema | Query   |    0 | NULL       | SHOW PROCESSLIST    |
+| 43 | apps | localhost | NULL          | Query   |   28 | User sleep | select sleep(10000) |
++----+------+-----------+---------------+---------+------+------------+---------------------+
+2 rows in set (0.00 sec)
+
+root@mysql-5.1.51&gt; <strong>CALL eval('SELECT CONCAT(
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+,id) from information_schema.processlist where user=
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre wp-pre-tag-2></pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+root
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre wp-pre-tag-2></pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+');</pre>
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre wp-pre-tag-2></pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+KILL 
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+,id) from information_schema.processlist where user=
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre wp-pre-tag-2></pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+root
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre wp-pre-tag-2></pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+');</pre>
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre wp-pre-tag-2></pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+,id) FROM INFORMATION_SCHEMA.PROCESSLIST WHERE TIME &gt; 20');</strong>
+Query OK, 0 rows affected (0.01 sec)
+
+root@mysql-5.1.51&gt; SHOW PROCESSLIST;
++----+------+-----------+---------------+---------+------+-------+------------------+
+| Id | User | Host      | db            | Command | Time | State | Info             |
++----+------+-----------+---------------+---------+------+-------+------------------+
+|  2 | root | localhost | common_schema | Query   |    0 | NULL  | SHOW PROCESSLIST |
++----+------+-----------+---------------+---------+------+-------+------------------+
+1 row in set (0.00 sec)</pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+,id) from information_schema.processlist where user=
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre>root@mysql-5.1.51&gt; SHOW PROCESSLIST;
++----+------+-----------+---------------+---------+------+------------+---------------------+
+| Id | User | Host      | db            | Command | Time | State      | Info                |
++----+------+-----------+---------------+---------+------+------------+---------------------+
+|  2 | root | localhost | common_schema | Query   |    0 | NULL       | SHOW PROCESSLIST    |
+| 43 | apps | localhost | NULL          | Query   |   28 | User sleep | select sleep(10000) |
++----+------+-----------+---------------+---------+------+------------+---------------------+
+2 rows in set (0.00 sec)
+
+root@mysql-5.1.51&gt; <strong>CALL eval('SELECT CONCAT(
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+root
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre wp-pre-tag-2></pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+');</pre>
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre wp-pre-tag-2></pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+KILL 
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+root
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre wp-pre-tag-2></pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+');</pre>
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre wp-pre-tag-2></pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+,id) FROM INFORMATION_SCHEMA.PROCESSLIST WHERE TIME &gt; 20');</strong>
+Query OK, 0 rows affected (0.01 sec)
+
+root@mysql-5.1.51&gt; SHOW PROCESSLIST;
++----+------+-----------+---------------+---------+------+-------+------------------+
+| Id | User | Host      | db            | Command | Time | State | Info             |
++----+------+-----------+---------------+---------+------+-------+------------------+
+|  2 | root | localhost | common_schema | Query   |    0 | NULL  | SHOW PROCESSLIST |
++----+------+-----------+---------------+---------+------+-------+------------------+
+1 row in set (0.00 sec)</pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+root
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre>root@mysql-5.1.51&gt; SHOW PROCESSLIST;
++----+------+-----------+---------------+---------+------+------------+---------------------+
+| Id | User | Host      | db            | Command | Time | State      | Info                |
++----+------+-----------+---------------+---------+------+------------+---------------------+
+|  2 | root | localhost | common_schema | Query   |    0 | NULL       | SHOW PROCESSLIST    |
+| 43 | apps | localhost | NULL          | Query   |   28 | User sleep | select sleep(10000) |
++----+------+-----------+---------------+---------+------+------------+---------------------+
+2 rows in set (0.00 sec)
+
+root@mysql-5.1.51&gt; <strong>CALL eval('SELECT CONCAT(
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+');</pre>
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre wp-pre-tag-2></pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+KILL 
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+');</pre>
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre wp-pre-tag-2></pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+,id) FROM INFORMATION_SCHEMA.PROCESSLIST WHERE TIME &gt; 20');</strong>
+Query OK, 0 rows affected (0.01 sec)
+
+root@mysql-5.1.51&gt; SHOW PROCESSLIST;
++----+------+-----------+---------------+---------+------+-------+------------------+
+| Id | User | Host      | db            | Command | Time | State | Info             |
++----+------+-----------+---------------+---------+------+-------+------------------+
+|  2 | root | localhost | common_schema | Query   |    0 | NULL  | SHOW PROCESSLIST |
++----+------+-----------+---------------+---------+------+-------+------------------+
+1 row in set (0.00 sec)</pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+');</pre>
+</blockquote>
+<p>Note the changes:</p>
+<ul>
+<li>You pass your query as a string</li>
+<li>Consequently, you have to escape it</li>
+<li>No terminating <strong>';'</strong> required</li>
+<li>You sit back and relax</li>
+</ul>
+<p>The <strong>eval()</strong> procedure will:</p>
+<ul>
+<li>Execute the given query</li>
+<li>Expect it to return with exactly one textual column</li>
+<li>Expect text results to be valid queries or commands (i.e. UPDATE, DROP, KILL, ALTER, ...)</li>
+<li>Execute, in turn, each one of those statements</li>
+</ul>
+<p>It will also require a temporary table. Thus, the user invoking <strong>eval()</strong> must have the <strong>CREATE TEMPORARY TABLES</strong> privilege, as well as any other privilege required for the supplied and implied queries. One typically executes <strong>eval()</strong> queries as a super user (e.g. <strong>'root'</strong> account), so this should not be a problem.</p>
+<p>This solution was made possible due to the fact that you can now send DDL commands via prepared statements. This makes for a very dynamic and versatile was to generate and execute queries and commands.</p>
+<h4>An execution example</h4>
+<p>Let's kill all queries running for more than <strong>20</strong> seconds, shall we?</p>
+<blockquote>
+<pre>root@mysql-5.1.51&gt; SHOW PROCESSLIST;
++----+------+-----------+---------------+---------+------+------------+---------------------+
+| Id | User | Host      | db            | Command | Time | State      | Info                |
++----+------+-----------+---------------+---------+------+------------+---------------------+
+|  2 | root | localhost | common_schema | Query   |    0 | NULL       | SHOW PROCESSLIST    |
+| 43 | apps | localhost | NULL          | Query   |   28 | User sleep | select sleep(10000) |
++----+------+-----------+---------------+---------+------+------------+---------------------+
+2 rows in set (0.00 sec)
+
+root@mysql-5.1.51&gt; <strong>CALL eval('SELECT CONCAT(
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+KILL 
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>
+,id) FROM INFORMATION_SCHEMA.PROCESSLIST WHERE TIME &gt; 20');</strong>
+Query OK, 0 rows affected (0.01 sec)
+
+root@mysql-5.1.51&gt; SHOW PROCESSLIST;
++----+------+-----------+---------------+---------+------+-------+------------------+
+| Id | User | Host      | db            | Command | Time | State | Info             |
++----+------+-----------+---------------+---------+------+-------+------------------+
+|  2 | root | localhost | common_schema | Query   |    0 | NULL  | SHOW PROCESSLIST |
++----+------+-----------+---------------+---------+------+-------+------------------+
+1 row in set (0.00 sec)</pre>
+</blockquote>
+<h4>Where is it?</h4>
+<p>It's part of <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, and I'm suggesting <em>common_schema</em> should appeal to anyone using or administrating a MySQL instance. There is a lot to this project in useful views &amp; routines which help you out in analyzing and diagnosing your server, providing you with features the MySQL server itself does not provide.</p>
+<p>If you just wish to browse <strong>eval()</strong>'s source code, <a href="http://code.google.com/p/common-schema/source/browse/trunk/common_schema/routines/general/eval.sql">it's here</a>. <strong>eval()</strong>'s documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html">here</a>, though if you've read thus far, you're covered.</p>
+<p>An announcement on a new <em>common_schema</em> release will follow.</p>

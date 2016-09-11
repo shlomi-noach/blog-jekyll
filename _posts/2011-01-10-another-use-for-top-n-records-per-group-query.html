@@ -1,0 +1,48 @@
+---
+title: Another use for "top N records per group" query
+date: 2011-01-10 10:24:44.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- SQL
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>A few days ago I published <a href="http://code.openark.org/blog/mysql/sql-selecting-top-n-records-per-group">SQL: selecting top N records per group</a>. It just dawned on me that the very same query solved another type of problem I was having a couple years ago.</p>
+<blockquote><p>BTW, for reference, Baron Schwartz posted <a href="http://www.xaprb.com/blog/2006/12/07/how-to-select-the-firstleastmax-row-per-group-in-sql/">this</a> 4 years ago. There are very interesting approaches in text and in comments. Good to see the ancients already knew of such problems, I should study my history better.</p>
+<p>(Kidding, kidding! This is self criticism of course)</p></blockquote>
+<p>In this case I present now I have a table with recurring data, which, to some extent, represents revision of data. For the sake of simplicity let's describe it as a simple simulation of a revision system:</p>
+<ul>
+<li>I have text files, whose content I store within a row</li>
+<li>Each text file uses at least one row in the table</li>
+<li>Text files can be edited, whereas an edited file is written in a new row (never UPDATEd).</li>
+</ul>
+<p>Hold your horses: I'm not really implementing a revision system, I just can't get into the actual details here.</p>
+<p>The table becomes large quickly, and it's desired to purge rows from the table. The rule is: we must obtain the most recent two versions for each file (if there are indeed more than one). All others can be purged. So the question is:<!--more--></p>
+<blockquote><p>Which are all the 3rd newest, 4th newst, ..., older, ..., oldest revisions per file?</p></blockquote>
+<p>To use the example from the aforementioned post:</p>
+<blockquote><p>Which are the 3rd largest, 4th largest, ..., smallest countries in each continent?</p></blockquote>
+<p>Assuming <strong>group_concat_max_len</strong> allows, and enough numbers are available, all we need to do is change this condition:</p>
+<blockquote>
+<pre>WHERE
+  tinyint_asc.value &gt;= 1 AND tinyint_asc.value &lt;= 5
+</pre>
+</blockquote>
+<p>into:</p>
+<blockquote>
+<pre>WHERE
+  tinyint_asc.value &gt;= 3
+</pre>
+</blockquote>
+<h4>More memory, more CPU</h4>
+<p>The original query limited the number of resulting rows (only 5 per group). There's no such limitation now; there could be <strong>1,000</strong> revision per file, there could be more. So this latest query could incur more overhead. Back to the original problem, if I do the purging frequently enough, this shouldn't be a problem.</p>
+<p>Right. Now to the task of revisiting old, forgotten code :)</p>

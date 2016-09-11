@@ -1,0 +1,37 @@
+---
+title: Announcing openark kit
+date: 2009-02-25 13:55:45.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- openark kit
+- python
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: shantanu.oak@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>It is my great pleasure to announce the availability of the <a title="openark kit project home page" href="http://code.openark.org/forge/openark-kit">openark kit</a>, a set of lightweight utilities for MySQL, which eases every day tasks.</p>
+<p>The available tools are:</p>
+<ul>
+<li><a title="oak-apply-ri" href="http://code.openark.org/forge/openark-kit/oak-apply-ri">oak-apply-ri</a>: apply referential integrity on two columns with parent-child  relationship.</li>
+<li><a title="oak-block-account" href="http://code.openark.org/forge/openark-kit/oak-block-account">oak-block-account</a>: block or release MySQL users accounts, disabling them or enabling them to login.</li>
+<li><a title="oak-kill-slow-queries" href="http://code.openark.org/forge/openark-kit/oak-kill-slow-queries">oak-kill-slow-queries</a>: terminate long running queries.</li>
+<li><a title="oak-modify-charset" href="http://code.openark.org/forge/openark-kit/oak-modify-charset">oak-modify-charset</a>: change the character set (and collation) of a textual column.</li>
+<li><a title="oak-purge-master-logs" href="http://code.openark.org/forge/openark-kit/oak-purge-master-logs">oak-purge-master-logs</a>: purge master logs, depending on the state of replicating slaves.</li>
+<li><a title="oak-security-audit" href="http://code.openark.org/forge/openark-kit/oak-security-audit">oak-security-audit</a>: audit accounts, passwords, privileges and other security settings.</li>
+<li><a title="oak-show-limits" href="http://code.openark.org/forge/openark-kit/oak-show-limits">oak-show-limits</a>: show AUTO_INCREMENT “free space”.</li>
+<li><a title="oak-show-replication-status" href="http://code.openark.org/forge/openark-kit/oak-show-replication-status">oak-show-replication-status</a>: show how far behind are replicating slaves on a given master.</li>
+</ul>
+<p><!--more-->All tools are written in Python, and require Python 2.3 or newer, and the python-mysqldb driver.</p>
+<p>The project is hosted in <a title="openark kit Google Code page" href="http://code.google.com/p/openarkkit/">Google Code</a>, where you can find downloads, issue tracking etc. Community feedback is requested and welcome. Please use the 'Issues' mechanism to report bugs.</p>
+<p>The openark kit is released under the <a href="http://www.opensource.org/licenses/bsd-license.php">BSD license</a>.</p>
+<p>All utilities have been put to work on production, yet all are still being developed, and still more are being created, as new ideas and needs emerge. I have been using custom made scripts for handling DB issues for years, and finally have decided to formalize them and to support them as an open source project. I do hope you try them out.</p>

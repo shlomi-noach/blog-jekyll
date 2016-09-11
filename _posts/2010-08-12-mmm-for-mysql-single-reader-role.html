@@ -1,0 +1,71 @@
+---
+title: MMM for MySQL single reader role
+date: 2010-08-12 14:12:16.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Configuration
+- High availability
+- Open Source
+- Replication
+meta:
+  _edit_last: '2'
+  _wp_old_slug: ''
+  _sg_subscribe-to-comments: walter@openquery.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>The standard documentation and tutorials on <a href="http://mysql-mmm.org/">MMM for MySQL</a>, for master-master replication setup, suggest one Virtual IP for the <em>writer</em> role, and two Virtual IPs for the <em>reader</em> role. It can be desired to only have a single virtual IP for the reader role, as explained below.</p>
+<h4>The two IPs for the reader role</h4>
+<p>A simplified excerpt from the <strong>mmm_common.conf</strong> sample configuration file, as can be found on the project's site and which is most quoted:<!--more--></p>
+<blockquote>
+<pre>...
+&lt;host db1&gt;
+  ip                      192.168.0.11
+  mode                    master
+  peer                    db2
+&lt;/host&gt;
+
+&lt;host db2&gt;
+  ip                      192.168.0.12
+  mode                    master
+  peer                    db1
+&lt;/host&gt;
+...
+&lt;role writer&gt;
+  hosts                   db1, db2
+  ips                     192.168.0.100
+  mode                    exclusive
+&lt;/role&gt;
+
+&lt;role reader&gt;
+  hosts                   db1, db2
+  ips                     192.168.0.101, 192.168.0.102
+  mode                    balanced
+&lt;/role&gt;
+</pre>
+</blockquote>
+<p>In the above setup <strong>db1</strong> &amp; <strong>db2</strong> participate in master-master active-passive replication. Whenever you need to write something, you use <strong>192.18.0.100</strong>, which is the virtual IP for the writer role. Whenever you need to read something, you use either <strong>192.168.0.101</strong> or <strong>192.168.0.102</strong>, which are the virtual IPs of the two machines, this time in read role. Logic says one wishes to distribute reads between the two machines.</p>
+<h4>One IP for reader role</h4>
+<p>I have a few cases where the above setup is not satisfactory: there is a requirement to know the IP of the passive (read-only) master. Reason? There are queries which we only want to execute on the slave (reporting, long analysis), and only execute on the active master when this isn't possible. Sometimes we might even prefer waiting for a slave to come back up rather than execute a query on the master.</p>
+<p>This may involve an application level solution, or a connection-pool level solution ("get me a slave's connection, or, if that's not possible, get me the master's").</p>
+<p>Anyway, neither <strong>192.168.0.101</strong> nor <strong>192.168.0.102</strong> relate to a particular machine's role status. That is, the fact that one of the machines is in <em>writer</em> mode or not does not affect these virtual IPs.</p>
+<p>The solution is a minor change to the configuration file. Real minor:</p>
+<blockquote>
+<pre>&lt;role reader&gt;
+  hosts                   db1, db2
+  ips                     192.168.0.101
+  mode                    balanced
+&lt;/role&gt;
+</pre>
+</blockquote>
+<p>In this new setup the two nodes compete for a single <em>reader</em> role virtual IP. There is no <strong>192.168.0.102</strong> anymore. Although it does not reflect from the configuration file, it turns out MMM acts in a smart way; the way you would expect it to run.</p>
+<p>There is nothing to suggest in the above that the IPs <strong>192.168.0.100</strong> &amp; <strong>192.168.0.101</strong> will be distributed between the two machines. But you would <em>like</em> them to. And MMM does that. It makes sure that, if possible, one of the machines (say <strong>db1</strong>) gets the <em>writer</em> role, hence <strong>192.168.0.100</strong>, and the other (<strong>db2</strong>) the <em>reader</em> role, hence <strong>192.168.0.101</strong>.</p>
+<p>Moreover, it prefers that situation over a current known situation: say <strong>db1</strong> went down. The <em>writer</em> role moves to <strong>db2</strong>. When <strong>db1</strong> is up again, MMM acts smartly: it does <em>not</em> give it back the <em>writer</em> role (since moving the active master around is costly, after all), but <em>does</em> give it the <em>reader</em> role, along with the <strong>192.168.2.101</strong> IP. So it takes care not to leave a server without a role, while preferring to move the <em>writer</em> role as little as possible.</p>

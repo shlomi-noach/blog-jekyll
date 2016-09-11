@@ -1,0 +1,79 @@
+---
+title: 'MySQL error handling on server side: a NO GO!'
+date: 2012-07-18 06:45:15.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- Errors
+- information
+- Stored routines
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>There is no reasonable way to catch and diagnose errors on server side. It is nearly impossible to know exactly <em>what went wrong</em>.</p>
+<p>To illustrate, consider the following query:</p>
+<blockquote>
+<pre>INSERT INTO my_table (my_column) VALUES (300);</pre>
+</blockquote>
+<p>What could go wrong with this query?</p>
+<ul>
+<li>We might hit a <strong>UNIQUE KEY</strong> violation</li>
+<li>Or a <strong>FOREIGN KEY</strong> violation</li>
+<li>my_column could be <strong>TINYINT UNSIGNED</strong>, and with strict <strong>sql_mode</strong> this makes for out-of-range</li>
+<li>Or, similarly, it could be an <strong>ENUM (2,3,5,8)</strong></li>
+</ul>
+<p>Is that it? Not remotely:</p>
+<ul>
+<li>This could be a read-only <strong>MyISAM</strong> table</li>
+<li>We may have issued a <strong>LOCK TABLES my_table READ</strong> -- this violates our lock</li>
+<li>Or this could be an <strong>InnoDB</strong> table, and this <strong>INSERT</strong> would make for a deadlock</li>
+<li>Or we have <strong>read_only=1</strong> configuration</li>
+<li>Or the user is not allowed access to this table</li>
+<li>Or the table does not exist</li>
+<li>Or the column does not exist</li>
+</ul>
+<p>Or... I'm pretty sure there could be many other issues.</p>
+<p>Now, if I write a Java program, perhaps using Hibernate, I get the error nicely wrapped up in a SQLException object, with easy access to error code and error message.</p>
+<p>But can I have the same on server side? <em>No</em>.</p>
+<p>Take a look at the following code:<!--more--></p>
+<blockquote>
+<pre>CREATE PROCEDURE some_procedure ()
+BEGIN
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION SET @error_found = 1;
+  INSERT INTO my_table (my_column) VALUES (300);
+  <strong>IF @error_found THEN -- Any what error exactly is this? What's the message? END IF;</strong>
+END;</pre>
+</blockquote>
+<p>If I wanted to take specific action for specific errors, I would need to:</p>
+<blockquote>
+<pre>  DECLARE CONTINUE HANDLER FOR 1146 SET @error_found = 1146;
+  DECLARE CONTINUE HANDLER FOR 1147 SET @error_found = 1147;
+  DECLARE CONTINUE HANDLER FOR 1148 SET @error_found = 1148;
+  DECLARE CONTINUE HANDLER FOR 1149 SET @error_found = 1149;
+  ...</pre>
+</blockquote>
+<p>But if I can't expect in advance the specific error, yet wish to note it down, that would mean defining hundreds and hundreds of HANDLERs, never being able to actually cover all cases since new codes are introduced in every version, sometimes in minor versions...</p>
+<h4>Weren't SINGAL and RESIGNAL introduced in 5.5?</h4>
+<p>They were, but they do nothing to help here. You can <strong>RESIGNAL</strong> an error - but that doesn't mean you get to be told what the error actually was!</p>
+<h4>But, what's the problem, anyway?</h4>
+<p>There's a variety of stuff I would like to do on server side, not via external Python/Perl/Java/Ruby/Shell scripts. Consider the <a href="http://dev.mysql.com/doc/refman/5.1/en/events.html">event scheduler</a>: I mean, what's the point? It's nearly useless if there's so much that you cannot do on server side. You cannot recognize errors, you cannot get enough metadata (see below). It's only good for a fraction of the jobs you would like to perform.</p>
+<p>In <a href="http://code.google.com/p/common-schema/">common_schema/QueryScript</a> I provide with scripting capabilities. But how about error handling? I've written a completely different error handling approach in <em>common_schema</em> (this is not released yet, tons of documentation to produce). But since <em>common_schema</em> works on server side, it is limited to whatever server side programming allows. And this, as explained, is really very little to work with.</p>
+<h4>What would have been nice</h4>
+<p>There's the <strong>error_count</strong> session variable. Doesn't actually do anything useful. It would have been nice to have the following session STATUS VARIABLEs:</p>
+<ul>
+<li><strong>last_error_code</strong></li>
+<li><strong>last_error_message</strong></li>
+</ul>
+<p>And if a query made for multiple errors, pick one (just make both variables consistent).</p>
+<p>Or, <em>please</em>, make some way to parse <strong>SHOW</strong> commands on server side! (also refer to <a href="http://code.openark.org/blog/mysql/reading-results-of-show-statements-on-server-side">this</a>). If only I could parse the <strong>SHOW ERRORS</strong> command, that would solve everything!</p>
+<p>MySQL <strong>5.0</strong> introduced <strong>INFORMATION_SCHEMA</strong>, albeit an incomplete one. Shortly after, <strong>SHOW</strong> commands were excluded from server side cursors. But that left us with so many missing parts. I've opened a <a href="http://bugs.mysql.com/bug.php?id=65897">bug report/feature request</a>. Would you please support it?</p>

@@ -1,0 +1,114 @@
+---
+title: Solving the Facebook-OSC non-atomic table swap problem
+date: 2016-05-03 08:42:07.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Open Source
+meta:
+  _sg_subscribe-to-comments: dmiller@twilio.com
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>We present a way to use an atomic, blocking table swap in the Facebook Online-Schema-Change solution, as well as in a rumored, other Online-Schema-rumored-Change solution. <strong>Update</strong>: also a caveat.</p>
+<h3>Quick recap (really quick)</h3>
+<p><a href="https://www.percona.com/doc/percona-toolkit/2.2/pt-online-schema-change.html">pt-online-schema-change</a> and <a href="https://www.facebook.com/notes/mysql-at-facebook/online-schema-change-for-mysql/430801045932/">facebook-osc</a> are two popular online-schema-change solutions for MySQL. They both use triggers, but in different ways. While the Percona tool uses synchronous table updates, such that any <strong>INSERT|UPDATE|DELETE</strong> on the modified table causes an <strong>INSERT|UPDATE|DELETE</strong> on a ghost table, in the Facebook tool all cause an <strong>INSERT</strong> on a changelog table, which is then iterated, read, having entries applied on the ghost table.</p>
+<p>The TL;DR is that DMLs on the table propagate synchronously, within same transaction in the Percona tool, and asynchronously, with lag, in the Facebook tool.</p>
+<h3>What's the problem with the table swap?</h3>
+<p>In the Percona tool, once the logic is satisfied the copy is complete, we issue this query:</p>
+<blockquote>
+<pre>RENAME TABLE tbl TO tbl_old, tbl_new TO tbl;</pre>
+</blockquote>
+<p>This is an atomic, two table <strong>RENAME</strong> operation.</p>
+<p>However with the asynchronous nature of the Facebook tool, such a <strong>RENAME</strong> would be a mistake. We must first block writes to the modified table, then make sure we have iterated the changelog table to the point of lock, apply those changes onto the ghost table, and only then do the swap.</p>
+<p>The problem is: you cannot <strong>RENAME TABLES</strong> while one of them is <strong>LOCK</strong>ed.</p>
+<p>This is silly, and inconsistent, because:</p>
+<blockquote>
+<pre>&gt; LOCK TABLES tbl WRITE;
+Query OK, 0 rows affected (0.00 sec)
+
+&gt; RENAME TABLE tbl TO tbl_old, tbl_new TO tbl;
+ERROR 1192 (HY000): Can't execute the given command because you have active locked tables or an active transaction
+
+&gt; ALTER TABLE tbl RENAME TO tbl_old;
+Query OK, 0 rows affected (0.00 sec)</pre>
+</blockquote>
+<p>Why would the <strong>RENAME</strong> fail where the <strong>ALTER</strong> works?</p>
+<p>Small thing, but critical to the operation of the online-schema-change. From the <a href="https://www.facebook.com/notes/mysql-at-facebook/online-schema-change-for-mysql/430801045932/">Facebook OSC documentation</a>:</p>
+<blockquote><p>Since alter table causes an implicit commit in innodb, innodb locks get released after the first alter table. So any transaction that sneaks in after the first alter table and before the second alter table gets a 'table not found' error. The second alter table is expected to be very fast though because copytable is not visible to other transactions and so there is no need to wait.</p></blockquote>
+<h3>What the FB solution means</h3>
+<p>It means for a very brief duration, the table is <em>not there</em>. Your app will get errors.</p>
+<p>Of course, we <em>should</em> be able to handle errors anytime, aywhere. But the honest truth is: we (as in <em>the world</em>) do not. Many apps will fail ungracefully should they get a <em>table not found</em> error.</p>
+<p>An atomic swap, as compared, would make for briefly blocking operations, making the app ignorant of the swap.</p>
+<h3>Rumor</h3>
+<p>Rumor has it that we at GitHub are developing a new, triggerless, Online Schema Change tool. It is rumored to be based off binary logs and is rumored to have lots of interesting rumored implications.</p>
+<p>Such rumored implementation would have to be asynchronous by nature, or so rumors say. And as such, it would fall for the same non-atomic table swap problem.</p>
+<h3>Solution</h3>
+<p>Once we heard it was rumored we were working on a triggerless online schema change tool, we realized we would have to solve the non-atomic swap problem. What we did was to gossip about it in between ourselves, which led to three different rumors of a solution, eventually manifested as three different working solutions. All three solutions make for blocking queries on the app's side. I will present one of these solution here, based on voluntary locks.<!--more--></p>
+<p>The idea is to make a table locked without actually issuing a <strong>LOCK TABLE</strong> statement, such that we would be able to run a <strong>RENAME TABLE</strong> operation, that would <em>wait until we say it's good to complete</em>.</p>
+<p>Let's assume:</p>
+<ul>
+<li>Our table is <strong>tbl</strong></li>
+<li>Ghost table (table onto which we've actually made the changes) is <strong>tbl_new</strong></li>
+<li>Our app continuously writes to <strong>tbl</strong></li>
+<li>We have <strong>3</strong> connections on our tables, aptly named <strong>#1</strong>, <strong>#2</strong>, <strong>#3</strong></li>
+</ul>
+<p>We issue the following, in this order:</p>
+<ol>
+<li><strong>#1</strong>:<br />
+<blockquote>
+<pre>SELECT GET_LOCK('ding', 0);</pre>
+</blockquote>
+<p>Lock acquired, no problems</li>
+<li><strong>#2</strong>:<br />
+<blockquote>
+<pre>SELECT RELEASE_LOCK('ding') FROM tbl WHERE GET_LOCK('ding', 999999)&gt;=0 LIMIT 1;</pre>
+</blockquote>
+<p>Ignore the <strong>RELEASE_LOCK</strong> for now, this is merely cleanup. The query attempts to read one row from <strong>tbl</strong> where <strong>GET_LOCK('ding')&gt;=0</strong>. But <strong>'ding'</strong> is locked, hence the entire query blocks.<br />
+Otherwise, other queries on <strong>tbl</strong> (both reads and writes) are running <em>fine</em>.</li>
+<li><strong>#3</strong>:<br />
+<blockquote>
+<pre>RENAME TABLE tbl TO tbl_old, tbl_new TO tbl;</pre>
+</blockquote>
+<p>Now the magic begins. The <strong>RENAME</strong> operation cannot proceed while queries are executing on <strong>tbl</strong>. In particular, it waits on <strong>#2</strong> to complete. But <strong>#2</strong> is blocked on <strong>#1</strong>, so it does not complete. Our <strong>RENAME</strong> is also blocked!<br />
+There are further two consequences that work to our advantage:</p>
+<ul>
+<li>Any further incoming <strong>INSERT|UPDATE|DELETE</strong> on <strong>tbl</strong> is now unable to proceed; such queries will now wait for the <strong>RENAME</strong> to complete. So <em>no further updated on <strong>tbl</strong></em> are being applied. App is blocked</li>
+<li><strong>tbl_new</strong> is <em>nonblocked</em>! And this is because how <strong>RENAME</strong> works internally. Since it couldn't satisfy the first clause, it doesn't even check for the second, and does not place a <strong>LOCK</strong> on <strong>tbl_new</strong>.</li>
+</ul>
+</li>
+<li>OSC:<br />
+Now that no further writes are possible on <strong>tbl</strong>, we satisfy ourselves that we've iterated to the last of the changelog entries and have applied changes to <strong>tbl_new</strong>. Exactly how we satisfy ourselves is a matter of implementation. Rumor is that we use a <em>rumor</em> that the last entry was handled in our rumored solution. That last part is actually not a pun.<br />
+We are now content that all changes have been applied to <strong>tbl_new</strong>.</li>
+<li><strong>#1</strong>:<br />
+<blockquote>
+<pre>SELECT RELEASE_LOCK('ding');</pre>
+</blockquote>
+<p><strong>Ding!</strong> Connection <strong>#2</strong> gets released, reads some row from <strong>tbl</strong> (but no one is actually interested in the result set) and completes. The <strong>#3 RENAME</strong> is not blocking on anything anymore. It executes. The tables are swapped. Once they are swapped, any <strong>INSERT|UPDATE|DELETE</strong>s that were pending on <strong>tbl</strong> are released and App is unblocked.<br />
+The atomic swap is complete.</li>
+</ol>
+<h4>Implementation</h4>
+<p>Agony. This workaround is agonizing. Is <em>agonization</em> a word? By rumor written in Go, our OSC has this implemented via goroutines, and the code is one of those atrocities you are ashamed to look at. Well, it's OK under the circumstances. But really, implementing this is painful, and actually more complicated than the above description. Why is that?</p>
+<p>In the above we make fro two blocking operations: <strong>#2</strong> and <strong>#3</strong>. We must not proceed to <strong>#3</strong> before <strong>#2</strong> is applied, and we must not proceed to OSC completion before <strong>#3</strong> is applied. But how does our code <em>know</em> that it's being blocked? If it's being blocked, it can't tell me anything, because it's blocked. If it's not blocked yet, it can tell me it's not blocked yet, but I'm really interested in knowing the time it gets blocked.</p>
+<p>But preferably the exact time, or near exact, because one we start blocking, App suffers. Connections accumulate. We really want to make the swap as quick as possible (and by rumor we have a rollback &amp; retry mechanism for this operation if it exceeds <strong>X</strong> seconds).</p>
+<p>Unfortunately the solution involves polling. That is, Once we issue <strong>#2</strong> (asynchronously, right? It's <em>blocking</em>), we aggressively poll <strong>SHOW PROCESSLIST</strong> and look for that blocked query. And the same for <strong>#3</strong>. Polling is a form of necessary ugliness in this flow.</p>
+<p>Other solutions</p>
+<p>The other two solutions do not use a voluntary lock. Instead:</p>
+<ol>
+<li>Use a <strong>LOCK</strong> on some yet another table and a query involving <em>that</em> table JOINed with <strong>tbl</strong></li>
+<li>A <strong>SELECT ... FOR UPDATE</strong> on yet another table followed by a <strong>SELECT</strong> on the locked row on <em>that</em> table JOINed with <strong>tbl.</strong></li>
+</ol>
+<p>We leave the implementation as an exercise for the reader.</p>
+<h3>Can't we just make the RENAME work under LOCK?</h3>
+<p>Yeah. That's what the Facebook people said. "Hey, we can just fix this".</p>
+<h3>Update: caveat</h3>
+<p>Should connection #1 or connection #2 die unexpectedly before we are satisfied the events have all been applied, the `RENAME` gets unblocked due to the collapse of locks, and we end up with a premature swap of the tables, potentially before we have applied the latest entries from the changelog table. This was noted by my colleague Gillian Gunson, and we keep looking into this.</p>

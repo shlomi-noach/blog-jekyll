@@ -1,0 +1,183 @@
+---
+title: SQL graphics
+date: 2009-08-11 14:24:32.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- SQL
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>SQL is not meant to generate graphics, for sure; but I see some cases where generating non-tabular output can be desirable, as I will show in future posts.</p>
+<p>I'd like to explain the basics of working SQL graphics: it is actually possible to do whatever you like. How?</p>
+<h4>Coordinates system</h4>
+<p>We'll now develop a coordinates system using SQL. By producing this, I will have proven my point that anything is possible, and will provide an additional proof of concept.</p>
+<p>To start with generating coordinates, I'll need a helper table: a numbers table (<a href="http://code.openark.org/blog/wp-content/uploads/2009/08/tinyint_asc.sql">tinyint_asc</a>, example, with numbers ranging 0..255).</p>
+<p>We'll strive to produce a 10x10 coordinate matrix. To do this, we'll self-join the numbers table against itself, and use a helper variable to set the size of the matrix.<!--more--></p>
+<blockquote>
+<pre>SELECT
+  *
+FROM
+  tinyint_asc numbers1,
+  tinyint_asc numbers2,
+  (select @size := 10) sel_size
+WHERE
+  numbers1.value &lt; @size
+  AND numbers2.value &lt; @size
+;
++-------+-------+-------------+
+| value | value | @size := 10 |
++-------+-------+-------------+
+|     0 |     0 |          10 |
+|     1 |     0 |          10 |
+|     2 |     0 |          10 |
+|     3 |     0 |          10 |
+|     4 |     0 |          10 |
+|     5 |     0 |          10 |
+|     6 |     0 |          10 |
+|     7 |     0 |          10 |
+|     8 |     0 |          10 |
+|     9 |     0 |          10 |
+|     0 |     1 |          10 |
+|     1 |     1 |          10 |
+|     2 |     1 |          10 |
+|     3 |     1 |          10 |
+|     4 |     1 |          10 |
+|     5 |     1 |          10 |
+|     6 |     1 |          10 |
+...
+|     7 |     8 |          10 |
+|     8 |     8 |          10 |
+|     9 |     8 |          10 |
+|     0 |     9 |          10 |
+|     1 |     9 |          10 |
+|     2 |     9 |          10 |
+|     3 |     9 |          10 |
+|     4 |     9 |          10 |
+|     5 |     9 |          10 |
+|     6 |     9 |          10 |
+|     7 |     9 |          10 |
+|     8 |     9 |          10 |
+|     9 |     9 |          10 |
++-------+-------+-------------+</pre>
+</blockquote>
+<p>Next step will be to present the coordinates in a slightly different way (this is just eyecandy):</p>
+<blockquote>
+<pre>SELECT
+  CONCAT(numbers2.value, '.', numbers1.value)
+FROM
+  tinyint_asc numbers1,
+  tinyint_asc numbers2,
+  (select @size := 10) sel_size
+WHERE
+  numbers1.value &lt; @size
+  AND numbers2.value &lt; @size
+;
++---------------------------------------------+
+| CONCAT(numbers2.value, '.', numbers1.value) |
++---------------------------------------------+
+| 0.0                                         |
+| 0.1                                         |
+| 0.2                                         |
+| 0.3                                         |
+| 0.4                                         |
+| 0.5                                         |
+| 0.6                                         |
+| 0.7                                         |
+| 0.8                                         |
+| 0.9                                         |
+| 1.0                                         |
+| 1.1                                         |
+| 1.2                                         |
+| 1.3                                         |
+| 1.4                                         |
+| 1.5                                         |
+| 1.6                                         |
+| 1.7                                         |
+...</pre>
+</blockquote>
+<p>Time to turn this into a coordinates system:</p>
+<blockquote>
+<pre>SELECT
+  GROUP_CONCAT(
+    CONCAT(numbers2.value, '.', numbers1.value)
+    ORDER BY numbers1.value
+    SEPARATOR ' ') AS coordinates
+FROM
+  tinyint_asc numbers1,
+  tinyint_asc numbers2,
+  (select @size := 10) sel_size
+WHERE
+  numbers1.value &lt; @size
+  AND numbers2.value &lt; @size
+GROUP BY numbers2.value
+;
++-----------------------------------------+
+| coordinates                             |
++-----------------------------------------+
+| 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 |
+| 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 |
+| 2.0 2.1 2.2 2.3 2.4 2.5 2.6 2.7 2.8 2.9 |
+| 3.0 3.1 3.2 3.3 3.4 3.5 3.6 3.7 3.8 3.9 |
+| 4.0 4.1 4.2 4.3 4.4 4.5 4.6 4.7 4.8 4.9 |
+| 5.0 5.1 5.2 5.3 5.4 5.5 5.6 5.7 5.8 5.9 |
+| 6.0 6.1 6.2 6.3 6.4 6.5 6.6 6.7 6.8 6.9 |
+| 7.0 7.1 7.2 7.3 7.4 7.5 7.6 7.7 7.8 7.9 |
+| 8.0 8.1 8.2 8.3 8.4 8.5 8.6 8.7 8.8 8.9 |
+| 9.0 9.1 9.2 9.3 9.4 9.5 9.6 9.7 9.8 9.9 |
++-----------------------------------------+</pre>
+</blockquote>
+<p>The above is all we need to generate any graphics we like. Just use your favorite mathematical function, apply analytic geometry and make it happen. Instead or <em>presenting</em> the coordinates, <em>use them</em> to decide what should be presented.</p>
+<h4>Proof of concept</h4>
+<p>To show that the above sentence is actually very simple, I'll show how to draw a circle using the SQL coordinates. The well known circle formula says:</p>
+<blockquote><p>(x-x0)² + (y-y0)² = rad²</p>
+<p><strong>x0</strong>, <strong>y0</strong> being the circle's central coordinates, <strong>rad</strong> being the radius.</p></blockquote>
+<p>To apply:</p>
+<blockquote>
+<pre>SELECT
+  GROUP_CONCAT(
+    IF(
+      ROUND(SQRT(POW(numbers1.value-(@size-1)/2, 2) + POW(numbers2.value-(@size-1)/2, 2))) &lt;= @radius,
+      '#', '-')
+    ORDER BY numbers1.value
+    SEPARATOR ' ') AS circle
+FROM
+  tinyint_asc numbers1,
+  tinyint_asc numbers2,
+  (select @size := 15) sel_size,
+  (select @radius := 6) sel_radius
+WHERE
+  numbers1.value &lt; @size
+  AND numbers2.value &lt; @size
+GROUP BY numbers2.value
+;
++-------------------------------+
+| circle                        |
++-------------------------------+
+| - - - - - - - - - - - - - - - |
+| - - - - - # # # # # - - - - - |
+| - - - # # # # # # # # # - - - |
+| - - # # # # # # # # # # # - - |
+| - - # # # # # # # # # # # - - |
+| - # # # # # # # # # # # # # - |
+| - # # # # # # # # # # # # # - |
+| - # # # # # # # # # # # # # - |
+| - # # # # # # # # # # # # # - |
+| - # # # # # # # # # # # # # - |
+| - - # # # # # # # # # # # - - |
+| - - # # # # # # # # # # # - - |
+| - - - # # # # # # # # # - - - |
+| - - - - - # # # # # - - - - - |
+| - - - - - - - - - - - - - - - |
++-------------------------------+</pre>
+</blockquote>
+<p>Remove the space separator, play with ratio, apply your own formula, and generate SQL-ascii graphics!</p>

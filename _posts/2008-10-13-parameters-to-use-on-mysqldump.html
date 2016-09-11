@@ -1,0 +1,37 @@
+---
+title: Parameters to use on mysqldump
+date: 2008-10-13 09:03:50.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Backup
+- mysqldump
+- Replication
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>mysqldump is commonly used for making a MySQL database backup or for setting up a replication.</p>
+<p>As in all mysql binaries, there are quite a few parameters to mysqldump. Some are just niceties but some flags are a must. Of course, choosing the parameters to use greatly depends on your requirements, database setup, network capacity etc.</p>
+<p>Here is my usual setup for mysqldump. The parameters below apply for an InnoDB based schema (no MyISAM, Memory tables). Parameters can be specified on the command line, or under the <code>[mysqld]</code> scope in the MySQL configuration file.</p>
+<blockquote>
+<p style="text-align: left;"><code>mysqldump -u dump_user -p -h db_host --routines --master-data --single-transaction  --skip-add-locks --skip-lock-tables --default-character-set=utf8 --compress my_db</code></p>
+</blockquote>
+<p>Let's review these parameters and see their effect:<!--more--></p>
+<ul>
+<li><code>-u</code> or <code>--user</code>: This is the user which initiates the dump. Depending on other parameters, the user may need to have quite a few privileges, such as <code>SELECT</code>, <code>RELOAD</code>, <code>FILE</code>, <code>REPLICATION CLIENT</code> etc. Since I do not usually allow for remote root access into mysql, I create a temporary user solely for the purpose of the dump (many times it's a one-time action), for the specific machine from which the dump is run, and provide this user with all necessary permissions.</li>
+<li><code>-h</code> or <code>--host</code>: I try not to dump from the same machine on which MySQL is running. If I do, I prefer to dump into a different disk from that on which the data and log files reside. The dump itself may create a heavy load on the machine (setting locks, performing lots of non cached IO operations). Since the target of the dump is mostly to create a backup on another machine, or set up replication on another machine, the dump has better not run from the MySQL machine.</li>
+<li><code>--routines</code>: It is really an annoyance to have to remember this flag. In contrast to --triggers, which is by default TRUE, the <code>--routines</code> parameter is by default FALSE, which means if you forget it - you don't get the stored functions and procedures in your schema.</li>
+<li><code>--master-data</code>: I always enable binary logs on the MySQL nodes I work on. While binary logs may lead to more IO operations (writing binary logs make for more disk writes, obviously, but also disable some InnoDB optimizations), may consume more disk space (once I've worked with a company which had such a burst of traffic, that the binary logs to completely filled their disk in less than one day). If binary logs are enabled, the <code>--master-data</code> parameter allows for easy replication setup: the dump includes the <code>CHANGE MASTER TO MASTER_LOG_FILE='...', MASTER_LOG_POS=...</code> statement, so no need to do stuff like <code>SHOW MASTER STATUS</code> on the dumped node. Optionally, you can set <code>--master-data=2</code> to have the statement commented.</li>
+<li><code>--single-transaction</code> <code>--skip-add-locks</code> <code>--skip-lock-tables</code>: When working with transactional-only storage engines (InnoDB is the most popular choice, but new engines are coming: Falcon, PBXT, Transactional-Maria, SolidDB and more), these parameters allow for a non-interruptive backup, which does not place read locks on all tables. It is possible to keep on reading and writing to the database while mysqldump is running with single transaction. Running in this mode does have its penalty: more IO operations (due to MVCC's duplication of data while many transactions access the same data for Read/Write). The server is likely to perform more slowly during the dump time.</li>
+<li><code>--default-character-set=utf8</code>: I've seen so many MySQL installations in which world-wide textual data was stored in the Latin1 charset than I can remember. Many developers, who are testing using standard English data, are not even aware of the issues arrising from changing the data later on to utf8. But even those who are, are usually unaware of the necessity to configure the character set on a per connection basis, or for their specific clients (JDBC or PHP connectors, etc). mysqldump is no different, and if you have non-latin text in your tables, always remember to set this option.</li>
+<li><code>--compress</code>: when dumping to another machine, especially a remote one, using this option to GZIP the data between the MySQL server and the mysqldump client. This will make for more CPU operations, but CPU is usually cheap nowdays, and the compression may well save you hours of network transfer time.</li>
+</ul>

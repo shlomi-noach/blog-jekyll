@@ -1,0 +1,61 @@
+---
+title: 'mycheckpoint (rev. 88): mount points monitoring, improved charting, enhanced
+  auto-deploy'
+date: 2010-02-10 08:29:47.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Graphs
+- Monitoring
+- mycheckpoint
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Revision <a href="http://code.google.com/p/mycheckpoint/">#88</a> of <a href="http://code.openark.org/forge/mycheckpoint">mycheckpoint</a> is released. In this revision:</p>
+<ul>
+<li>Disk space monitoring</li>
+<li>Improved charting</li>
+<li>Enhanced auto-deploy</li>
+<li>And more...</li>
+</ul>
+<h4>Disk space monitoring</h4>
+<p><em>mycheckpoint</em> now monitors (on Linux only) three mount points:</p>
+<ol>
+<li>The "<strong>/</strong>" (root) mount point</li>
+<li>The <strong>datadir</strong> mount point</li>
+<li>The <strong>tmpdir</strong> mount point</li>
+</ol>
+<p>It may well be the case that two of the above (or perhaps all three of them) share the same mount point. For example, if there isn't any particular partition for "<strong>/tmp</strong>", it is possible that the <strong>tmpdir</strong> (by default "<strong>/tmp</strong>") is on the same mount point as "<strong>/</strong>". <em>mycheckpoint</em> does not care.</p>
+<p><em>mycheckpoint</em> monitors and reports the mount point's used percent, in a similar algorithm <strong>df</strong> uses.</p>
+<p>Disk space monitoring is only possible when monitoring the local machine (i.e. <em>mycheckpoint</em> runs on the same machine as the monitored MySQL server). In the future <em>mycheckpoint</em> may also monitor additional mount points, such as the various logs mount points.</p>
+<h4><!--more-->Improved charting</h4>
+<p>There has been some extensive work to turn the charts into real time-series based. <a href="http://code.google.com/apis/chart/">Google charts</a> does not support time series charts; when it will, the required URL length would probably be too long to be used. Some SQL tweaks made it possible to display the charts in correct time-scale even if sampling is taken on non constant interval (or fail to be taken for long periods).</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2010/02/mycheckpoint-dml-chart-sample-88.png"><img class="alignnone size-full wp-image-1951" title="mycheckpoint-dml-chart-sample-88" src="{{ site.baseurl }}/assets/mycheckpoint-dml-chart-sample-88.png" alt="" width="400" height="200" /></a></p></blockquote>
+<p>For more examples see the link for <em>HTML brief reports</em> sample, below.</p>
+<p>I will write more on SQL Google charts generation in the future.</p>
+<h4>Enhanced auto-deploy</h4>
+<p><em>mycheckpoint</em> will now detect changes to the MySQL version, in addition to changes in <em>mycheckpoint</em>'s version itself. This means there's no need in ever worrying about upgrades to either one of these components. Just use mycheckpoint to take another sample; it will auto-detect if the MySQL version is different, and start sampling all those new variables introduced in the new version (or stop sampling variables no longer used). It works both for MySQL upgrades and downgrades.</p>
+<h4>Enhanced localhost detection</h4>
+<p>To determine whether it is monitoring the local host, <em>mycheckpoint</em> now considers the hostname for the monitored server, and sees if it is either <strong>'127.0.0.1'</strong>, <strong>'localhost'</strong>, or the machine's <em>hostname</em> or fully qualified <em>hostname.domainname</em> (these last two additions apply for Unix based machines, and have only been tested on Linux so far).</p>
+<h4>HTML brief reports</h4>
+<p>Getting a full HTML report is time consuming. I've had requests (though not officially submitted through the Issues mechanism) to make it shorter. This is as yet a difficult job. There's just too much data to aggregate (up to ~180 days of every-5-minute-samples, in a common scenario).</p>
+<p>HTML <em>brief reports</em> were introduced in previous versions, and have now been enhanced to include more data. These only present last 24 hours data, and load fast. See <a href="http://code.openark.org/blog/wp-content/uploads/2010/02/mycheckpoint-brief-report-sample-88.html">HTML brief report sample</a>.</p>
+<h4>Get it</h4>
+<p>Downloads are available on Google code's <a href="http://code.google.com/p/mycheckpoint/">mycheckpoint</a> page. Documentation can be found on the <a href="http://code.openark.org/forge/mycheckpoint/">mycheckpoint home page</a>.</p>
+<h4>On the press</h4>
+<p>Not so new by now (it's two months old), I'm very happy that mycheckpoint has been noted by <a href="http://jeremy.zawodny.com/blog/"><strong>Jeremy Zawodny</strong></a> in his "<a href="http://www.linux-mag.com/cache/7639/1.html">My Top Resources of 2009</a>" column on Linux Magazine.</p>
+<h4>Future plans</h4>
+<p>Immediate plans for mycheckpoint are:</p>
+<ul>
+<li>Email alerts notifications; this will allow <em>mycheckpoint</em> to become a real monitoring solution. Following the concept of "<em>SQL oritented monitoring</em>", these will be SQL based as well.</li>
+<li>Custom monitoring: allowing user defined queries to be recorded by <em>mycheckpoint</em>; these can then participate in alerts monitoring. This will allow for easy email notifications on program-level errors.</li>
+</ul>

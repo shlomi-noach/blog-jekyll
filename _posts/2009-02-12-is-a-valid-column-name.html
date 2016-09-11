@@ -1,0 +1,85 @@
+---
+title: '`;`.`*`.`.` is a valid column name'
+date: 2009-02-12 06:38:11.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Security
+- Syntax
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>And the following query:</p>
+<blockquote>
+<pre>SELECT `;`.`*`.`.` FROM `;`.`*`;</pre>
+</blockquote>
+<p>is valid as well. So are the following:</p>
+<blockquote>
+<pre>DROP DATABASE IF EXISTS `;`;
+CREATE DATABASE `;`;
+CREATE TABLE `;`.`*` (`.` INT);
+CREATE TABLE `;`.```` (`.` INT);
+CREATE TABLE `;`.`$(ls)` (`.` INT);</pre>
+</blockquote>
+<p><!--more-->So, on my Linux machine:</p>
+<blockquote>
+<pre>root@mymachine:/usr/local/mysql/data# ls -l
+total 30172
+drwx------ 2 mysql mysql     4096 2009-01-11 08:00 ;
+-rw-rw---- 1 mysql mysql 18874368 2009-01-09 19:08 ibdata1
+-rw-rw---- 1 mysql mysql  5242880 2009-01-09 19:08 ib_logfile0
+-rw-rw---- 1 mysql mysql  5242880 2009-01-09 19:08 ib_logfile1
+drwxr-x--- 2 mysql mysql     4096 2008-12-09 11:38 mysql
+-rw-rw---- 1 mysql mysql  1423612 2009-01-11 08:00 mysql-bin.000001
+-rw-rw---- 1 mysql mysql       19 2009-01-04 09:05 mysql-bin.index
+drwx------ 2 mysql mysql     4096 2008-12-21 13:58 sakila
+-rw-rw---- 1 mysql root      9783 2009-01-04 09:05 mymachine.err
+-rw-rw---- 1 mysql mysql        6 2009-01-04 09:05 mymachine
+.pid
+drwx------ 2 mysql mysql     4096 2009-01-04 08:30 world</pre>
+</blockquote>
+<p>Well then...</p>
+<blockquote>
+<pre>root@mymachine:/usr/local/mysql/data# <strong>cd ;</strong>
+root@mymachine:~#</pre>
+</blockquote>
+<p>Trying again:</p>
+<blockquote>
+<pre>root@mymachine:~# <strong>cd -</strong>
+/usr/local/mysql/data
+root@mymachine:/usr/local/mysql/data# <strong>cd ";"</strong>
+root@mymachine:/usr/local/mysql/data/;#</pre>
+</blockquote>
+<p>And now:</p>
+<blockquote>
+<pre>root@mymachine:/usr/local/mysql/data/;# <strong>ls -l *.frm</strong>
+-rw-rw---- 1 mysql mysql 8554 2009-01-11 08:00 `.frm
+-rw-rw---- 1 mysql mysql 8554 2009-01-11 08:00 *.frm
+-rw-rw---- 1 mysql mysql 8554 2009-01-11 08:00 $(ls).frm</pre>
+</blockquote>
+<p>Oh, sorry, I meant:</p>
+<blockquote>
+<pre>root@mymachine:/usr/local/mysql/data/;# <strong>ls -l "*".frm</strong>
+-rw-rw---- 1 mysql mysql 8554 2009-01-11 08:00 *.frm</pre>
+</blockquote>
+<p>Weird.</p>
+<p>As a nice surprise, though, the dot (.) is not allowed in database or table names (but is allowed in column names). Nor are the slash (/) and backslash (\). Look <a title="Schema Object Names" href="http://dev.mysql.com/doc/refman/5.0/en/identifiers.html">here</a> for more on this.</p>
+<h4>Support for non English naming</h4>
+<p>I kinda new about this all along, but never thought of the consequences. It's nice to have a relaxed naming rule (I can even name my tables in Hebrew if I like), but "nice" doesn't always play along with "practical".</p>
+<p>As a Hebrew speaker, I repeatedly encounter issues with using my language. In many applications Hebrew encoding is not supported (many times even UTF8 isn't). Not to mention the fact that Hebrew is written from right to left. On many occasion I was irritated by the lack of support for non-English or non-ASCII characters.</p>
+<p>But not always and not everywhere. I've had my share of programming languages, and, to be honest, I never expected my programming language to support UTF8 encoding for function names, variables, modules, packages or whatever. Using "a-zA-Z0-9_" is <em>just fine</em>. Many people who are not well familiar with English just name their variables in their native language, but written with English characters. This works well till you get someone from outside the country, who doesn't speak the language and does not understand (nor can pronounce, nor has the matching keyboard layout or knows how to use it) the names.</p>
+<p>In the same way, I have no wish for my table names to be named in Hebrew, German or Japanese names. English is <em>just fine</em>.</p>
+<p>Using non-letter characters just adds to the mess. Popular "command" characters such as '~', ',', ':', ';', '*', '?', '(', '$' are better left alone. They don't belong in database or table names (mapped to file names) or column names (internally handled by MySQL).</p>
+<p>English has become the <em>de-facto</em> computer world language. Programming languages, file systems, TCP/IP protocols, SQL: everything "speaks" English.</p>
+<h4>Security</h4>
+<p>There's another aspect, though: security. It may sound silly, but you can actually write complete scripts in a table's name! Not wanting to give the wrong idea, I'm not presenting some table names which can wreak havoc on your machine if used improperly.</p>
+<p>But think about it: don't we all use a couple of scripts which backup/clean/automate some stuff for us? Don't these scripts just go ahead and read some table names, then do stuff on those tables? How well do they trust table names?</p>

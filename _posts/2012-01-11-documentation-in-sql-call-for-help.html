@@ -1,0 +1,147 @@
+---
+title: 'Documentation in SQL: CALL for help()'
+date: 2012-01-11 09:01:54.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- Development
+- MySQL
+tags:
+- common_schema
+- documentation
+- mycheckpoint
+- Open Source
+- openark kit
+- Stored routines
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Documentation is an important part of any project. On the projects I maintain I put a lot of effort on documentation, and, frankly, the majority of time spent on my projects is on documentation.</p>
+<p>The matter of keeping the documentation faithful is a topic of interest. I'd like to outline a few documentation bundling possibilities, and the present the coming new documentation method for <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>. I'll talk about any bundling that is NOT <em>man pages</em>.</p>
+<h4>High level: web docs</h4>
+<p>This is the initial method of documentation I used for <a title="openark kit" href="../../forge/openark-kit">openark kit</a> and <a title="mycheckpoint" href="../../forge/mycheckpoint">mycheckpoint</a>. It's still valid for <em>mycheckpoint</em>. Documentation is web-based. You need Internet access to read it. It's in HTML format.</p>
+<p>Well, not exactly HTML format: I wrote it in WordPress. Yes, it's HTML, but there's a lot of noise around (theme, menus, etc.) which is not strictly part of the documentation.</p>
+<p>While this is perhaps the easiest way to go, here's a few drawbacks:<!--more--></p>
+<ul>
+<li>You're bound to some framework (WordPress in this case)</li>
+<li>Docs are split between MySQL database (my underlying WordPRess storage) &amp; WordPress files (themes, style, header, footer etc.)</li>
+<li>Documentation is separate from your code - they're just not in the same place</li>
+<li>There is no version control over the documentation.</li>
+</ul>
+<p>The result is a single source of documentation, which applies to whatever version is latest. It's impossible to maintain docs for multiple versions. You must manually synchronize your WordPress updates with code commits (or rather - code release!).</p>
+<h4>Mid level: version controlled HTML docs</h4>
+<p>I first saw this approach on Baron's <a href="http://www.xaprb.com/blog/2010/09/22/aspersa-gets-a-user-manual/" rel="bookmark">Aspersa gets a user manual</a> post. I loved it: the documentation is HTML, but stored as part of your project's code, in same version control.</p>
+<p>This means one can <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/introduction.html">browse the documentation</a> (<em>openark kit</em> in this example) exactly as it appears in the baseline. Depending on your project hosting, one may be able to do so per version.</p>
+<p>The approach has the great benefit of having the docs tightly coupled with the code in terms of development. Before committing code, one updates documentation for that code, then commits/releases both together.</p>
+<p>You're also not bound to any development framework. You may edit with <em>vim, emacs, gedit, bluefish, eclipse,</em> ... any tool of your choice. It's all down to plain old text files.</p>
+<h4>Mid level #2: documentation bundling</h4>
+<p>One thing I started doing with common_schema is to release a doc bundle with the code. So one can download a compressed bundle of all HTML files. That way one is absolutely certain what's the right documentation for revision <strong>178</strong>. There's no effort about it: the docs are already tightly coupled with code versions. Just compress and distribute.</p>
+<h4>Low level: documentation coupled with your code</h4>
+<p>Perl scripts can be written as Perl modules, in which case they are eligible for using the <em>perldoc</em> convention. You code your documentation within your script itself, as comment. <em>Perldoc</em> can extract the documentation and present in man-like format. Same happens with Python's <em>pydoc</em>. Baron's <a href="http://www.xaprb.com/blog/2011/11/07/when-documentation-is-code/" rel="bookmark">When documentation is code</a> illustrates that approach. <a href="http://www.maatkit.org/">Maatkit</a> (now <em>Percona Toolkit</em>) has been using it for years.</p>
+<p>This method has the advantage of having the documentation ready right within your shell. You don't need a browser, nor firewall access. The docs are just there for you in the same environment where you're executing the code.</p>
+<h4>SQL Low level: CALL for help()</h4>
+<p><em>common_schema</em> is a different type of project. It is merely a schema. There's no Perl nor Python. One imports the schema into one's MySQL server.</p>
+<p>What's the low-level approach for this type of code?</p>
+<p>For <em>common_schema</em> I use three levels of documentation: the mid-level, where one can <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/introduction.html">browse through the versioned docs</a>, the 2nd mid-level, where one can <a href="http://code.google.com/p/common-schema/downloads/list">download bundled documentation</a>, and then a low-level approach: documentation embedded within the code.</p>
+<p>MySQL's documentation is also built into the server: see the <strong>help_*</strong> tables within the <strong>mysql</strong> schema. The <em>mysql</em> command line client allows one to access help by supporting the help command, e.g.</p>
+<blockquote>
+<pre>mysql&gt; help create table;</pre>
+</blockquote>
+<p>The client intercepts this command (this is not server side command) and searches through the <strong>mysql.help_*</strong> docs.</p>
+<p>With <em>common_schema</em>, I don't have control over the client; it's all on server side. But the code being a schema, what with stored routines and tables, it's easy enough to set up documentation.</p>
+<p>As of the next version of <em>common_schema</em>, and following MySQL's method, <em>common_schema</em> provides a <strong>help</strong> table:</p>
+<blockquote>
+<pre>DESC help;
++--------------+-------------+------+-----+---------+-------+
+| Field        | Type        | Null | Key | Default | Extra |
++--------------+-------------+------+-----+---------+-------+
+| topic        | varchar(32) | NO   | PRI | NULL    |       |
+| help_message | text        | NO   |     | NULL    |       |
++--------------+-------------+------+-----+---------+-------+</pre>
+</blockquote>
+<p>And a <strong>help()</strong> procedure, so that you can call for <em>help()</em>. The procedure will look for the best matching document based on your search expression:</p>
+<blockquote>
+<pre>root@mysql-5.1.51&gt; <strong>CALL help('match');</strong>
+<strong>+---------------------------------------</strong>----------------------------------------+
+| help                                                                          |
++-------------------------------------------------------------------------------+
+|                                                                               |
+| NAME                                                                          |
+|                                                                               |
+| match_grantee(): Match an existing account based on user+host.                |
+|                                                                               |
+| TYPE                                                                          |
+|                                                                               |
+| Function                                                                      |
+|                                                                               |
+| DESCRIPTION                                                                   |
+|                                                                               |
+| MySQL does not provide with identification of logged in accounts. It only     |
+| provides with user + host:port combination within processlist. Alas, these do |
+| not directly map to accounts, as MySQL lists the host:port from which the     |
+| connection is made, but not the (possibly wildcard) user or host.             |
+| This function matches a user+host combination against the known accounts,     |
+| using the same matching method as the MySQL server, to detect the account     |
+| which MySQL identifies as the one matching. It is similar in essence to       |
+| CURRENT_USER(), only it works for all sessions, not just for the current      |
+| session.                                                                      |
+|                                                                               |
+| SYNOPSIS                                                                      |
+|                                                                               |
+|                                                                               |
+|                                                                               |
+|        match_grantee(connection_user char(16) CHARSET utf8,                   |
+|        connection_host char(70) CHARSET utf8)                                 |
+|          RETURNS VARCHAR(100) CHARSET utf8                                    |
+|                                                                               |
+|                                                                               |
+| Input:                                                                        |
+|                                                                               |
+| * connection_user: user login (e.g. as specified by PROCESSLIST)              |
+| * connection_host: login host. May optionally specify port number (e.g.       |
+|   webhost:12345), which is discarded by the function. This is to support      |
+|   immediate input from as specified by PROCESSLIST.                           |
+|                                                                               |
+|                                                                               |
+| EXAMPLES                                                                      |
+|                                                                               |
+| Find an account matching the given use+host combination:                      |
+|                                                                               |
+|                                                                               |
+|        mysql&gt; SELECT match_grantee('apps', '192.128.0.1:12345') AS            |
+|        grantee;                                                               |
+|        +------------+                                                         |
+|        | grantee    |                                                         |
+|        +------------+                                                         |
+|        | 'apps'@'%' |                                                         |
+|        +------------+                                                         |
+|                                                                               |
+|                                                                               |
+|                                                                               |
+| ENVIRONMENT                                                                   |
+|                                                                               |
+| MySQL 5.1 or newer                                                            |
+|                                                                               |
+| SEE ALSO                                                                      |
+|                                                                               |
+| processlist_grantees                                                          |
+|                                                                               |
+| AUTHOR                                                                        |
+|                                                                               |
+| Shlomi Noach                                                                  |
+|                                                                               |
++-------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>I like HTML for documentation. I think it's a good format, provided you don't start doing funny things. Perhaps <em>TROFF</em> is more suitable; certainly more popular on Unix machines. But I already have everything in HTML. So, what do I do?</p>
+<p>My decision was to keep documentation in HTML, and use the handy <em>html2text</em> tool to do the job. And it does it pretty well! The sample you see above is an automated translation of HTML to plain text.</p>
+<p>I add a few touches of my own: SELECTing long texts is ugly, whether you do it via "<strong>;</strong>" or "<strong>\G</strong>". The <strong>help()</strong> routine breaks the text by '<strong>\n</strong>', returning a multi row result set. The above sample makes for some <strong>60+</strong> rows, nicely formatted, broken from the original single text appearing in the <strong>help</strong> table.</p>
+<p>So now you have an internal help method for <em>common_schema</em>, right where the code is. You don't have to leave the command line client in order to get help.</p>
+<p><a href="http://datacharmer.blogspot.com/">Giuseppe</a> offered me the idea for this, even while my own thinking about it was in early stages.</p>
+<p>The next version of <em>common_schema</em> will be available in a few weeks. The code is pretty much ready. I just need to work on, ahem..., the documentation.</p>

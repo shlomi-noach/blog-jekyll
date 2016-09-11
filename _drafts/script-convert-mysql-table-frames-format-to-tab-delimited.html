@@ -1,0 +1,75 @@
+---
+layout: post
+title: 'Script: convert MySQL table (frames) format to tab-delimited'
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags:
+- python
+- scripts
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>123</p>
+<blockquote>
+<pre>#!/bin/python
+import fileinput, re
+
+markup_columns = None
+for line_number, line in enumerate(fileinput.input()):
+  if line_number == 0:
+    markup_columns = [n for (n, e) in enumerate(line) if e == '+']
+  if line_number &gt;= 3:
+    if line.startswith('+'):
+      break
+    line = ''.join(['<pre wp-pre-tag-0></pre>\b' if n in markup_columns else e for (n, e) in enumerate(line)])
+    line = re.sub('[ ]*<pre wp-pre-tag-0></pre>\b[ ]*', '\t', line).strip()
+    print line</pre>
+</blockquote>
+<p>123</p>
+<p>Changes this output:</p>
+<blockquote>
+<pre>+--------------+----------------------------+--------+-------------+
+| table_schema | table_name                 | engine | data_length |
++--------------+----------------------------+--------+-------------+
+| sakila       | actor                      | InnoDB |       16384 |
+| sakila       | actor_info                 | NULL   |        NULL |
+| sakila       | address                    | InnoDB |       81920 |
+| sakila       | category                   | InnoDB |       16384 |
+| sakila       | city                       | InnoDB |       49152 |
+| sakila       | country                    | InnoDB |       16384 |
+| sakila       | customer                   | InnoDB |       81920 |
+| sakila       | customer_list              | NULL   |        NULL |
+| sakila       | film                       | InnoDB |      196608 |
+| sakila       | film_actor                 | InnoDB |      196608 |
+| sakila       | film_category              | InnoDB |       65536 |
++--------------+----------------------------+--------+-------------+</pre>
+</blockquote>
+<p>Via</p>
+<blockquote>
+<pre>cat table.txt | python unframe.py</pre>
+</blockquote>
+<p>To this:</p>
+<blockquote>
+<pre>sakila    actor    InnoDB    16384 
+sakila    actor_info    NULL    NULL 
+sakila    address    InnoDB    81920 
+sakila    category    InnoDB    16384 
+sakila    city    InnoDB    49152 
+sakila    country    InnoDB    16384 
+sakila    customer    InnoDB    81920 
+sakila    customer_list    NULL    NULL 
+sakila    film    InnoDB    196608 
+sakila    film_actor    InnoDB    196608 
+sakila    film_category    InnoDB    65536</pre>
+</blockquote>
+<p>123</p>

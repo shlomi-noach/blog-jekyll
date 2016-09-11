@@ -1,0 +1,216 @@
+---
+title: Useful database analysis queries with INFORMATION_SCHEMA
+date: 2008-11-26 08:47:12.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Analysis
+- Indexing
+- INFORMATION_SCHEMA
+- SQL
+- Syntax
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+excerpt: "A set of useful queries on INFORMATION_SCHEMA follows. These queries can
+  be used when approaching a new database, to learn about some of its properties,
+  or they can be regularly used on an existing schema, so as to verify its integrity.\r\n\r\nI
+  will present queries for:\r\n\r\n    * Checking on database engines and size\r\n
+  \   * Locating duplicate and redundant indexes\r\n    * Checking on character sets
+  for columns and tables, looking for variances\r\n    * Checking on processes and
+  long queries\r\n"
+---
+<p>A set of useful queries on INFORMATION_SCHEMA follows. These queries can be used when approaching a new database, to learn about some of its properties, or they can be regularly used on an existing schema, so as to verify its integrity.</p>
+<p>I will present queries for:</p>
+<ul>
+<li>Checking on database engines and size</li>
+<li>Locating duplicate and redundant indexes</li>
+<li>Checking on character sets for columns and tables, looking for variances</li>
+<li>Checking on processes and long queries (only with MySQL 5.1)<!--more--></li>
+</ul>
+<h4>Dimensions</h4>
+<p>The following query returns the total size per engine per database. For example, it is common that in a given database, all tables are InnoDB. But once in a while, and even though default-engine is set to InnoDB, someone creates a MyISAM table. This may break transactional behavior, or may cause a <code>mysqldump --single-transaction</code> to be ineffective.</p>
+<p><em>See aggregated size per schema per engine:</em></p>
+<blockquote>
+<pre><strong>SELECT </strong>TABLE_SCHEMA, ENGINE, <strong>COUNT</strong>(*) <strong>AS </strong>count_tables,
+  <strong>SUM</strong>(DATA_LENGTH+INDEX_LENGTH) <strong>AS </strong>size,
+<strong>SUM</strong>(INDEX_LENGTH) <strong>AS </strong>index_size<strong> FROM </strong>INFORMATION_SCHEMA.TABLES
+<strong>WHERE </strong>TABLE_SCHEMA <strong>NOT IN</strong> ('mysql', 'INFORMATION_SCHEMA')
+  <strong>AND </strong>ENGINE <strong>IS NOT NULL GROUP BY</strong> TABLE_SCHEMA, ENGINE</pre>
+</blockquote>
+<p>Result example:</p>
+<blockquote>
+<pre>+--------------+--------+--------------+----------+------------+
+| TABLE_SCHEMA | ENGINE | count_tables | size     | index_size |
++--------------+--------+--------------+----------+------------+
+| test         | InnoDB |            3 | 12140544 |          0 |
+| world        | InnoDB |            1 |  4734976 |          0 |
+| world        | MyISAM |            5 | 10665303 |    4457472 |
++--------------+--------+--------------+----------+------------+</pre>
+</blockquote>
+<p>I may not have intended to, but it seems I have both MyISAM and InnoDB tables in the world database.</p>
+<p>The index_size may be important with MyISAM when estimating the desired key_buffer_size.</p>
+<p><em>See per table size (almost exactly as presented in INFORMATION_SCHEMA):</em></p>
+<blockquote>
+<pre>SELECT TABLE_SCHEMA, TABLE_NAME, ENGINE, 
+ SUM(DATA_LENGTH+INDEX_LENGTH) AS size,
+SUM(INDEX_LENGTH) AS index_size FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_SCHEMA NOT IN ('mysql', 'INFORMATION_SCHEMA')
+ AND ENGINE IS NOT NULL GROUP BY TABLE_SCHEMA, TABLE_NAME</pre>
+</blockquote>
+<h4>Indexes</h4>
+<p>We will now turn to check for duplicate or redundant indexes. We begin by presenting the following table:</p>
+<blockquote>
+<pre>mysql&gt; show create table City \G
+*************************** 1. row ***************************
+       Table: City
+Create Table: CREATE TABLE `City` (
+  `ID` int(11) NOT NULL auto_increment,
+  `Name` char(35) character set utf8 NOT NULL default '',
+  `CountryCode` char(3) NOT NULL default '',
+  `District` char(20) NOT NULL default '',
+  `Population` int(11) NOT NULL default '0',
+  PRIMARY KEY  (`ID`),
+  UNIQUE KEY `ID` (`ID`),
+  KEY `Population` (`Population`),
+  KEY `Population_2` (`Population`,`CountryCode`)
+) ENGINE=MyISAM AUTO_INCREMENT=4080 DEFAULT CHARSET=latin1</pre>
+</blockquote>
+<p>We can see that the Population_2 index covers the Population index, so the latter is redundant and should be removed. We also see that the ID index is redundant, since there is a PRIMARY KEY on ID, which is in itself a unique key. How can we test such cases by querying the INFORMATION_SCHEMA? Turns out we can do that using the STATISTICS table.</p>
+<p>[Update: thanks to Roland Bouman's comments. The following queries only consider BTREE indexes, and do not verify FULLTEXT or HASH indexes]</p>
+<p><em>See if some index is a prefix of another (in which case it is redundant):</em></p>
+<blockquote>
+<pre><strong>SELECT </strong>* <strong>FROM </strong>(
+  <strong>SELECT </strong>TABLE_SCHEMA, TABLE_NAME, INDEX_NAME,
+    <strong>GROUP_CONCAT</strong>(COLUMN_NAME <strong>ORDER BY</strong> SEQ_IN_INDEX) <strong>AS </strong>columns
+  <strong>FROM </strong>`information_schema`.`STATISTICS`
+  <strong>WHERE </strong>TABLE_SCHEMA <strong>NOT IN</strong> ('mysql', 'INFORMATION_SCHEMA')
+    <strong>AND </strong>NON_UNIQUE = 1 <strong>AND </strong>INDEX_TYPE='BTREE' <strong>
+  GROUP BY</strong> TABLE_SCHEMA, TABLE_NAME, INDEX_NAME
+) <strong>AS </strong>i1 <strong>INNER JOIN</strong> (
+  <strong>SELECT </strong>TABLE_SCHEMA, TABLE_NAME, INDEX_NAME,
+    <strong>GROUP_CONCAT</strong>(COLUMN_NAME <strong>ORDER BY</strong> SEQ_IN_INDEX) <strong>AS </strong>columns
+  <strong>FROM </strong>`information_schema`.`STATISTICS`
+  <strong>WHERE </strong>INDEX_TYPE='BTREE' <strong>
+  GROUP BY</strong> TABLE_SCHEMA, TABLE_NAME, INDEX_NAME
+) <strong>AS </strong>i2
+<strong>USING </strong>(TABLE_SCHEMA, TABLE_NAME)
+<strong>WHERE </strong>i1.columns != i2.columns <strong>AND LOCATE</strong>(<strong>CONCAT</strong>(i1.columns, ','), i2.columns) = 1</pre>
+</blockquote>
+<p>The above query lists pairs of indexes in which one of them is a true prefix of the other. I'm using <code><strong>GROUP_CONCAT</strong>(COLUMN_NAME <strong>ORDER BY</strong> SEQ_IN_INDEX)</code> to aggregate columns per index, by order of appearance in that index.<br />
+The query only considers cases when the prefix (the "shorter") index is non-unique. Else wise there is no redundancy, as the uniqueness of the index imposes a constraint which is not achieved by the "longer" index.</p>
+<p>Result example:</p>
+<blockquote>
+<pre>+--------------+------------+------------+------------+--------------+------------------------+
+| TABLE_SCHEMA | TABLE_NAME | INDEX_NAME | columns    | INDEX_NAME   | columns                |
++--------------+------------+------------+------------+--------------+------------------------+
+| world        | City       | Population | Population | Population_2 | Population,CountryCode |
++--------------+------------+------------+------------+--------------+------------------------+</pre>
+</blockquote>
+<p><em>See if any two indexes are identical:</em></p>
+<blockquote>
+<pre><strong>SELECT </strong>* <strong>FROM </strong>(
+  <strong>SELECT </strong>TABLE_SCHEMA, TABLE_NAME, INDEX_NAME,
+    <strong>GROUP_CONCAT</strong>(COLUMN_NAME <strong>ORDER BY</strong> SEQ_IN_INDEX) <strong>AS </strong>columns, NON_UNIQUE
+  <strong>FROM </strong>`information_schema`.`STATISTICS`
+  <strong>WHERE </strong>TABLE_SCHEMA <strong>NOT IN </strong>('mysql', 'INFORMATION_SCHEMA')
+  <strong>AND</strong> INDEX_TYPE='BTREE'
+  <strong>GROUP BY</strong> TABLE_SCHEMA, TABLE_NAME, INDEX_NAME
+) <strong>AS </strong>i1 <strong>INNER JOIN</strong> (
+  <strong>SELECT </strong>TABLE_SCHEMA, TABLE_NAME, INDEX_NAME,
+    <strong>GROUP_CONCAT</strong>(COLUMN_NAME <strong>ORDER BY</strong> SEQ_IN_INDEX) <strong>AS </strong>columns, NON_UNIQUE
+  <strong>FROM </strong>`information_schema`.`STATISTICS`
+  <strong>WHERE </strong>INDEX_TYPE='BTREE'
+  <strong>GROUP BY</strong> TABLE_SCHEMA, TABLE_NAME, INDEX_NAME
+) <strong>AS </strong>i2
+<strong>USING </strong>(TABLE_SCHEMA, TABLE_NAME)
+<strong>WHERE </strong>i1.columns = i2.columns <strong>AND </strong>i1.NON_UNIQUE = i2.NON_UNIQUE
+  <strong>AND </strong>i1.INDEX_NAME &lt; i2.INDEX_NAME</pre>
+</blockquote>
+<p>The above checks for unique or non-unique indexes alike. It checks for indexes with identical columns list (and in the same order, of course). Any two indexes having the same list of columns imply a redundancy. If both are unique or both are non-unique, either can be removed. If one is unique and the other is not, the non-unique index should be removed.</p>
+<p>Result example:</p>
+<blockquote>
+<pre>+--------------+------------+------------+---------+------------+------------+---------+------------+
+| TABLE_SCHEMA | TABLE_NAME | INDEX_NAME | columns | NON_UNIQUE | INDEX_NAME | columns | NON_UNIQUE |
++--------------+------------+------------+---------+------------+------------+---------+------------+
+| world        | City       | PRIMARY    | ID      |          0 | ID         | ID      |          0 |
++--------------+------------+------------+---------+------------+------------+---------+------------+</pre>
+</blockquote>
+<p>You may also wish to take a look at the excellent mk-duplicate-key-checker, a <a title="maatkit" href="http://www.maatkit.org/">maatkit</a> utility by <a title="Xaprb" href="http://www.xaprb.com/blog/">Baron Schwartz</a>.</p>
+<h4>Character sets</h4>
+<p><em>Show the character sets for all tables:</em></p>
+<blockquote>
+<pre><strong>SELECT </strong>TABLE_SCHEMA, TABLE_NAME, CHARACTER_SET_NAME, TABLE_COLLATION
+<strong>FROM </strong>INFORMATION_SCHEMA.TABLES
+<strong>INNER JOIN</strong> INFORMATION_SCHEMA.COLLATION_CHARACTER_SET_APPLICABILITY
+  <strong>ON </strong>(TABLES.TABLE_COLLATION = COLLATION_CHARACTER_SET_APPLICABILITY.COLLATION_NAME)
+<strong>WHERE </strong>TABLE_SCHEMA <strong>NOT IN</strong> ('mysql', 'INFORMATION_SCHEMA')</pre>
+</blockquote>
+<p>Surprisingly, the TABLES table does not include the character set for the table, only the collation, so we must join with COLLATION_CHARACTER_SET_APPLICABILITY to get the character set for that collation. Yes, it's more normalized this way, but INFORMATION_SCHEMA is not too normalized anyway.</p>
+<p><em>See all the textual columns, along with their character sets:</em></p>
+<blockquote>
+<pre><strong>SELECT </strong>TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, CHARACTER_SET_NAME, COLLATION_NAME
+<strong>FROM </strong>INFORMATION_SCHEMA.COLUMNS
+<strong>WHERE </strong>TABLE_SCHEMA <strong>NOT IN</strong> ('mysql', 'INFORMATION_SCHEMA')
+  <strong>AND </strong>CHARACTER_SET_NAME <strong>IS NOT NULL</strong>
+<strong>ORDER BY</strong> TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME</pre>
+</blockquote>
+<p><em>See those columns for which the character set or collation is different from the table's character set and collation:</em></p>
+<blockquote>
+<pre><strong>SELECT </strong>columns.TABLE_SCHEMA, columns.TABLE_NAME, COLUMN_NAME,
+  CHARACTER_SET_NAME <strong>AS </strong>column_CHARSET,
+  COLLATION_NAME <strong>AS </strong>column_COLLATION,
+  table_CHARSET, TABLE_COLLATION
+<strong>FROM </strong>(
+  <strong>SELECT </strong>TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, CHARACTER_SET_NAME, COLLATION_NAME
+  <strong>FROM </strong>INFORMATION_SCHEMA.COLUMNS
+  <strong>WHERE </strong>TABLE_SCHEMA <strong>NOT IN</strong> ('mysql', 'INFORMATION_SCHEMA')
+    <strong>AND </strong>CHARACTER_SET_NAME <strong>IS NOT NULL</strong>
+) <strong>AS </strong>columns <strong>INNER JOIN </strong>(
+  <strong>SELECT </strong>TABLE_SCHEMA, TABLE_NAME, CHARACTER_SET_NAME <strong>AS </strong>table_CHARSET, TABLE_COLLATION
+  <strong>FROM </strong>INFORMATION_SCHEMA.TABLES
+  <strong>INNER JOIN</strong> INFORMATION_SCHEMA.COLLATION_CHARACTER_SET_APPLICABILITY
+    <strong>ON </strong>(TABLES.TABLE_COLLATION = COLLATION_CHARACTER_SET_APPLICABILITY.COLLATION_NAME)
+) <strong>AS </strong>tables
+<strong>ON </strong>(columns.TABLE_SCHEMA = tables.TABLE_SCHEMA <strong>AND </strong>columns.TABLE_NAME = tables.TABLE_NAME)
+<strong>WHERE </strong>(columns.CHARACTER_SET_NAME != table_CHARSET <strong>OR </strong>columns.COLLATION_NAME != TABLE_COLLATION)
+<strong>ORDER BY</strong> TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME</pre>
+</blockquote>
+<p>Result example:</p>
+<blockquote>
+<pre>+--------------+------------+-------------+----------------+------------------+---------------+-------------------+
+| TABLE_SCHEMA | TABLE_NAME | COLUMN_NAME | column_CHARSET | column_COLLATION | table_CHARSET | TABLE_COLLATION   |
++--------------+------------+-------------+----------------+------------------+---------------+-------------------+
+| world        | City       | Name        | utf8           | utf8_general_ci  | latin1        | latin1_swedish_ci |
++--------------+------------+-------------+----------------+------------------+---------------+-------------------</pre>
+</blockquote>
+<h4>Processes (MySQL 5.1)</h4>
+<p>With MySQL 5.1 comes a boost to INFORMATION_SCHEMA. Among the new tables we can find the PROCESSLIST table, as well as GLOBAL_VARIABLES and GLOBAL_STATUS. Together with the new Event Scheduler, it seems the sky is the limit.</p>
+<p><em>See which processes are active:</em></p>
+<blockquote>
+<pre>SELECT * FROM information_schema.PROCESSLIST WHERE COMMAND != 'Sleep'</pre>
+</blockquote>
+<p><em>Show slow queries:</em></p>
+<blockquote>
+<pre>SELECT * FROM information_schema.PROCESSLIST WHERE COMMAND != 'Sleep' AND TIME &gt; 4</pre>
+</blockquote>
+<p><em>How many processes per user?</em></p>
+<blockquote>
+<pre>SELECT USER, COUNT(*) FROM information_schema.PROCESSLIST GROUP BY USER</pre>
+</blockquote>
+<p><em>How many processes per host?</em></p>
+<blockquote>
+<pre>SELECT SUBSTR(HOST, 1, LOCATE(':',HOST)-1) AS hostname, COUNT(*)
+FROM information_schema.PROCESSLIST GROUP BY hostname</pre>
+</blockquote>
+<p>Along with the Event Scheduler, a stored procedure may decide to KILL processes executing for more than 10 minutes, KILL users who have too many connections, perform some logging on connections and more.</p>
+<h4>Conclusion</h4>
+<p>I have presented what I think is a set of useful queries. When I approach a new database I use these to get an overall understanding of what's in it. Finding duplicate indexes can explain a lot about how the designers or developers <em>think</em> the database should behave. Looking at the non-default character sets shows if textual columns have been carefully designed or not. For example, querying for non-default columns characters and getting no results may imply that many textual columns have improper character sets.</p>

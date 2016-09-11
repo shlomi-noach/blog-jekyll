@@ -1,0 +1,96 @@
+---
+title: 'Orchestrator 1.4.340: GTID, binlog servers, Smart Mode, failovers and lots
+  of goodies'
+date: 2015-09-01 12:10:15.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Open Source
+- orchestrator
+- Pseudo GTID
+- Replication
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><a href="https://github.com/outbrain/orchestrator/releases"><strong>Orchestrator</strong> 1.4.340 is released</a>. Not quite competing with the MySQL latest changelog, and as I haven't blogged about <em>orchestrator</em> featureset in a while, this is a quick listing of <em>orchestrator</em> features available since my last publication:</p>
+<ul>
+<li>Supports <strong>GTID</strong> (Oracle &amp; MariaDB)
+<ul>
+<li>GTID still not being used in automated recovery -- in progress.</li>
+<li><strong>enable-gtid</strong>, <strong>disable-gtid</strong>, <strong>skip-query</strong> for GTID commands</li>
+</ul>
+</li>
+<li>Supports <strong>binlog servers</strong> (MaxScale)
+<ul>
+<li>Discovery &amp; operations on binlog servers</li>
+<li>Understanding slave repositioning in a binlog-server architecture</li>
+</ul>
+</li>
+<li><strong>Smart mode</strong>: relocate &amp; relocate-below commands (or Web/GUI drag-n-drop) let <em>orchestrator</em> figure out the best way of slave repositioning. <em>Orchestrator</em> picks from GTID, Pseudo GTID, binlog servers, binlog file:pos math (and more) options, or combinations of the above. Fine grained commands still there, but mostly you won't need them.</li>
+<li><strong>Crash recoveries</strong> (did you know <em>orchestrator</em> does that?):
+<ul>
+<li>For intermediate master recovery: improved logic in picking the best recovery plan (prefer in-DC, prefer promoting local slave, supporting binlog server topologies, ...)</li>
+<li>For master recovery: even better slave promotion; supports <em>candidate slaves </em>(prefer promoting such slaves); supports binlog server shared topologies</li>
+<li>Better auditing and logging of recovery cases</li>
+<li>Better analysis of crash scenarios, also in the event of lost VIPs, hanging connections; emergent checks in crash suspected scenarios</li>
+<li>recover-lite: do all topology-only recovery steps, without invoking external processes</li>
+</ul>
+</li>
+<li><strong>Better browser support</strong>: used to only work on Firefox and Chrome (and the latter has had issues), the Web UI should now work well on all browsers, at the cost of reduced <strong>d3</strong> animation. More work still in progress.</li>
+<li><strong>Faster</strong>, more parallel, less blocking operations on all counts; removed a lots of serialized code; less locks.</li>
+<li><strong>Web enhancements</strong>
+<ul>
+<li>More verbose drag-n-drop (operation hint; color hints)</li>
+<li>Drag-n-drop for <em>slaves-of-a-server</em></li>
+<li>Replication/crash analysis dashboard</li>
+</ul>
+</li>
+<li><strong>Pools</strong>: <em>orchestrator</em> can be <em>told</em> about instance-to-pool association (<strong>submit-pool-instances</strong> command)
+<ul>
+<li>And can then present pool status (web)</li>
+<li>Or pool hints within topologies (web)</li>
+<li>Or queried for all pools (<strong>cluster-pool-instances</strong> command)</li>
+</ul>
+</li>
+<li>Other:
+<ul>
+<li>Supports MySQL <strong>5.7</strong> (tested with <strong>5.7.8</strong>)</li>
+<li>Configurable graphite path for metrics</li>
+<li><strong>--noop</strong> flag; does all the work except for actually changing master on slaves. Shows intentions.</li>
+<li>Web (or cli <strong>which-cluster-osc-slaves</strong> command) provide list of control slaves to use in <strong>pt-osc</strong> operation</li>
+<li><strong>hostname-unresolve</strong>: force <em>orchestrator</em> to unresolve a fqdn into VIP/CNAME/... when issuing a CHANGE MASTER TO</li>
+</ul>
+</li>
+<li>3rd party contributions (hey, thanks!) include:
+<ul>
+<li>More &amp; better SSL support</li>
+<li>Vagrant templates</li>
+</ul>
+</li>
+<li>For developers:
+<ul>
+<li><em>Orchestrator</em> now go-gettable. Just <strong>go get github.com/outbrain/orchestrator</strong></li>
+<li>Improved build script; supports more architectures</li>
+</ul>
+</li>
+</ul>
+<p><!--more--></p>
+<p>Also consider these manuals:</p>
+<ul>
+<li><a href="https://github.com/outbrain/orchestrator/wiki/Orchestrator-Manual">The Orchestrator Manual</a></li>
+<li><a href="https://github.com/outbrain/orchestrator/wiki/Orchestrator-deployment">Orchestrator deployment</a></li>
+<li><a href="https://github.com/outbrain/orchestrator/wiki/Orchestrator-first-steps">Orchestrator first steps</a></li>
+<li><a href="https://github.com/outbrain/orchestrator/wiki/Orchestrator-for-developers">Orchestrator for developers</a></li>
+</ul>
+<p><em>Orchestrator</em> is free and open source (Apache 2.0 License).</p>
+<p>I'll be <a href="https://www.percona.com/live/europe-amsterdam-2015/sessions/managing-and-visualizing-your-replication-topologies-orchestrator">speaking about orchestrator in PerconaLive Amsterdam</a>.</p>

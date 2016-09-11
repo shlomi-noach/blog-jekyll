@@ -1,0 +1,45 @@
+---
+layout: post
+title: MySQL on Linux and Windows - incompatabilities
+date: 
+type: post
+published: false
+status: draft
+categories: []
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: admin
+  email: shlomi@openark.org
+  display_name: admin
+  first_name: ''
+  last_name: ''
+---
+<p>While in general MySQL runs the same on both operating systems, here's a short list of some differences between the two.</p>
+<p>I wish to avoid stating differences that are obvious, such as "Linux has Unix-Socket and Windows has Named-Pipes", but rather state those differences which imply different functionality or availability of utilities.</p>
+<ul>
+<li>On Windows, table names are case insensitive. So <strong>SELECT * FROM Country</strong> is the same as<strong> SELECT * FROM country</strong>.</li>
+</ul>
+<ul>
+<li>Moreover, Windows stores table names in lower case. This means replicating from Windows (master) to Linux (slave) may fail due to the fact that the MySQL server on windows regards tables in an altered case than the original, whereas linux expects exact names. This can be solved with setting <strong>lower_case_table_names=1</strong> on the linux machine.</li>
+</ul>
+<ul>
+<li><strong>SET PROFILING</strong> and <strong>SHOW PROFILE</strong> will not work on Windows.</li>
+</ul>
+<ul>
+<li>MySQL Cluster is not available for Windows at the time of this writing.</li>
+</ul>
+<ul>
+<li> MySQL Proxy is not available for Windows at the time of this writing.</li>
+</ul>
+<ul>
+<li>Not all Perl scripts supplied with the MySQL distribution are applicable on Windows. Not all of them are provided on Windows (The MySQL 5.0 windows installation comes with no Perl scripts at all. The 5.1 installation comes with some).</li>
+</ul>
+<ul>
+<li>Some high availability options are not available on Windows, namely Linux Heartbeat and DRBD. Windows Cluster is only available on Windows.</li>
+</ul>
+<ul>
+<li>You can expect most of the common 3rd party utilities to run well on Linux: mytop, innotop, mysqlreport, mysqlsla, maatkit etc.</li>
+</ul>
+<p>Please share below other differences I may have missed.</p>

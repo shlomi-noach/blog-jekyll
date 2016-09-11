@@ -1,0 +1,234 @@
+---
+title: 'common_schema: 1.3: security goodies, parameterized split(), json-to-xml,
+  query checksum'
+date: 2013-01-14 08:25:07.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- Development
+- New Features
+- Open Source
+- QueryScript
+- scripts
+- Security
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>common_schema <strong>1.3</strong> is released and is <a href="http://code.google.com/p/common-schema">available for download</a>. New and noteworthy in this version:</p>
+<ul>
+<li>Parameterized <strong><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_split.html">split()</a></strong>: take further control over huge transactions by breaking them down into smaller chunks, now manually tunable if needed</li>
+<li><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/duplicate_grantee.html"><strong>duplicate_grantee()</strong></a>: copy+paste existing accounts along with their full set of privileges</li>
+<li><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/similar_grants.html"><strong>similar_grants</strong></a>: find which accounts share the exact same set of privileges (i.e. have the same <em>role</em>)</li>
+<li><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/json_to_xml.html"><strong>json_to_xml()</strong></a>: translate any valid JSON object into its equivalent XML form</li>
+<li><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/extract_json_value.html"><strong>extract_json_value()</strong></a>: use XPath notation to extract info from JSON data, just as you would from XML</li>
+<li><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_checksum.html"><strong>query_checksum()</strong></a>: given a query, calculate a checksum on the result set</li>
+<li><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/random_hash.html"><strong>random_hash()</strong></a>: get a 40 hexadecimal digits random hash, using a reasonably large changing input</li>
+</ul>
+<p>Let's take a closer look at the above:</p>
+<h4>Parameterized split()</h4>
+<p><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_split.html"><strong>split</strong></a> takes your bulk query and automagically breaks it down into smaller pieces. So instead of one huge <strong>UPDATE</strong> or <strong>DELETE</strong> or <strong>INSERT..SELECT</strong> transaction, you get many smaller transactions, each with smaller impact on I/O, locks, CPU.</p>
+<p>As of <strong>1.3</strong>, <em>split()</em> gets more exposed: you can have some control on its execution, and you also get a lot of very interesting info during operation.</p>
+<p>Here's an example of <em>split()</em> control:</p>
+<blockquote>
+<pre>set @script := "
+  <strong>split</strong>({<em>start</em>:7015, <em>step</em>:2000} : <span style="color: #3366ff;">UPDATE sakila.rental SET return_date = return_date + INTERVAL 1 DAY</span>) 
+    <strong>throttle</strong> 1;
+";
+call common_schema.run(@script);</pre>
+</blockquote>
+<p>In the above we choose a split size of 2,000 rows at a time; but we also choose to only start with <strong>7015</strong>, skipping all rows prior to that value. Just what is that value? It depends on the splitting key (and see next example for just that); but in this table we can safely assume this is the <strong>rental_id</strong> <strong>PRIMARY KEY</strong> of the table.</p>
+<p>You don't <em>have to</em> use these control <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_split.html#parameters">parameters</a>. But they can save you some time and effort.<!--more--></p>
+<p>And, look at some interesting info about the <em>splitting</em> process:</p>
+<blockquote>
+<pre>set @script := "
+  <strong>split</strong>(<span style="color: #339966;">sakila.film_actor</span>) 
+    <span style="color: #3366ff;"><strong>select</strong></span> $split_columns <span style="color: #3366ff;">as columns</span>, $split_range_start <span style="color: #3366ff;">as range_start</span>, $split_range_end <span style="color: #3366ff;">as range_end</span>
+";
+call common_schema.run(@script);
++----------------------+-------------+------------+
+| columns              | range_start | range_end  |
++----------------------+-------------+------------+
+| `actor_id`,`film_id` | '1','1'     | '39','293' |
++----------------------+-------------+------------+
+
++----------------------+-------------+------------+
+| columns              | range_start | range_end  |
++----------------------+-------------+------------+
+| `actor_id`,`film_id` | '39','293'  | '76','234' |
++----------------------+-------------+------------+
+
++----------------------+-------------+-------------+
+| columns              | range_start | range_end   |
++----------------------+-------------+-------------+
+| `actor_id`,`film_id` | '76','234'  | '110','513' |
++----------------------+-------------+-------------+
+
++----------------------+-------------+-------------+
+| columns              | range_start | range_end   |
++----------------------+-------------+-------------+
+| `actor_id`,`film_id` | '110','513' | '146','278' |
++----------------------+-------------+-------------+
+
++----------------------+-------------+-------------+
+| columns              | range_start | range_end   |
++----------------------+-------------+-------------+
+| `actor_id`,`film_id` | '146','278' | '183','862' |
++----------------------+-------------+-------------+
+
++----------------------+-------------+-------------+
+| columns              | range_start | range_end   |
++----------------------+-------------+-------------+
+| `actor_id`,`film_id` | '183','862' | '200','993' |
++----------------------+-------------+-------------+</pre>
+</blockquote>
+<p>In the above you get to be told exactly how table splitting occurs: you are being told what columns are used to split the table, and what range of values is used in each step. There's more to it: read the <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_split.html">split() documentation</a>.</p>
+<h4>similar_grants</h4>
+<p>Out of your <strong>100</strong> different grants, which ones share the exact same set of privileges? MySQL has non notion of <em>roles</em>, but that doesn't mean the notion does not exist. Multiple accounts share the same restrictions and privileges. Use <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/similar_grants.html"><strong>similar_grants</strong></a> to find out which. You might just realize there's a few redundant accounts in your system.</p>
+<blockquote>
+<pre>mysql&gt; SELECT * FROM similar_grants;
++-------------------------------+----------------+-------------------------------------------------------+
+| sample_grantee                | count_grantees | similar_grantees                                      |
++-------------------------------+----------------+-------------------------------------------------------+
+| 'root'@'127.0.0.1'            |              3 | <span style="color: #3366ff;">'root'@'127.0.0.1'</span>,<span style="color: #0000ff;">'root'@'myhost'</span>,<span style="color: #333399;">'root'@'localhost'</span> |
+| 'repl'@'10.%'                 |              2 | <span style="color: #008000;">'repl'@'10.%'</span>,<span style="color: #808000;">'replication'@'10.0.0.%'</span>                |
+| 'apps'@'%'                    |              1 | 'apps'@'%'                                            |
+| 'gromit'@'localhost'          |              1 | 'gromit'@'localhost'                                  |
+| 'monitoring_user'@'localhost' |              1 | 'monitoring_user'@'localhost'                         |
++-------------------------------+----------------+-------------------------------------------------------+</pre>
+</blockquote>
+<h4>duplicate_grantee()</h4>
+<p>Provide an existing account, and name your new, exact duplicate account. The complete set of privileges is copied, and so is the password. <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/duplicate_grantee.html"><strong>duplicate_grantee()</strong></a> is your Copy+Paste of MySQL accounts.</p>
+<p>Let's begin with some pre-existing account and see how it duplicates:</p>
+<blockquote>
+<pre>mysql&gt; show grants for <span style="color: #000080;">'world_user'@'localhost'</span>;
++------------------------------------------------------------------------------------------------------------------------+
+| Grants for world_user@localhost                                                                                        |
++------------------------------------------------------------------------------------------------------------------------+
+| GRANT USAGE ON *.* TO 'world_user'@'localhost' IDENTIFIED BY PASSWORD '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'      |
+| GRANT ALL PRIVILEGES ON `world`.* TO 'world_user'@'localhost'                                                          |
+| GRANT EXECUTE, ALTER ROUTINE ON FUNCTION `sakila`.`get_customer_balance` TO 'world_user'@'localhost' WITH GRANT OPTION |
++------------------------------------------------------------------------------------------------------------------------+
+
+mysql&gt; call <strong>duplicate_grantee</strong>(<span style="color: #000080;">'world_user@localhost'</span>, <span style="color: #000080;">'copied_user@10.0.0.%'</span>);
+Query OK, 0 rows affected (0.06 sec)
+
+mysql&gt; show grants for <span style="color: #000080;">'copied_user'@'10.0.0.%'</span>;
++------------------------------------------------------------------------------------------------------------------------+
+| Grants for copied_user@10.0.0.%                                                                                        |
++------------------------------------------------------------------------------------------------------------------------+
+| GRANT USAGE ON *.* TO 'copied_user'@'10.0.0.%' IDENTIFIED BY PASSWORD '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'      |
+| GRANT ALL PRIVILEGES ON `world`.* TO 'copied_user'@'10.0.0.%'                                                          |
+| GRANT EXECUTE, ALTER ROUTINE ON FUNCTION `sakila`.`get_customer_balance` TO 'copied_user'@'10.0.0.%' WITH GRANT OPTION |
++------------------------------------------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>The routine is quite relaxed in grantee format. <strong>copied_user@10.0.0.%</strong>, <strong>copied_user@'10.0.0.%'</strong> and <strong>'copied_user'@'10.0.0.%'</strong> are all just fine, and represent the same account. Saves trouble with all that quoting.</p>
+<h4>json_to_xml()</h4>
+<p>JSON is becoming increasingly popular in storing dynamically-structured data. XML's tags overhead and its human unfriendliness make it less popular today. However, the two share similar concepts, and conversion between the two is possible. <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/json_to_xml.html"><strong>json_to_xml()</strong></a> will translate your valid JSON data into its equivalent XML format. The rules are simple (all-nodes-and-data, no attributes, arrays as repeating nodes, objects as subnodes) and the results are valid XML objects.</p>
+<p>Sample data taken from <a href="http://json.org/example.html">json.org</a>:</p>
+<blockquote>
+<pre>mysql&gt; SET @json := '
+<span style="color: #000080;">{
+  "menu": {
+    "id": "file",
+    "value": "File",
+    "popup": {
+      "menuitem": [
+        {"value": "New", "onclick": "CreateNewDoc()"},
+        {"value": "Open", "onclick": "OpenDoc()"},
+        {"value": "Close", "onclick": "CloseDoc()"}
+      ]
+    }
+  }
+}</span>
+';
+
+mysql&gt; SELECT <strong>json_to_xml(@json)</strong> AS <strong>xml</strong> \G
+*************************** 1. row ***************************
+<strong>xml:</strong> &lt;menu&gt;&lt;id&gt;file&lt;/id&gt;&lt;value&gt;File&lt;/value&gt;&lt;popup&gt;&lt;menuitem&gt;&lt;value&gt;New&lt;/value&gt;&lt;onclick&gt;CreateNewDoc()&lt;/onclick&gt;&lt;/menuitem&gt;&lt;menuitem&gt;&lt;value&gt;Open&lt;/value&gt;&lt;onclick&gt;OpenDoc()&lt;/onclick&gt;&lt;/menuitem&gt;&lt;menuitem&gt;&lt;value&gt;Close&lt;/value&gt;&lt;onclick&gt;CloseDoc()&lt;/onclick&gt;&lt;/menuitem&gt;&lt;/popup&gt;&lt;/menu&gt;</pre>
+</blockquote>
+<p>Beautified form of the above result:</p>
+<blockquote>
+<pre>&lt;menu&gt;
+  &lt;id&gt;file&lt;/id&gt;
+  &lt;value&gt;File&lt;/value&gt;
+  &lt;popup&gt;
+    &lt;menuitem&gt;
+      &lt;value&gt;New&lt;/value&gt;
+      &lt;onclick&gt;CreateNewDoc()&lt;/onclick&gt;
+    &lt;/menuitem&gt;
+    &lt;menuitem&gt;
+      &lt;value&gt;Open&lt;/value&gt;
+      &lt;onclick&gt;OpenDoc()&lt;/onclick&gt;
+    &lt;/menuitem&gt;
+    &lt;menuitem&gt;
+      &lt;value&gt;Close&lt;/value&gt;
+      &lt;onclick&gt;CloseDoc()&lt;/onclick&gt;
+    &lt;/menuitem&gt;
+  &lt;/popup&gt;
+&lt;/menu&gt;</pre>
+</blockquote>
+<p>Note that linked examples page uses sporadically invented attributes; <em>common_schema</em> prefers using well-defined nodes.</p>
+<h4>extract_json_value()</h4>
+<p>Which means things you can do with XML can also be done with JSON. XPath is a popular extraction DSL, working not only for XML but also for Object Oriented structures (see Groovy's nice integration of XPath into the language, or just commons-beans for conservative approach). JSON is a perfect data store for XPath expressions; by utilizing the translation between JSON and XML, one is now easily able to extract value from JSON (using same example as above):</p>
+<blockquote>
+<pre>mysql&gt; SELECT <strong>extract_json_value</strong>(@json, <span style="color: #000080;">'//id'</span>) AS result;
++--------+
+| result |
++--------+
+| file   |
++--------+
+
+mysql&gt; SELECT <strong>extract_json_value</strong>(@json, <span style="color: #000080;">'count(/menu/popup/menuitem)'</span>) AS count_items;
++-------------+
+| count_items |
++-------------+
+| 3           |
++-------------+</pre>
+</blockquote>
+<p>Implementations of <strong>json_to_xml()</strong> and <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/extract_json_value.html"><strong>extract_json_value()</strong></a> are CPU intensive. There is really just one justification for having these written in Stored Procedures: their lack in the standard MySQL function library. This is reason enough. Just be aware; test with <a href="http://dev.mysql.com/doc/refman/5.5/en/information-functions.html#function_benchmark">BENCHMARK()</a>.</p>
+<h4>query_checksum()</h4>
+<p>It looks like this:</p>
+<blockquote>
+<pre>mysql&gt; call <strong>query_checksum</strong>(<span style="color: #000080;">'select id from world.City where id in (select capital from world.Country) order by id'</span>);
++----------------------------------+
+| checksum                         |
++----------------------------------+
+| 5f35070b90b0c079ba692048c51a89fe |
++----------------------------------+
+
+mysql&gt; call <strong>query_checksum</strong>(<span style="color: #000080;">'select capital from world.Country where capital is not null order by capital'</span>);
++----------------------------------+
+| checksum                         |
++----------------------------------+
+| 5f35070b90b0c079ba692048c51a89fe |
++----------------------------------+</pre>
+</blockquote>
+<p>The two queries above yield with the same result set. As consequence, <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_checksum.html"><strong>query_checksum()</strong></a> produces the same checksum value for both. The next query produces a different result set, hence a different checksum:</p>
+<blockquote>
+<pre>mysql&gt; call <strong>query_checksum</strong>(<span style="color: #000080;">'select id from world.City where id in (select capital from world.Country) order by id limit 10'</span>);
++----------------------------------+
+| checksum                         |
++----------------------------------+
+| 997079c2dfca34ba87ae44ed8965276e |
++----------------------------------+</pre>
+</blockquote>
+<p>The routine actually invokes the given queries (modifying them a bit along the way) and uses a deterministic incremental checksum to get the final result.</p>
+<p>Its use? As a handy built-in mechanism for comparing your table data. This is meant for relatively small result sets - not for your <strong>20GB</strong> table. Inspired by Baron's <a href="http://www.xaprb.com/blog/2009/03/25/mysql-command-line-tip-compare-result-sets/">old trick</a>, and works on server side (Windows/GUI/automated clients to benefit).</p>
+<h4>random_hash()</h4>
+<p>Random hashes come handy. The naive way to produce them is by executing something like <strong>SELECT SHA1(RAND())</strong>. However the <strong>RAND()</strong> function just doesn't provide enough plaintext for the hash function. The <strong>SHA</strong>/<strong>MD5</strong> functions expect a textual input, and produce a <strong>160</strong>/<strong>128</strong> bit long hash. The maximum char length of a <strong>RAND()</strong> result is <strong>20</strong> characters or so, and these are limited to the <strong>0-9</strong> digits. So at about <strong>10^20</strong> options for input, which is about <strong>64</strong> bit. Hmmmm. a 64 bit input to generate a <strong>160</strong> bit output? I don't think so! <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/random_hash.html"><strong>random_hash()</strong></a> provides additional input in the form of your current status (at about 830 characters) as well as <strong>RAND()</strong>, <strong>SYSDATE()</strong> and server ID.</p>
+<h4>Bugfixes</h4>
+<p>Any bugfix adds at least one test; typically more. Currently with over <strong>470</strong> tests, <em>common_schema</em> is built to work.</p>
+<h4>Get common_schema</h4>
+<p><em>common_schema</em> <strong>1.3</strong> is available under the permissive New BSD License. <a href="http://code.google.com/p/common-schema/">Find the latest download here</a>.</p>
+<p>If you like to support <em>common_schema</em>, I'm always open for ideas and contributions. Or you can just spread the word!</p>

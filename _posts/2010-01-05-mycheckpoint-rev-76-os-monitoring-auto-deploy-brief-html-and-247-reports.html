@@ -1,0 +1,138 @@
+---
+title: 'mycheckpoint rev. 76: OS monitoring, auto deploy, brief HTML and 24/7 reports'
+date: 2010-01-05 10:55:14.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Graphs
+- Linux
+- Monitoring
+- mycheckpoint
+- python
+- scripts
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Revision <strong>76</strong> of <a href="http://code.openark.org/forge/mycheckpoint">mycheckpoint</a> comes with quite a few improvements, including:</p>
+<ul>
+<li>OS monitoring (CPU, load average, memory)</li>
+<li>Auto-deploy</li>
+<li>Improved charting</li>
+<li>Brief HTML reports</li>
+<li>24/7 charts</li>
+</ul>
+<h4>OS Monitoring</h4>
+<p>When monitoring the local machine, <em>mycheckpoint</em> now monitors CPU utilization, load average, memory and swap space.</p>
+<p>This only applies to the Linux operating system; there is currently no plan to work this out for other operating systems.</p>
+<p>Examples:</p>
+<blockquote>
+<pre>mysql&gt; SELECT <strong>os_cpu_utilization_percent</strong> FROM sv_report_chart_sample;
+
+</pre>
+<p><img class="size-full wp-image-1794 alignnone" title="mycheckpoint-chart-cpu-sample" src="{{ site.baseurl }}/assets/mycheckpoint-chart-cpu-sample.png" alt="mycheckpoint-chart-cpu-sample" width="400" height="200" />
+</p></blockquote>
+<blockquote>
+<pre>mysql&gt; SELECT ts, <strong>os_loadavg</strong> FROM mycheckpoint.sv_report_sample;
++---------------------+------------+
+| 2009-12-27 11:45:01 |       1.78 |
+| 2009-12-27 11:50:01 |       2.48 |
+| 2009-12-27 11:55:01 |       2.35 |
+...
++---------------------+------------+</pre>
+</blockquote>
+<blockquote>
+<pre>mysql&gt; SELECT report FROM mycheckpoint.sv_report_human_sample ORDER BY id DESC LIMIT 1 \G
+*************************** 1. row ***************************
+report:
+Report period: 2009-12-27 13:20:01 to 2009-12-27 13:25:01. Period is 5 minutes (0.08 hours)
+Uptime: 100.0% (Up: 334 days, 06:37:28 hours)
+
+<strong>OS:
+ Load average: 1.67
+ CPU utilization: 25.2%
+ Memory: 7486.4MB used out of 7985.6484MB (Active: 6685.8906MB)
+ Swap: 3835.2MB used out of 8189.3750MB</strong>
+...</pre>
+</blockquote>
+<h4>Auto-deploy</h4>
+<p><em>mycheckpoint</em> now has a version recognition mechanism. There is no need to call <em>mycheckpoint</em> with the "<strong>deploy</strong>" argument on first install or after upgrade. <em>mycheckpoint</em> will recognize a change of version and will auto-deploy before moving on to monitoring your system.</p>
+<p><!--more-->It is still possible, though, to use "<strong>deploy</strong>", in case you just want to make sure an upgrade takes place, without issuing a monitoring action.</p>
+<h4>Improved charting</h4>
+<p>Further improvements and bug fixes made to the Google charts, including the implementation of missing values charting.</p>
+<h4>Brief HTML report</h4>
+<p>In contrast with the full blown HTML report (see <a href="http://code.openark.org/forge/wp-content/uploads/2009/12/mycheckpoint_report-72.html">sample</a>), which presents hourly/daily/weekly reports for the many metrics, the new brief report only presents with a few hourly based charts. These include InnoDB performance, DML, OS metrics, and replication status.</p>
+<p>To get a brief HTML report, issue:</p>
+<blockquote>
+<pre>mysql&gt; SELECT html FROM sv_report_html_brief;
+
+<a href="http://code.openark.org/forge/wp-content/uploads/2009/12/mycheckpoint-brief-report.html" /></pre>
+<p><img class="alignnone size-full wp-image-1839" title="mycehckpoint-report-html-brief-screenshot-small" src="{{ site.baseurl }}/assets/mycehckpoint-report-html-brief-screenshot-small2.png" alt="" width="611" height="409" /></p>
+</blockquote>
+<p>See <a href="http://code.openark.org/forge/wp-content/uploads/2009/12/mycheckpoint-brief-report.html">sample brief HTML report</a>.</p>
+<h4>24/7 charts</h4>
+<p>24/7 charts present the various metrics on a 24x7 matrix, which allows for diagnostics of usage throughout the day and week. For example, it makes it easier to see how things slow down on Saturday/Sunday; how load increases on 10:00am every day, etc.</p>
+<p>24/7 charts are provided by the <strong>sv_report_chart_24_7</strong> view.</p>
+<blockquote>
+<pre>DESC sv_report_chart_24_7;
++---------------------------------------+----------+------+-----+---------+-------+
+| Field                                 | Type     | Null | Key | Default | Extra |
++---------------------------------------+----------+------+-----+---------+-------+
+| innodb_read_hit_percent               | longblob | YES  |     | NULL    |       |
+| innodb_buffer_pool_reads_psec         | longblob | YES  |     | NULL    |       |
+| innodb_buffer_pool_pages_flushed_psec | longblob | YES  |     | NULL    |       |
+| innodb_os_log_written_psec            | longblob | YES  |     | NULL    |       |
+| innodb_row_lock_waits_psec            | longblob | YES  |     | NULL    |       |
+| mega_bytes_sent_psec                  | longblob | YES  |     | NULL    |       |
+| mega_bytes_received_psec              | longblob | YES  |     | NULL    |       |
+| key_read_hit_percent                  | longblob | YES  |     | NULL    |       |
+| key_write_hit_percent                 | longblob | YES  |     | NULL    |       |
+| com_select_psec                       | longblob | YES  |     | NULL    |       |
+| com_insert_psec                       | longblob | YES  |     | NULL    |       |
+| com_delete_psec                       | longblob | YES  |     | NULL    |       |
+| com_update_psec                       | longblob | YES  |     | NULL    |       |
+| com_replace_psec                      | longblob | YES  |     | NULL    |       |
+| com_set_option_percent                | longblob | YES  |     | NULL    |       |
+| com_commit_percent                    | longblob | YES  |     | NULL    |       |
+| slow_queries_percent                  | longblob | YES  |     | NULL    |       |
+| select_scan_psec                      | longblob | YES  |     | NULL    |       |
+| select_full_join_psec                 | longblob | YES  |     | NULL    |       |
+| select_range_psec                     | longblob | YES  |     | NULL    |       |
+| table_locks_waited_psec               | longblob | YES  |     | NULL    |       |
+| opened_tables_psec                    | longblob | YES  |     | NULL    |       |
+| created_tmp_tables_psec               | longblob | YES  |     | NULL    |       |
+| created_tmp_disk_tables_psec          | longblob | YES  |     | NULL    |       |
+| connections_psec                      | longblob | YES  |     | NULL    |       |
+| aborted_connects_psec                 | longblob | YES  |     | NULL    |       |
+| threads_created_psec                  | longblob | YES  |     | NULL    |       |
+| seconds_behind_master                 | longblob | YES  |     | NULL    |       |
+| os_loadavg                            | longblob | YES  |     | NULL    |       |
+| os_cpu_utilization_percent            | longblob | YES  |     | NULL    |       |
+| os_mem_used_mb                        | longblob | YES  |     | NULL    |       |
+| os_mem_active_mb                      | longblob | YES  |     | NULL    |       |
+| os_swap_used_mb                       | longblob | YES  |     | NULL    |       |
++---------------------------------------+----------+------+-----+---------+-------</pre>
+</blockquote>
+<p>Example:</p>
+<blockquote>
+<pre>mysql&gt; SELECT com_select_psec, innodb_buffer_pool_pages_flushed_psec FROM mycheckpoint.<strong>sv_report_chart_24_7</strong> \G
+</pre>
+<p><img class="alignnone size-full wp-image-1798" title="mycheckpoint-chart-247-sample" src="{{ site.baseurl }}/assets/mycheckpoint-chart-247-sample1.png" alt="mycheckpoint-chart-247-sample" width="400" height="200" /><br />
+<img class="alignnone size-full wp-image-1830" title="mycheckpoint-24-7-chart-sample2" src="{{ site.baseurl }}/assets/mycheckpoint-24-7-chart-sample2.png" alt="" width="400" height="200" /></p>
+</blockquote>
+<h4>Trying mycheckpoint</h4>
+<ul>
+<li>Get <em>mycheckpoint</em> from the <a href="https://code.google.com/p/mycheckpoint/">mycheckpoint Google Code project page</a>.</li>
+<li>Read the <a href="http://code.openark.org/forge/mycheckpoint/documentation">documentation</a>.</li>
+<li>Report <a href="https://code.google.com/p/mycheckpoint/issues/list">issues</a>!</li>
+</ul>
+<h4>Future plans</h4>
+<p>I haven't got any major immediate issues; planning on user customization of charts and HTML reports. Considering thresholds and alerting for the future.</p>

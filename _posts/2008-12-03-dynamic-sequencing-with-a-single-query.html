@@ -1,0 +1,189 @@
+---
+title: Dynamic sequencing with a single query
+date: 2008-12-03 19:59:14.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- SQL
+- Syntax
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: j.faber@elevate.nl
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+excerpt: "It is a known trick to use a session variable for dynamically counting/sequencing
+  rows. The way to go is to SET a variable to zero, then use arithmetic within assignment
+  to increment its value for each row in the SELECTed rows.\r\n\r\nBut can it be achieved
+  with one query only? That's more of a problem... I'll provide such a solution, albeit
+  not a pretty one."
+---
+<p>It is a known trick to use a session variables for dynamically counting/sequencing rows. The way to go is to SET a variable to zero, then use arithmetic within assignment to increment its value for each row in the SELECTed rows.</p>
+<p>For example, the following query lists the top 10 populated countries, using <a title="MySQL's world database setup" href="http://dev.mysql.com/doc/world-setup/en/world-setup.html">MySQL's world database</a>:</p>
+<blockquote>
+<pre>SELECT Code, Name, Population
+FROM Country ORDER BY Population DESC LIMIT 10;
+
++------+--------------------+------------+
+| Code | Name               | Population |
++------+--------------------+------------+
+| CHN  | China              | 1277558000 |
+| IND  | India              | 1013662000 |
+| USA  | United States      |  278357000 |
+| IDN  | Indonesia          |  212107000 |
+| BRA  | Brazil             |  170115000 |
+| PAK  | Pakistan           |  156483000 |
+| RUS  | Russian Federation |  146934000 |
+| BGD  | Bangladesh         |  129155000 |
+| JPN  | Japan              |  126714000 |
+| NGA  | Nigeria            |  111506000 |
++------+--------------------+------------+</pre>
+</blockquote>
+<p>The results do not provide any sequence number. Nor does the table have an AUTO_INCREMENT or otherwise unique row number. If I were to rate the countries by population, the common trick is:</p>
+<blockquote>
+<pre>SET @rank := 0;
+SELECT
+  @rank := @rank+1 AS rank,
+  Code, Name, Population
+FROM Country ORDER BY Population DESC LIMIT 10;
+
++------+------+--------------------+------------+
+| rank | Code | Name               | Population |
++------+------+--------------------+------------+
+|    1 | CHN  | China              | 1277558000 |
+|    2 | IND  | India              | 1013662000 |
+|    3 | USA  | United States      |  278357000 |
+|    4 | IDN  | Indonesia          |  212107000 |
+|    5 | BRA  | Brazil             |  170115000 |
+|    6 | PAK  | Pakistan           |  156483000 |
+|    7 | RUS  | Russian Federation |  146934000 |
+|    8 | BGD  | Bangladesh         |  129155000 |
+|    9 | JPN  | Japan              |  126714000 |
+|   10 | NGA  | Nigeria            |  111506000 |
++------+------+--------------------+------------+</pre>
+</blockquote>
+<p>The first query sets the @rank to zero, so that it is not NULL (since no arithmetic can be done with NULL).  The second query relies on its success.</p>
+<p><strong>Can the same be achieved with one query only? </strong>That's more of a problem.<!--more--> To try this out, I <em>log out</em> (important, otherwise @rank still has its previous value) from my client, log in again, and try the following:</p>
+<blockquote>
+<pre>SELECT
+  @rank := IFNULL(@rank,0)+1 AS rank,
+  Code, Name, Population
+FROM Country ORDER BY Population DESC LIMIT 10;
+
++------+------+--------------------+------------+
+| rank | Code | Name               | Population |
++------+------+--------------------+------------+
+|    1 | CHN  | China              | 1277558000 |
+|    1 | IND  | India              | 1013662000 |
+|    1 | USA  | United States      |  278357000 |
+|    1 | IDN  | Indonesia          |  212107000 |
+|    1 | BRA  | Brazil             |  170115000 |
+|    1 | PAK  | Pakistan           |  156483000 |
+|    1 | RUS  | Russian Federation |  146934000 |
+|    1 | BGD  | Bangladesh         |  129155000 |
+|    1 | JPN  | Japan              |  126714000 |
+|    1 | NGA  | Nigeria            |  111506000 |
++------+------+--------------------+------------+</pre>
+</blockquote>
+<p>Ooops. When a session variable is NULL, it only gets assigned <em>after the query completes</em>, instead of per row. (For fun, try running the above query again in the same session, and see what values you get for @rank).</p>
+<p>I do not know the reason for this behavior. I don't even know if it's intended. But I do want to make a workaround. So I try by using various techniques:</p>
+<blockquote>
+<pre>SELECT
+  @rank := CASE @rank WHEN NULL THEN 0 ELSE @rank + 1 END AS rank,
+  Code, Name, Population
+FROM Country ORDER BY Population DESC LIMIT 10;
+
++------+------+--------------------+------------+
+| rank | Code | Name               | Population |
++------+------+--------------------+------------+
+| NULL | CHN  | China              | 1277558000 |
+| NULL | IND  | India              | 1013662000 |
+| NULL | USA  | United States      |  278357000 |
+| NULL | IDN  | Indonesia          |  212107000 |
+| NULL | BRA  | Brazil             |  170115000 |
+| NULL | PAK  | Pakistan           |  156483000 |
+| NULL | RUS  | Russian Federation |  146934000 |
+| NULL | BGD  | Bangladesh         |  129155000 |
+| NULL | JPN  | Japan              |  126714000 |
+| NULL | NGA  | Nigeria            |  111506000 |
++------+------+--------------------+------------+</pre>
+</blockquote>
+<p>Well, that wouldn't work since NULL compared with NULL returns NULL, right? Let's try another:</p>
+<blockquote>
+<pre>SELECT
+  @rank := CASE WHEN @rank IS NULL THEN 0 ELSE @rank + 1 END AS rank,
+  Code, Name, Population
+FROM Country ORDER BY Population DESC LIMIT 10;
+
++------+------+--------------------+------------+
+| rank | Code | Name               | Population |
++------+------+--------------------+------------+
+|    0 | CHN  | China              | 1277558000 |
+|    0 | IND  | India              | 1013662000 |
+|    0 | USA  | United States      |  278357000 |
+|    0 | IDN  | Indonesia          |  212107000 |
+|    0 | BRA  | Brazil             |  170115000 |
+|    0 | PAK  | Pakistan           |  156483000 |
+|    0 | RUS  | Russian Federation |  146934000 |
+|    0 | BGD  | Bangladesh         |  129155000 |
+|    0 | JPN  | Japan              |  126714000 |
+|    0 | NGA  | Nigeria            |  111506000 |
++------+------+--------------------+------------+</pre>
+</blockquote>
+<p>We can go on like this (and I did) trying to force the session variable into being set to 0 after the first row. Once can try nested assignment, selecting from DUAL, using IF, NULLIF and more. Still, MySQL will only set the variable, if it's NULL, <em>after</em> the query completes. A solution is to force the variable to zero before the query begins. I will use a UNION ALL, in which the first part sets the @rank, and the second performs the query. Since its a UNION, I need to have the same number of columns in both parts. Moreover, since I'm ORDERing by Population, a column named `Population` must exist in the first part. This leads to the following query:</p>
+<blockquote>
+<pre>SELECT NULL AS rank, NULL AS Code, NULL AS Name, NULL AS Population
+  FROM DUAL WHERE (@rank := 0)&lt;0
+UNION ALL
+SELECT @rank := @rank + 1 AS rank, Code, Name, Population
+  FROM Country ORDER BY Population DESC LIMIT 10
+
++------+------+--------------------+------------+
+| rank | Code | Name               | Population |
++------+------+--------------------+------------+
+|   94 | CHN  | China              | 1277558000 |
+|   72 | IND  | India              | 1013662000 |
+|  229 | USA  | United States      |  278357000 |
+|   71 | IDN  | Indonesia          |  212107000 |
+|   29 | BRA  | Brazil             |  170115000 |
+|  152 | PAK  | Pakistan           |  156483000 |
+|  226 | RUS  | Russian Federation |  146934000 |
+|   19 | BGD  | Bangladesh         |  129155000 |
+|   82 | JPN  | Japan              |  126714000 |
+|  146 | NGA  | Nigeria            |  111506000 |
++------+------+--------------------+------------+</pre>
+<p>The first query in the UNION should not return any rows, hence the impossible (@rank := 0)&lt;0 condition.</p></blockquote>
+<p>Well, the rank has numbers all right, but what kind of numbers are these? Apparently the ranking took place <em>before</em> the ORDER BY. Not giving up, we try one more time:</p>
+<blockquote>
+<pre>SELECT NULL AS rank, NULL AS Code, NULL AS Name, NULL AS Population
+  FROM DUAL WHERE (@rank := 0)&lt;0
+UNION ALL
+SELECT @rank := @rank + 1 AS rank, Code, Name, Population
+  FROM (SELECT Code, Name, Population
+    FROM Country ORDER BY Population DESC LIMIT 10) AS c
+
++------+------+--------------------+------------+
+| rank | Code | Name               | Population |
++------+------+--------------------+------------+
+|    1 | CHN  | China              | 1277558000 |
+|    2 | IND  | India              | 1013662000 |
+|    3 | USA  | United States      |  278357000 |
+|    4 | IDN  | Indonesia          |  212107000 |
+|    5 | BRA  | Brazil             |  170115000 |
+|    6 | PAK  | Pakistan           |  156483000 |
+|    7 | RUS  | Russian Federation |  146934000 |
+|    8 | BGD  | Bangladesh         |  129155000 |
+|    9 | JPN  | Japan              |  126714000 |
+|   10 | NGA  | Nigeria            |  111506000 |
++------+------+--------------------+------------+</pre>
+</blockquote>
+<p>Now we've got it!</p>
+<p>The question arises: why go through all this when a simple two-queries solution is available?</p>
+<p>First, as a MySQL excercise, I find this an interesting problem. Second, it just may be possible you'll be bound with one single query. For example, reporting tools may only allow for one query per report table. As another example, you may not have a sophisticated connection pool, and you are bound for sending one query per connection, hence unable to store session variables in between.</p>
+<p>If you know of other solutions, hopefully simpler ones, please comment below!</p>

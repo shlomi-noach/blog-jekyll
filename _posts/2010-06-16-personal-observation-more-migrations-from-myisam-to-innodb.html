@@ -1,0 +1,34 @@
+---
+title: 'Personal observation: more migrations from MyISAM to InnoDB'
+date: 2010-06-16 18:43:42.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- InnoDB
+- MyISAM
+- Opinions
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: arjen@openquery.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I'm evidencing an increase in the planning, confidence &amp; execution for MyISAM to InnoDB migration.</p>
+<p>How much can a single consultant observe? I agree Oracle should not go to PR based on my experience. But I find that:</p>
+<ul>
+<li>More companies are now familiar with InnoDB than there used to.</li>
+<li>More companies are interested in migration to InnoDB than there used to.</li>
+<li>More companies feel such migration to be safe.</li>
+<li>More companies start up with an InnoDB based solution than with a MyISAM based solution.</li>
+</ul>
+<p>This is the way I see it. No doubt, the Oracle/Sun deal made its impact. The fact that InnoDB is no longer a 3rd party; the fact Oracle invests in InnoDB and no other engine (Falcon is down, no real development on MyISAM); the fact InnoDB is to be the default engine: all these put companies at ease with migration.</p>
+<p><!--more-->I am happy with this change. I believe for most installations InnoDB provides with a clear advantage over MyISAM (though MyISAM has its uses), and this makes for more robust, correct and manageable MySQL instances; the kind that make a DBA's life easier and quieter. And it is easier to make customers see the advantages.</p>
+<p>I am not inclined to say <em>"You should migrate your entire database to InnoDB"</em>. I don't do that a lot. But recently, more customers approach and say <em>"We were thinking about migrating our entire database to InnoDB, what do you think?"</em>. What a change of approach.</p>
+<p>And, yes: there are still <em>a lot</em> of companies using MyISAM based databases, who still live happily.</p>

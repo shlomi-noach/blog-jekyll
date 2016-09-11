@@ -1,0 +1,44 @@
+---
+title: MySQL command line vs. visual editors - reflections
+date: 2012-02-01 10:19:12.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Opinions
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: gnarvaja@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>My <a href="http://code.openark.org/blog/mysql/mysql-command-line-vs-visual-editors">previous post</a> drew some attention, and in particular two comments I wish to relate to. I also wish to make a more fine-grained observation on visual editors.</p>
+<p>One comment is by <em><a href="http://www.webyog.com/">Peter Laursen</a></em>, who rejected the generalization in my post, and another by <em>wlad</em>, who was harsher (but to the point), suggesting my post translated to <em>"I don't know it, therefore it sucks"</em>.</p>
+<p>I must have delivered the wrong message, since apparently people read my post as "don't use visual editors, they are bad for you", which is not what I intended to say, nor is it what I actually <em>think</em>. I took a very specific aspect of visual editors and commented on that. My comment should not extrapolate to "anything about visual editors is bad".</p>
+<p>I don't think people should only be using the command line, and am not in the least interested in vi/emacs/eclipse/netbeans kind of wars. Of course everyone should be using whatever works best for them in terms of productivity and ease of use. And of course visual editors have great advantages over command line.</p>
+<p><!--more-->I'm sorry, it would be childish to assume otherwise, and extra-extra-extrapolation to suggest that was my hidden meaning.</p>
+<h4>Reflections on Peter's comments</h4>
+<p>I can see that my post was harsh on visual editors, and agree one cannot just generalize on the dozens of editors available. I have used a few tools, and only to some extent, since I personally feel more comfortable with command line, and so I cannot possibly generalize on all tools. Nor are they all equal.</p>
+<p>My point is, there is one de-facto tool, which is the command-line, for which there are no hidden assumptions. For which I don't need to investigate whether a new connection is being opened, or if my query is somehow modified, or... I guess one can say "hey, my tool does nothing of the sort and acts just like the command line". I'm not arguing. The visual editor is an additional layer between you and the server (the <em>mysql</em> command line client is in itself a layer, but a very transparent one, a very low level one), one which needs to take care of visual issues, such as display space, GUI components, widgets not running out of memory, responsiveness, good looks. These, one way or the other, add complexity to the discussion between yourself and your database.</p>
+<p>One can say "it's all configurable, there's good documentation, you should know the tool you are using". To some extent the same can be said of the command line client. Here is an observation of mine, please consider it as user input: many (I don't know if <em>most</em>) users will not bother modifying the settings. Many will feel uncomfortable with turning checkboxes on and off, or modify thresholds. It is similar in essence to users not modifying the default InnoDB settings for the MySQL server, working with <strong>8MB</strong> of buffer pool.</p>
+<p>Anyway I agree my post was over-generalizing on the criticism of visual editors. Sorry for that. It should have been more specific on the advantages of command line.</p>
+<h4>Reflections on wlad's comments</h4>
+<p>Since I wanted to concentrate on the command line issue, I didn't elaborate on other stuff. For example, I didn't specify on what type of trainings I ask students to close down their visual editors and open up a command line. Perhaps one could read as <em>"from this moment on, and for the entire duration of the training, no one should be using visual editors, and anyone who does will find himself/herself out of the class"</em>. I really didn't think to elaborate on that, and even now - wow, it will take me ages to tell the full story. So I will be extra-brief:</p>
+<p>I do make that suggestion. I do that when I start discussion of keys &amp; execution plans. I don't enforce that. I don't mind which tool a developer uses. I actually tell them about various GUI tools they can use (naming the ones I see as most popular among other students).</p>
+<p>But I also do <em>not</em> turn my training to <em>"I'm going to do this session using the same tools you are using just because you are using them and you are in this class"</em>.</p>
+<p>There is a multi-layered reasoning for that:</p>
+<ul>
+<li>Many times there is a mixture of tools in the classroom. I can't just pick up on one. The command line is the most common tool everyone can agree upon. I sometimes demonstrate on MySQL Workbench since many are familiar with it being an "official" GUI tool by the same company which makes the database.</li>
+<li>If I dwell on the particulars of a GUI tool, this consumes precious time that must be used to explain the EXPLAIN and talk about INDEX in depth. I just don't have that time on training. The command line consumes very little time for me.</li>
+<li>I also don't see that I should demonstrate using commercial products. I have nothing against commercial, and on occasion I buy commercial, and I certainly do not slight a commercial product just because it's commercial, but I prefer to sponsor open source. If students have a commercial product, I don't see this is my duty to walk them through the product.</li>
+<li>There are actually a few more reasons; operating systems, installations, assumptions on installed software, strict system administrators who would not installed anything I would tell them, projectors, font sizes, contrast of colors on projected image, ... Believe me, I've been doing this for years, there are <em>many</em> factors to <em>any</em> small decision in class.</li>
+</ul>
+<p>Last, I wish to relate to wlad's <em>"I don't know it. It sucks"</em> attribution to my post.</p>
+<p>It is true there is not one single SQL GUI tool I know bottoms up. And the status is deteriorating, since I've long since decided my personal preference is command line. This makes me a non-expert, no-authority on any GUI tool. I actually present myself as such in class. This does not lower the quality of the training; it's an aspect outside the training (for the reasons I mentioned above). I therefore agree to <em>"I don't know it"</em>.</p>
+<p>Now, I strongly believe I do not make the connection to <em>"therefore it sucks"</em>. I think that's an exaggerated extrapolation of what I said. But it is such an overwhelming statement about myself for me to read, that I will keep it in mind. It's a good thing to keep in mind, not only on GUI tools, but also in real life.</p>

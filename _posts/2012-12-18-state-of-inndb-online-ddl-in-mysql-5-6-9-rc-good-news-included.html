@@ -1,0 +1,148 @@
+---
+title: State of InnDB Online DDL in MySQL 5.6.9-RC (good news included)
+date: 2012-12-18 13:21:12.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- InnoDB
+- New Features
+- Review
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><strong>5.6.9-RC</strong> is <a href="https://blogs.oracle.com/MySQL/entry/mysql_5_6_9_release">out</a>, and I was curious to see how the <a href="http://dev.mysql.com/doc/refman/5.6/en/innodb-online-ddl.html">online DDL</a> has improved since <a href="http://code.openark.org/blog/mysql/state-of-inndb-online-ddl-in-mysql-5-6-8-rc">my 5.6.8 review</a>. I also owe James Day this review, since he came up with results inconsistent with my own.</p>
+<p>We both agreed the dataset I was using was too small, but I got similar results even on larger scale. Then some time passed, and <strong>5.6.9</strong> was announced.</p>
+<p>So for the <strong>5.6.9</strong> test I took one of my real tables on production. It is not extremely large: it's a ~ <strong>300MB</strong> <strong>.ibd</strong> file, in the following format:</p>
+<blockquote>
+<pre>mysql&gt; show create table tbl \G
+
+CREATE TABLE `tbl` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `a` varchar(255) CHARACTER SET utf8 NOT NULL DEFAULT '',
+  `w` smallint(11) NOT NULL DEFAULT '0',
+  `d` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `icount` smallint(5) unsigned NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`) KEY_BLOCK_SIZE=8,
+  UNIQUE KEY `u_idx` (`a`,`w`,`d`) KEY_BLOCK_SIZE=8,
+  KEY `d` (`d`) KEY_BLOCK_SIZE=8
+) ENGINE=InnoDB AUTO_INCREMENT=16960441 DEFAULT CHARSET=latin1 ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=16</pre>
+</blockquote>
+<p>Got some <strong>2.5M</strong> rows in the table; desktop machine, <strong>64</strong> bit Linux, mysqlsandbox.</p>
+<p>I have crossed several DDL statements with several DML statements. The DDL statements in this test are (<strong>ALTER TABLE...</strong>):<!--more--></p>
+<ul>
+<li><strong>ROW_FORMAT=COMPACT</strong></li>
+<li><strong>AUTO_INCREMENT=16960441</strong></li>
+<li><strong>ADD INDEX (w)</strong></li>
+<li><strong>DROP INDEX w</strong></li>
+<li><strong>ADD COLUMN c CHAR(1) NOT NULL</strong></li>
+<li><strong>DROP COLUMN c</strong></li>
+</ul>
+<p>The DML statements are:</p>
+<ol>
+<li><strong>select max(id) from test.tbl;</strong> -- this queries the AUTO_INCREMENT value, which is of course a PRIMARY KEY</li>
+<li><strong>select min(d) from test.tbl;</strong> -- there is an index on d, and normal execution plan is to optimize table away and just use the index</li>
+<li><strong>select min(icount) from test.tbl;</strong> -- there is no index on icount, and full table scan is required</li>
+<li><strong>update test.tbl set d = d + interval 1 second where id = 8057370;</strong> -- the UPDATE uses the PRIMARY KEY</li>
+<li><strong>update test.tbl set d = d + interval 1 second where icount = 200;</strong> -- will affect <strong>4</strong> rows, but requires full scan.</li>
+</ol>
+<p>The results?</p>
+<table border="0" cellspacing="0">
+<colgroup width="243"></colgroup>
+<colgroup width="92"></colgroup>
+<colgroup width="131"></colgroup>
+<colgroup span="5" width="85"></colgroup>
+<tbody>
+<tr>
+<td align="LEFT" bgcolor="#E6E6FF" height="47"><strong>ALTER TABLE...</strong></td>
+<td align="LEFT" bgcolor="#E6E6FF"><strong>Time (sec)</strong></td>
+<td align="LEFT" bgcolor="#E6E6FF"><strong>General comments</strong></td>
+<td align="LEFT" bgcolor="#E6E6FF"><strong>select max PK</strong></td>
+<td align="LEFT" bgcolor="#E6E6FF"><strong>select min by index</strong></td>
+<td align="LEFT" bgcolor="#E6E6FF"><strong>select min by full scan</strong></td>
+<td align="LEFT" bgcolor="#E6E6FF"><strong>update by PK</strong></td>
+<td align="LEFT" bgcolor="#E6E6FF"><strong>update by full scan</strong></td>
+</tr>
+<tr>
+<td align="LEFT" bgcolor="#FFFFCC" height="17">ROW_FORMAT=COMPACT</td>
+<td align="RIGHT" bgcolor="#FFFFCC">183</td>
+<td align="LEFT" bgcolor="#FFFFCC"></td>
+<td align="LEFT" bgcolor="#FFFFCC"><span style="color: #00ae00;">online</span></td>
+<td align="LEFT" bgcolor="#FFFFCC"><span style="color: #00ae00;">online</span></td>
+<td align="LEFT" bgcolor="#FFFFCC"><span style="color: #00ae00;">online</span></td>
+<td align="LEFT" bgcolor="#FFFFCC"><span style="color: #00ae00;">online</span></td>
+<td align="LEFT" bgcolor="#FFFFCC"><span style="color: #00ae00;">online</span></td>
+</tr>
+<tr>
+<td align="LEFT" bgcolor="#FFFFCC" height="16">AUTO_INCREMENT=16960441</td>
+<td align="RIGHT" bgcolor="#FFFFCC">0.24</td>
+<td align="LEFT" bgcolor="#FFFFCC">[Instant operation]</td>
+<td align="LEFT" bgcolor="#FFFFCC">n/a</td>
+<td align="LEFT" bgcolor="#FFFFCC">n/a</td>
+<td align="LEFT" bgcolor="#FFFFCC">n/a</td>
+<td align="LEFT" bgcolor="#FFFFCC">n/a</td>
+<td align="LEFT" bgcolor="#FFFFCC">n/a</td>
+</tr>
+<tr>
+<td align="LEFT" bgcolor="#FFFFCC" height="17">ADD INDEX (w)</td>
+<td align="RIGHT" bgcolor="#FFFFCC">21</td>
+<td align="LEFT" bgcolor="#FFFFCC"></td>
+<td align="LEFT" bgcolor="#FFFFCC"><span style="color: #00ae00;">online</span></td>
+<td align="LEFT" bgcolor="#FFFFCC"><span style="color: #00ae00;">online</span></td>
+<td align="LEFT" bgcolor="#FFFFCC"><span style="color: #00ae00;">online</span></td>
+<td align="LEFT" bgcolor="#FFFFCC"><span style="color: #00ae00;">online</span></td>
+<td align="LEFT" bgcolor="#FFFFCC"><span style="color: #00ae00;">online</span></td>
+</tr>
+<tr>
+<td align="LEFT" bgcolor="#FFFFCC" height="16">DROP INDEX w</td>
+<td align="RIGHT" bgcolor="#FFFFCC">0.1</td>
+<td align="LEFT" bgcolor="#FFFFCC">[Instant operation]</td>
+<td align="LEFT" bgcolor="#FFFFCC">n/a</td>
+<td align="LEFT" bgcolor="#FFFFCC">n/a</td>
+<td align="LEFT" bgcolor="#FFFFCC">n/a</td>
+<td align="LEFT" bgcolor="#FFFFCC">n/a</td>
+<td align="LEFT" bgcolor="#FFFFCC">n/a</td>
+</tr>
+<tr>
+<td align="LEFT" bgcolor="#FFFFCC" height="17">ADD COLUMN c CHAR(1) NOT NULL</td>
+<td align="RIGHT" bgcolor="#FFFFCC">103</td>
+<td align="LEFT" bgcolor="#FFFFCC"></td>
+<td align="LEFT" bgcolor="#FFFFCC"><span style="color: #00ae00;">online</span></td>
+<td align="LEFT" bgcolor="#FFFFCC"><span style="color: #00ae00;">online</span></td>
+<td align="LEFT" bgcolor="#FFFFCC"><span style="color: #00ae00;">online</span></td>
+<td align="LEFT" bgcolor="#FFFFCC"><span style="color: #00ae00;">online</span></td>
+<td align="LEFT" bgcolor="#FFFFCC"><span style="color: #00ae00;">online</span></td>
+</tr>
+<tr>
+<td align="LEFT" bgcolor="#FFFFCC" height="17">DROP COLUMN c</td>
+<td align="RIGHT" bgcolor="#FFFFCC">110</td>
+<td align="LEFT" bgcolor="#FFFFCC"></td>
+<td align="LEFT" bgcolor="#FFFFCC"><span style="color: #00ae00;">online</span></td>
+<td align="LEFT" bgcolor="#FFFFCC"><span style="color: #00ae00;">online</span></td>
+<td align="LEFT" bgcolor="#FFFFCC"><span style="color: #00ae00;">online</span></td>
+<td align="LEFT" bgcolor="#FFFFCC"><span style="color: #00ae00;">online</span></td>
+<td align="LEFT" bgcolor="#FFFFCC"><span style="color: #00ae00;">online</span></td>
+</tr>
+</tbody>
+</table>
+<h4>Notes</h4>
+<ul>
+<li>All operations were online: operations did not wait for <strong>ALTER</strong> to complete.</li>
+<li>I executed all operations multiple times during each <strong>ALTER</strong>.</li>
+<li>In addition, I executed operations from another client.</li>
+<li>Some operations were fast, others sometimes took as long as <strong>7.34</strong> seconds to complete. This is no small matter: the time it took for each DML was indeterministic, and longer than what it would usually take it. That's perfectly understandable. Just note that some operations took exceedingly long time to complete. My understanding is that the <strong>ALTER</strong> operations happens in chunks. DML statements are allowed in between these chunks. This is the reason why on smaller tables there didn't seem to be any "online" statement: the chunks were just too large in relation to table size. And so, and this is still my own understanding, your query may get lucky or unlucky depending on the exact moment it has been issued.</li>
+<li>I did not try it with <strong>FOREIGN KEY</strong>s. I previously concluded that foreign keys were a no-go for online DDL. I'm not sure if this is still the case. Another time for this test - but it must take place.</li>
+</ul>
+<h4>Conclusions</h4>
+<p>Still RC - but for the first time the online DDL seem to deliver what's promised. I'm very happy to see this.</p>
+<p>I am yet to understand how the <strong>ALTER</strong> works via replication. With single threaded replication I would assume it's back to "wait till I'm done" on the slave, in which case the <em>"online"</em> term is not there yet. Even on multi-threaded replication DML on same schema would hang. I'm happy to be corrected on this by an authority.</p>
+<p>My predicament is that <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-online-alter-table.html">oak-online-alter-table</a> or <a href="http://www.percona.com/doc/percona-toolkit/2.1/pt-online-schema-change.html">pt-online-schema-change</a> are here to stay for the next couple of years at least. Some operations, like partitioning, are not supported by current online InnoDB DDL. Also, these scripts allow you some control over the speed at which the <strong>ALTER</strong> process works, allowing for pre-defined sleep time in between chunks, so as to let the server - and its slaves - recover their breath.</p>
+<p>Nonetheless, big kudos for the InnoDB team at Oracle for pulling this one out!</p>

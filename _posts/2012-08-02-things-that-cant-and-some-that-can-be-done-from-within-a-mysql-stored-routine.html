@@ -1,0 +1,57 @@
+---
+title: Things that can't (and some that can) be done from within a MySQL stored routine
+date: 2012-08-02 06:32:57.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Stored routines
+meta:
+  _edit_last: '2'
+  _oembed_55835302a9154b1a33fa9bef669291f7: '<iframe src="http://www.slideshare.net/slideshow/embed_code/28163348"
+    width="427" height="356" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"
+    style="border:1px solid #CCC; border-width:1px 1px 0; margin-bottom:5px; max-width:
+    100%;" allowfullscreen> </iframe> <div style="margin-bottom:5px"> <strong> <a
+    href="https://www.slideshare.net/shlominoach/commonschema-22" title="common_schema
+    2.2 DBA&#x27;s framework for MySQL" target="_blank">common_schema 2.2 DBA&#x27;s
+    framework for MySQL</a> </strong> from <strong><a href="http://www.slideshare.net/shlominoach"
+    target="_blank">Shlomi Noach</a></strong> </div>'
+  _sg_subscribe-to-comments: awfief@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I'm doing a lot of stored routine programming lately, working on <a href="http://code.google.com/p/common-schema/">common_schema</a>. I'm in particular touching at the extremes of abilities. Some things just can't be done from within a stored routine. Here's a list of <strong>can't be done</strong>:</p>
+<ul>
+<li>Cursor for <strong>SHOW</strong> statements: can't be done -- this is explicitly blocked from operating (it once used to work).</li>
+<li>Get detailed error information on exceptions: apparently <strong>5.6</strong> has support for this. <strong>5.1</strong> and <strong>5.5</strong> <a href="http://code.openark.org/blog/mysql/mysql-error-handling-on-server-side-a-no-go">do not</a>.</li>
+<li>Change <strong>binlog_format</strong>: this is obvious, if you think about it. <strong>binlog_format</strong> dictates how the routine itself is replicated in the first place.</li>
+<li>Set <strong>sql_log_bin</strong>. Again, this makes sense.</li>
+<li>Work out different results depending on current machine. For example, you can't have a routine that returns with <strong>'master'</strong> on the master and with <strong>'slave'</strong> on the slave. That is, not under <em>any condition</em>. Consider: if <em>Row Based Replication</em> is used, you don't actually have a routine <em>executing</em> on the slave. I'm happy to be proven wrong on this.</li>
+<li>Know what database was in use by calling code. The routine executes within the context of the database where it is defined. But you can't tell what database was in use just a couple milliseconds before.</li>
+<li>Likewise, know what <strong>sql_mode</strong> was in use by calling code. Stored routines have their own <strong>sql_mode</strong> - the one they were created with. No way to check up on the calling stack.</li>
+<li>And you can't <strong>USE</strong> another database (database as in <em>schema</em>). <strong>USE</strong> is a client command.</li>
+<li>Reconnect after failure (kind of obvious, isn't it?)</li>
+<li>Connect to other servers (not so obvious to SQL Server DBAs). You can't issue queries on other servers. Bummer.</li>
+<li>Shutdown the server</li>
+<li>Fork (you're in a connection, you can't issue a new connection from your own connection)</li>
+</ul>
+<p><!--more-->Well, some of the above can be solved using plugins or User Defined Functions, but I'm looking at standard servers.</p>
+<h4>Things that can be done</h4>
+<p>I can't list anything that can be done from within a routine, but, to balance, here's a brief list of things that <strong>can be done</strong>:</p>
+<ul>
+<li>Recover from errors (e.g. deadlocks) via <strong>DECLARE CONTINUE HANDLER</strong>.</li>
+<li>Perform table operations (<strong>ANALYZE</strong>, <strong>OPTIMIZE</strong>, ...) - though not read the results of these operations other than knowing they succeeded.</li>
+<li>Perform all DDL statements (create/drop/modify views, routines, triggers, events, tables, users)</li>
+<li>Modify session/global variables (<strong>group_concat_max_len</strong>, <strong>innodb_stats_on_metadata</strong>, ...<code>)</code></li>
+</ul>
+<h4>You should be aware of</h4>
+<ul>
+<li><strong>max_sp_recursion_depth</strong>: the maximum recursion depth, if you're thinking of recursions.</li>
+<li><strong>thread_stack</strong>: I find that setting to <strong>256K</strong> makes a huge difference over the <strong>5.1</strong> default of <strong>192K</strong>. With <strong>192K</strong>, I frequently run into "out of stack space" problems. With <strong>256K</strong> - I have yet to encounter that. Dunno, some kind of magic number? This is my observation.</li>
+</ul>

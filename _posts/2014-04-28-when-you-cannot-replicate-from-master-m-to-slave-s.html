@@ -1,0 +1,40 @@
+---
+title: When you cannot replicate from master M to slave S
+date: 2014-04-28 09:42:05.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Replication
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+  _oembed_55835302a9154b1a33fa9bef669291f7: '<iframe src="http://www.slideshare.net/slideshow/embed_code/28163348"
+    width="427" height="356" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"
+    style="border:1px solid #CCC; border-width:1px 1px 0; margin-bottom:5px; max-width:
+    100%;" allowfullscreen> </iframe> <div style="margin-bottom:5px"> <strong> <a
+    href="https://www.slideshare.net/shlominoach/commonschema-22" title="common_schema
+    2.2 DBA&#x27;s framework for MySQL" target="_blank">common_schema 2.2 DBA&#x27;s
+    framework for MySQL</a> </strong> from <strong><a href="http://www.slideshare.net/shlominoach"
+    target="_blank">Shlomi Noach</a></strong> </div>'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Working on some replication topology automation, here are some rules that will prevent you from replicating from a MySQL server <strong>M</strong> to a slave <strong>S</strong>:</p>
+<ul>
+<li><strong>M</strong> does not have binary logs (<strong>log_bin</strong>) enabled</li>
+<li><strong>M</strong> is itself a slave and does not have <strong>log_slave_updates</strong> enabled</li>
+<li><strong>M</strong> has a higher major version than <strong>S</strong> (e.g. <strong>M</strong> is <strong>5.6</strong> and <strong>S</strong> is <strong>5.5</strong>, but do note <a href="http://dev.mysql.com/doc/refman/5.6/en/replication-options-binary-log.html#option_mysqld_log-bin-use-v1-row-events">log_bin_use_v1_row_events</a>)</li>
+<li>Both servers have same <strong>server_id</strong></li>
+<li><strong>S</strong> has <strong>log_bin</strong> &amp; <strong>log_slave_updates</strong>, uses <strong>STATEMENT</strong> <strong>binlog_format</strong>, and <strong>M</strong> uses <strong>ROW</strong> or <strong>MIXED</strong> <strong>binlog_format</strong></li>
+<li><strong>S</strong> has <strong>log_bin</strong> &amp; <strong>log_slave_updates</strong>, uses <strong>MIXED</strong> <strong>binlog_format</strong>, and <strong>M</strong> uses <strong>ROW</strong> <strong>binlog_format</strong></li>
+<li><strong>S</strong> and <strong>M</strong> are using different replication filters (some rules could work; good luck if you're that adventurous)</li>
+</ul>
+<p>[EDIT: the above is configuration-wise]</p>
+<p>Did I miss anything? Please comment below.</p>

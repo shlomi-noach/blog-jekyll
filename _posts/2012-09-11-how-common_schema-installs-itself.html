@@ -1,0 +1,89 @@
+---
+title: How common_schema installs itself
+date: 2012-09-11 08:48:13.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- Installation
+- QueryScript
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: justin.swanhart@percona.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Up till <a href="http://code.google.com/p/common-schema/">common_schema</a> version <strong>1.1</strong>, the user would need to choose from distinct distribution files: an install compatible with MySQL <strong>5.1</strong>, one compatible with InnoDB Plugin enabled servers, and one compatible with Percona Server. The difference between the three is the availability of certain <strong>INFORMATION_SCHEMA</strong> tables.</p>
+<p>With <strong>1.1</strong>, this is no longer the case: <em>common_schema</em> auto-detects the server and available feature set, and installs accordingly.</p>
+<h4>Wait, isn't common_schema just a SQL file?</h4>
+<p>Yes. It's not like there's an installer like <em>InstallShield</em> or anything. Nevertheless, <em>common</em><em>_schema</em> offers a smart way of conditional handling, which is uses in itself. It's called <a href="http://www.queryscript.com/">QueryScript</a>.</p>
+<p><em>common_schema</em> is installed by importing the SQL file (via <strong>SOURCE</strong> command; the <em>mysql</em> client; your favorite GUI). This creates your usual tables, views and routines. But some of these routines make for an interpreter for <em>QueryScript</em>. Somewhere along the installation process (remember - it's just a SQL import), <em>common_schema</em> switches over to executing scripts to manage the installation. In particular, there are a few views which depend on optional tables, such as InnoDB Plugin's tables for <strong>INFORMATION_SCHEMA</strong>.<!--more--></p>
+<p>Consider the following <strong>CREATE VIEW</strong> statement:</p>
+<blockquote>
+<pre>CREATE OR REPLACE
+ALGORITHM = UNDEFINED
+SQL SECURITY INVOKER
+VIEW innodb_transactions_summary AS
+  SELECT 
+    COUNT(*) AS count_transactions,
+    IFNULL(SUM(trx_state = 'RUNNING'), 0) AS running_transactions,
+    IFNULL(SUM(trx_requested_lock_id IS NOT NULL), 0) AS locked_transactions,
+    COUNT(DISTINCT trx_requested_lock_id) AS distinct_locks
+  FROM 
+    <strong>INFORMATION_SCHEMA.INNODB_TRX</strong>
+  WHERE 
+    trx_mysql_thread_id != CONNECTION_ID()
+;</pre>
+</blockquote>
+<p>Such a statement would fail the import if the underlying tables (<strong>INFORMATION_SCHEMA.INNODB_TRX</strong> in our example) do not actually exist. Which is why this <strong>CREATE</strong> statement is not invoked just like that. It is wrapped within a script:</p>
+<blockquote>
+<pre>set @script := "
+  set <strong>@common_schema_innodb_plugin_expected := 0</strong>;
+  <strong>try</strong> {
+    set <strong>@common_schema_innodb_plugin_expected</strong> := @common_schema_innodb_plugin_expected + 1; 
+
+    <strong>CREATE VIEW</strong> ... (as above)
+
+    set <strong>@common_schema_innodb_plugin_installed</strong> := @common_schema_innodb_plugin_installed + 1;
+  }
+  <strong>catch</strong> {
+  }
+";
+
+call run(@script);</pre>
+</blockquote>
+<p>I really want to stress this: this is a <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_try_catch.html"><strong>try-catch</strong></a> statement running from within your MySQL server. <em>QueryScript</em> accepts this statement and behaves very similarly to the way you are used to with your favorite programming language.</p>
+<p>If the <strong>CREATE VIEW</strong> cannot be fulfilled, an error is generated. But instead of failing the entire script, it is caught by the <strong>catch</strong>clause; the "<strong>set @common_schema_innodb_plugin_installed :=</strong> ..." line is never executed upon such error.</p>
+<p>Upon <strong>CREATE VIEW</strong> failure, <strong>@common_schema_innodb_plugin_installed</strong> falls short of <strong>@common_schema_innodb_plugin_expected</strong> and<strong> </strong>. By the end of installation process, the two are compared, so as to determine the install success:</p>
+<blockquote>
+<pre>+-----------------------------------------------------------+
+| complete                                                  |
++-----------------------------------------------------------+
+| - Base components: <strong>installed</strong>                              |
+| - InnoDB Plugin components: <strong>installed</strong>                     |
+| - Percona Server components: <strong>not installed</strong>                |
+|                                                           |
+| Installation complete. Thank you for using common_schema! |
++-----------------------------------------------------------+</pre>
+</blockquote>
+<h4>Can't you just use "mysql --force"?</h4>
+<p>So, one can import a SQL file using <strong>mysql --force</strong>, which does nto break down on first sight of error, but continues to next statements.</p>
+<p>True, but:</p>
+<ul>
+<li>I don't want to ask that of the user.</li>
+<li>It won't give me a status on <em>what went wrong</em>.</li>
+</ul>
+<p>By using <em>QueryScript</em>'s <strong>try-catch</strong>:</p>
+<ul>
+<li>I can take alternate action on failure.</li>
+<li><em>common_schema</em> can (and does) inform the user at the end of installation process which components are installed and which are not.</li>
+<li>It can (and does) write this info down to a <em>metadata</em> table such that I can ask the user for that information when submitting a bug report.</li>
+</ul>
+<p><em>Eat your own dog food!</em></p>

@@ -1,0 +1,25 @@
+---
+title: 'InnoDB DDL: kudos to quick responders on bugs.mysql.com'
+date: 2012-10-18 18:55:29.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- InnoDB
+- New Features
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Continuing my <a href="http://code.openark.org/blog/mysql/experimenting-with-5-6-innodb-online-ddl-bugs-included">experiments with 5.6 InnoDB online DDL</a>, a bug which I've opened, and another which I commented on were quickly answered and explained by the Oracle/MySQL team.</p>
+<p>On both accounts I'm happy to acknowledge the issue is resolved; in both cases I failed to produce a real bug scenario. Good lesson. <em>Kudos for quick and informative responses!</em></p>
+<p>What's left of my experiment, then? Still a lot to check.</p>
+<p>I am mainly still confused with which operations exactly can use <strong>LOCK=NONE</strong> (allowing for updated to table while <strong>ALTER</strong>ing). So far I am only able to produce <strong>ALTER</strong>s with <strong>LOCK=SHARED</strong>, meaning table is readable, but cannot be updated.</p>
+<p>I will want to test speeds. I've so far been content with slow response times for queries over altered tables. How well will that endure under heavy load?</p>

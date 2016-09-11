@@ -1,0 +1,25 @@
+---
+title: 'Trick: recovering from "no space left on device" issues with MySQL'
+date: 2013-08-23 13:25:15.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Linux
+- Monitoring
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Just read Ronald Bradford's post on an <a href="http://ronaldbradford.com/blog/unnecessary-3am-emergency-call-2013-08-23/">unnecessary 3am (emergency) call</a>. I sympathize! Running out of disk space makes for some weird MySQL behaviour, and in fact whenever I encounter weird behaviour I verify disk space.</p>
+<p>But here's a trick I've been using for years to avoid such cases and to be able to recover quickly. It helped me on such events as running out of disk space during ALTER TABLEs or avoiding purging of binary logs when slave is known to be under maintenance.</p>
+<p>Ronald suggested it -- just put a dummy file in your <strong>@@datadir</strong>! I like putting a <strong>1GB</strong> dummy file: I typically copy+paste a <strong>1GB</strong> binary log file and call it <strong>"placeholder.tmp"</strong>. Then I forget all about it. My disk space should not run out -- if it does it's a cause for emergency. I have monitoring, but sometimes I'm hoping to make an operation on <strong>97%</strong>-<strong>99%</strong> utilization.</p>
+<p>If I do run out of disk space: well, MySQL won't let me connect; won't complete an important statement; not sync transaction to disk -- bad situation. Not a problem in our case: we can magically recover <strong>1GB</strong> worth of data from the <strong>@@datadir</strong>, buying us enough time (maybe just minutes) to gracefully complete so necessary operations; connect, KILL, shutdown, abort etc.</p>

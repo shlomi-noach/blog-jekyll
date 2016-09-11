@@ -1,0 +1,143 @@
+---
+title: How often should you use OPTIMIZE TABLE? - followup
+date: 2010-10-04 10:07:45.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Indexing
+- InnoDB
+- Performance
+meta:
+  _edit_last: '2'
+  _wp_old_slug: ''
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This post follows up on Baron's <a href="http://www.xaprb.com/blog/2010/02/07/how-often-should-you-use-optimize-table/">How often should you use OPTIMIZE TABLE?</a>. I had the opportunity of doing some massive purging of data from large tables, and was interested to see the impact of the <strong>OPTIMIZE</strong> operation on table's indexes. I worked on some production data I was authorized to provide as example.</p>
+<h4>The use case</h4>
+<p>I'll present a single use case here. The table at hand is a compressed InnoDB table used for logs. I've rewritten some column names for privacy:</p>
+<blockquote>
+<pre>mysql&gt; show create table logs \G
+
+Create Table: CREATE TABLE `logs` (
+ `id` int(11) NOT NULL AUTO_INCREMENT,
+ `name` varchar(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ `ts` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ `origin` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ `message` text NOT NULL,
+ `level` tinyint(11) NOT NULL DEFAULT '0',
+ `s` char(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
+ PRIMARY KEY (`id`),
+ KEY `s` (`s`),
+ KEY `name` (`name`,`ts`),
+ KEY `origin` (`origin`,`ts`)
+) ENGINE=InnoDB AUTO_INCREMENT=186878729 DEFAULT CHARSET=utf8 ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8</pre>
+</blockquote>
+<p>The table had log records starting <strong>2010-08-23</strong> and up till <strong>2010-09-02</strong> noon. Table status:<!--more--></p>
+<blockquote>
+<pre>mysql&gt; show table status like 'logs'\G
+*************************** 1. row ***************************
+           Name: logs
+         Engine: InnoDB
+        Version: 10
+     Row_format: Compressed
+           Rows: 22433048
+ Avg_row_length: 206
+    Data_length: 4625285120
+Max_data_length: 0
+   Index_length: 1437073408
+      Data_free: 4194304
+ Auto_increment: 186878920
+    Create_time: 2010-08-24 18:10:49
+    Update_time: NULL
+     Check_time: NULL
+      Collation: utf8_general_ci
+       Checksum: NULL
+ Create_options: row_format=COMPRESSED KEY_BLOCK_SIZE=8
+        Comment:</pre>
+</blockquote>
+<p>(A bit puzzled on the <strong>Create_time</strong>; the table was taken from an LVM snapshot of another server, so it existed for a very long time before. Not sure why the <strong>Create_time</strong> field is as it is here; I assume the MySQL upgrade marked it so, did not have the time nor need to look into it).</p>
+<p>I was using <a href="http://www.percona.com/downloads/Percona-Server-5.1/">Percona-Server-5.1.47-11.2</a>, and so was able to look at the index statistics for that table:</p>
+<blockquote>
+<pre>mysql&gt; SELECT * FROM information_schema.INNODB_INDEX_STATS WHERE table_name='logs';
++--------------+------------+--------------+--------+----------------+------------+------------+
+| table_schema | table_name | index_name   | fields | row_per_keys   | index_size | leaf_pages |
++--------------+------------+--------------+--------+----------------+------------+------------+
+| newsminer    | logs       | PRIMARY      |      1 | 1              |     282305 |     246856 |
+| newsminer    | logs       | s            |      2 | 17, 1          |      38944 |      33923 |
+| newsminer    | logs       | name         |      3 | 2492739, 10, 2 |      22432 |      19551 |
+| newsminer    | logs       | origin       |      3 | 1303, 4, 1     |      26336 |      22931 |
++--------------+------------+--------------+--------+----------------+------------+------------+</pre>
+</blockquote>
+<h4>Status after massive purge</h4>
+<p>My first requirement was to purge out all record up to <strong>2010-09-01 00:00:00</strong>. I did so in small chunks, using <a href="http://code.openark.org/forge/openark-kit">openark kit</a>'s oak-chunk-update (same can be achieved with <a href="http://www.maatkit.org/">maatkit</a>'s mk-archiver). The process purged <strong>1000</strong> rows at a time, with some sleep in between, and ran for about a couple of hours. It may be interesting to note that since ts is in <a href="http://code.openark.org/blog/mysql/monotonic-functions-sql-and-mysql">monotonically ascending</a> values, purging of old rows also means purging of lower PKs, which means we're trimming the PK tree from left.</p>
+<p>Even while purging took place, I could see the index_size/leaf_pages values dropping, until, finally:</p>
+<blockquote>
+<pre>mysql&gt; SELECT * FROM information_schema.INNODB_INDEX_STATS WHERE table_name='logs';
++--------------+------------+--------------+--------+--------------+------------+------------+
+| table_schema | table_name | index_name   | fields | row_per_keys | index_size | leaf_pages |
++--------------+------------+--------------+--------+--------------+------------+------------+
+| newsminer    | logs       | PRIMARY      |      1 | 1            |      40961 |      35262 |
+| newsminer    | logs       | s            |      2 | 26, 1        |      34440 |       3798 |
+| newsminer    | logs       | name         |      3 | 341011, 4, 1 |       4738 |       2774 |
+| newsminer    | logs       | origin       |      3 | 341011, 4, 2 |      10178 |       3281 |
++--------------+------------+--------------+--------+--------------+------------+------------+</pre>
+</blockquote>
+<p>The number of deleted rows was roughly <strong>85%</strong> of total rows, so down to <strong>15%</strong> number of rows.</p>
+<h4>Status after OPTIMIZE TABLE</h4>
+<p>Time to see whether <strong>OPTIMIZE</strong> really optimizes! Will it reduce number of leaf pages in PK? In secondary keys?</p>
+<blockquote>
+<pre>mysql&gt; OPTIMIZE TABLE logs;
+...
+mysql&gt; SELECT * FROM information_schema.INNODB_INDEX_STATS WHERE table_name='logs';
++--------------+------------+--------------+--------+--------------+------------+------------+
+| table_schema | table_name | index_name   | fields | row_per_keys | index_size | leaf_pages |
++--------------+------------+--------------+--------+--------------+------------+------------+
+| newsminer    | logs       | PRIMARY      |      1 | 1            |      40436 |      35323 |
+| newsminer    | logs       | s            |      2 | 16, 1        |       5489 |       4784 |
+| newsminer    | logs       | name         |      3 | 335813, 7, 1 |       3178 |       2749 |
+| newsminer    | logs       | origin       |      3 | 335813, 5, 2 |       3951 |       3446 |
++--------------+------------+--------------+--------+--------------+------------+------------+
+4 rows in set (0.00 sec)</pre>
+</blockquote>
+<p>The above shows no significant change in either of the indexes: not for <strong>index_size</strong>, not for <strong>leaf_pages</strong>, not for statistics (<strong>row_per_keys</strong>). The <strong>OPTIMIZE</strong> did not reduce index size. It did not reduce the number of index pages (<strong>leaf_pages</strong> are the major factor here). Some <strong>leaff_pages</strong> values have even increased, but in small enough margin to consider as equal.</p>
+<p>Index-wise, the above example does not show an advantage to using <strong>OPTIMIZE</strong>. I confess, I was surprised. And for the better. This indicates InnoDB makes good merging of index pages after massive purging.</p>
+<h4>So, no use for OPTIMIZE?</h4>
+<p>Think again: file system-wise, things look different.</p>
+<p>Before purging of data:</p>
+<blockquote>
+<pre>bash:~# ls -l logs.* -h
+-rw-r----- 1 mysql mysql 8.6K 2010-08-15 17:40 logs.frm
+-rw-r----- 1 mysql mysql 2.9G 2010-09-02 14:01 logs.ibd</pre>
+</blockquote>
+<p>After purging of data:</p>
+<blockquote>
+<pre>bash:~# ls -l logs.* -h
+-rw-r----- 1 mysql mysql 8.6K 2010-08-15 17:40 logs.frm
+-rw-r----- 1 mysql mysql 2.9G 2010-09-02 14:21 logs.ibd</pre>
+</blockquote>
+<p>Recall that InnoDB never releases table space back to file system!</p>
+<p>After <strong>OPTIMIZE</strong> on table:</p>
+<blockquote>
+<pre>bash:~# ls -l logs.* -h
+-rw-rw---- 1 mysql mysql 8.6K 2010-09-02 14:26 logs.frm
+-rw-rw---- 1 mysql mysql 428M 2010-09-02 14:43 logs.ibd</pre>
+</blockquote>
+<p>On <strong>innodb_file_per_table</strong> an <strong>OPTIMIZE</strong> creates a new table space, and the old one gets destroyed. Space goes back to file system. Don't know about you; I like to have my file system with as much free space as possible.</p>
+<h4>Need to verify</h4>
+<p>I've tested Percona Server, since this is where I can find <strong>INNODB_INDEX_STATS</strong>. But this begs the following questions:</p>
+<ul>
+<li>Perhaps the results only apply for Percona Server? (I'm guessing not).</li>
+<li>Or only for InnoDB plugin? Does the same hold for "builtin" InnoDB? (dunno)</li>
+<li>Only on &gt;= 5.1? (Maybe; 5.0 is becoming rare now anyway)</li>
+<li>Only on InnoDB (Well, of course this test is storage engine dependent!)</li>
+</ul>
+<h4>Conclusion</h4>
+<p>The use case above is a particular example. Other use cases may include tables where deletions often occur in middle of table (remember we were trimming the tree from left side only). Other yet may need to handle <strong>UPDATE</strong>s to indexed columns. I have some more operations to do here, with larger tables (e.g. <strong>40GB</strong> compressed). If anything changes, I'll drop a note.</p>

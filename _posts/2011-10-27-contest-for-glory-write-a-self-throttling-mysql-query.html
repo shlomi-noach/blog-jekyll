@@ -1,0 +1,68 @@
+---
+title: 'Contest for Glory: write a self throttling MySQL query'
+date: 2011-10-27 19:20:30.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- community
+- SQL
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: harald.lapp@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>What's all this about?</p>
+<p>I've you've <a href="http://code.openark.org/blog/mysql/slides-from-my-talk-programmatic-queries-things-you-can-code-with-sql">been to my talk</a> in London, then you've already got this as homework. If not, allow me to fill in the details:</p>
+<p>I was speaking about MySQL's programmatic nature in many aspects (best if you read the slides!). We discussed user defined variables, derived tables, ordering constructs, order of evaluation, time suspension and time calculation.</p>
+<p>An issue I presented was that of a very long running query. Say it runs for <strong>20</strong> minutes. It kills your I/O. Do you <strong>KILL</strong> the query or wait? It <em>could</em> terminate in <strong>5</strong> seconds from now, and if you kill it now, you lose everything. But it may yet run for <strong>3</strong> more hours!</p>
+<p>We discussed a futuristic feature where the query would gracefully terminate after some designated time. However, futuristic wishes do not help us.</p>
+<h4>A self throttling query</h4>
+<p>I suggested the idea for a self throttling query. We know how to throttle writing queries, such as <strong>DELETE</strong> queries: we break them into small chunks, then work each chunk at a time, setting ourselves to sleep in between chunks. This is how <strong>--sleep</strong> and <strong>--sleep-ratio</strong> work in <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-chunk-update.html">oak-chunk-update</a>. It is how <strong>--sleep</strong> and<strong> --sleep-coef</strong> work in <a href="http://www.percona.com/doc/percona-toolkit/pt-archiver.html">pt-archiver</a>.</p>
+<p>But can the same be done for <strong>SELECT</strong> queries?<!--more--></p>
+<p>The answer is: yes. And it can be done from within the query itself. And it's your job to do it.</p>
+<p>So here are the rules:</p>
+<ul>
+<li>For simplicity, assume the <strong>SELECT</strong> executes over a single large table.</li>
+<li>We assume no <strong>GROUP BY</strong>, <strong>DISTINCT</strong> and the like.</li>
+<li>There can be <strong>WHERE</strong>, <strong>ORDER BY</strong> etc.</li>
+</ul>
+<p>As an example:</p>
+<blockquote>
+<pre>SELECT rental_id, TIMESTAMPDIFF(DAY, rental_date, return_date) AS rental_days FROM sakila.rental</pre>
+</blockquote>
+<p>Here is the problem:</p>
+<ul>
+<li>The query takes too much disk I/O</li>
+</ul>
+<p>Suggestion: make the query self throttling. We're going to make it run for a <em>longer</em> time, allowing for non-I/O periods within the query. We assume we are not bothered with locks.</p>
+<h4>Task #1</h4>
+<ul>
+<li>Write a self throttling query: rewrite the query above such that for every <strong>1,000</strong> rows, it goes to sleep for <strong>2</strong> seconds.</li>
+</ul>
+<h4>Task #2</h4>
+<ul>
+<li>Improve upon the previous solution: rewrite the query such that for every <strong>1,000</strong> rows, it goes to sleep for the same amount of time it took for those <strong>1,000</strong> rows to execute (effectively doubling the execution time of the query).</li>
+</ul>
+<h4>Advanced</h4>
+<ul>
+<li>There are issues with security, but in principal it is possible to have the query go to sleep when actual disk I/O exceeds some value. Code it!</li>
+</ul>
+<h4>Prove it</h4>
+<p>devise a method to <em>prove</em> that sleeps do occur as required.</p>
+<h4>How to submit a solution?</h4>
+<ul>
+<li>Simplest is to add as comment on this post. Use <strong>&lt;pre&gt;...&lt;/pre&gt;</strong> for formatted code.</li>
+<li>You may also email me directly.</li>
+</ul>
+<p>I will pick up the best solution according to correctness, elegance and time of submission.</p>
+<p>The winners get <em><strong>glory</strong></em>: their names to be mentioned on this blog. Shall we save the discussion on the exact font face and size for later on?</p>
+<p><em><strong>UPDATE:</strong> it should have been clear from my talk: no stored routines involved!</em></p>
+<p><em><strong>UPDATE</strong></em>: solution is on: <a href="http://code.openark.org/blog/mysql/self-throttling-mysql-queries">Self throttling MySQL queries</a></p>

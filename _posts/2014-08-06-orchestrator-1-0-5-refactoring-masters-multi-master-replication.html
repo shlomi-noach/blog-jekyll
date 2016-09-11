@@ -1,0 +1,41 @@
+---
+title: 'Orchestrator 1.0.5: refactoring masters, multi-master replication'
+date: 2014-08-06 14:14:39.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Open Source
+- orchestrator
+- Replication
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Outbrain's <em>orchestrator</em> Version <strong>1.0.5</strong> <a href="https://github.com/outbrain/orchestrator/releases/tag/v1.0.5">is released</a>.</p>
+<blockquote><p>Quick links: <strong><a href="https://github.com/outbrain/orchestrator/wiki/Orchestrator-Manual">Orchestrator Manual</a></strong>, <strong><a href="https://github.com/outbrain/orchestrator/wiki/FAQ">FAQ</a></strong>, <strong><a href="https://github.com/outbrain/orchestrator/releases">Downloads</a></strong></p></blockquote>
+<p><em>Orchestrator</em> now supports refactoring of masters via master-master topologies. It now allows promoting slaves as co-masters and detachment of instances from a co-master topology, effectively allowing for replacing an active master.</p>
+<h4>Like this</h4>
+<p>Drag a master:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/08/orchestator-cm-simple-drag-master-01.png"><img class="alignnone size-full wp-image-6965" src="{{ site.baseurl }}/assets/orchestator-cm-simple-drag-master-01.png" alt="orchestator-cm-simple-drag-master-01" width="804" height="340" /></a></p></blockquote>
+<p>Onto one of its slaves:<!--more--></p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/08/orchestator-cm-simple-drag-master-02.png"><img class="alignnone size-full wp-image-6966" src="{{ site.baseurl }}/assets/orchestator-cm-simple-drag-master-02.png" alt="orchestator-cm-simple-drag-master-02" width="804" height="340" /></a></p></blockquote>
+<p>Making both co-masters:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/08/orchestator-cm-simple-dropped-master.png"><img class="alignnone size-full wp-image-6967" src="{{ site.baseurl }}/assets/orchestator-cm-simple-dropped-master.png" alt="orchestator-cm-simple-dropped-master" width="804" height="340" /></a></p></blockquote>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/08/orchestator-cm-co-masters.png"><img class="alignnone size-full wp-image-6969" src="{{ site.baseurl }}/assets/orchestator-cm-co-masters.png" alt="orchestator-cm-co-masters" width="804" height="340" /></a></p></blockquote>
+<p>You now have a multi-master topology. You may move slaves around between the masters. Or, if you like, detach the newly promoted co-master from its original master:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/08/orchestator-cm-simple-detach-slave-01.png"><img class="alignnone size-full wp-image-6971" src="{{ site.baseurl }}/assets/orchestator-cm-simple-detach-slave-01.png" alt="orchestator-cm-simple-detach-slave-01" width="827" height="776" /></a></p></blockquote>
+<p>Now it becomes the single master:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/08/orchestator-cm-new-master.png"><img class="alignnone size-full wp-image-6973" src="{{ site.baseurl }}/assets/orchestator-cm-new-master.png" alt="orchestator-cm-new-master" width="877" height="431" /></a></p></blockquote>
+<p>Refactor as you will:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/08/orchestator-cm-simple-new.png"><img class="alignnone size-full wp-image-6972" src="{{ site.baseurl }}/assets/orchestator-cm-simple-new.png" alt="orchestator-cm-simple-new" width="804" height="340" /></a></p></blockquote>
+<p><em>Orchestrator</em> is released as open source under the <a href="https://raw.githubusercontent.com/outbrain/orchestrator/master/LICENSE">Apache 2.0 license</a> and is available at: <a href="https://github.com/outbrain/orchestrator">https://github.com/outbrain/orchestrator</a></p>
+<h4></h4>

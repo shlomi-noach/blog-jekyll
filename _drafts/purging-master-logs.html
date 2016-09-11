@@ -1,0 +1,33 @@
+---
+layout: post
+title: Purging master logs
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags:
+- Backup
+- Configuration
+- openark kit
+- Replication
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>In this post I will try to cover all that's related to purging master logs: when should you purge? How to verify slaves are up to date? How to balance between master's space requirements and slaves' lag? What configuration is available?</p>
+<p>I will also present <a href="http://code.openark.org/forge/openark-kit/oak-purge-master-logs">oak-purge-master-logs</a>, part of the <a href="http://code.openark.org/forge/openark-kit">openark kit</a> project, which automates much of the work, and is freely available for download.</p>
+<p>A crontab setup for such a case follows:</p>
+<blockquote>
+<pre>13 * * * * oak-purge-master-logs --defaults-file=/root/.my-oak.cnf --expect-num-slaves=2 --reatin-logs=5 --pro-slaves
+23 * * * * oak-purge-master-logs --defaults-file=/root/.my-oak.cnf --expect-num-slaves=2 --reatin-logs=15 --pro-master --pro-slaves
+37 * * * * oak-purge-master-logs --defaults-file=/root/.my-oak.cnf --expect-num-slaves=2 --reatin-logs=20 --pro-master</pre>
+</blockquote>
+<p>The above retains 5 logs on the master, if all goes well. When one of the slaves stops replicating, it will be considerate and keep up to 15 logs, so there's some time to fix the proble. When both slaves fail it will extend its generousity and retain up to 20 logs, but no more than that.</p>
+<p>In the above setup the master protects itself from running out of disk space, by assuring no more than 20 (well, 21 including the pending log) are stored.</p>

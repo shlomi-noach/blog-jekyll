@@ -1,0 +1,45 @@
+---
+title: Orchestrator visual cheatsheet
+date: 2015-06-05 14:19:34.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- orchestrator
+- Replication
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><strong><a href="https://github.com/outbrain/orchestrator">Orchestrator</a></strong> is growing. Supporting automatic detection of topologies, simple refactoring of topology trees, complex refactoring via Pseudo-GTID, failure detection and automated discovery, it is becoming larger and larger by the day.</p>
+<p>One of the problems with growign projects is hwo to properly document them. Orchestrator enjoys <a href="https://github.com/outbrain/orchestrator/wiki/Orchestrator-Manual">a comprehensive manual</a>, but as these get more and more detailed, it is becoming difficult to get oriented and pointed in the right direction. I've done my best to advise the simple use cases throughout the manual.</p>
+<p>One thing that is difficult to put into words is topologies. Explaining "failover of an intermediate master S1 that has S2,...,Sn slaves onto a sibling of S1 provided that..." is too verbose. So here's a quick visual cheatsheet for (current) topology refactoring commands. Refactoring commands are a mere subset of overall orchestrator commands, but they're great to play with and perfect for visualization.</p>
+<p>The "move" and related commands use normal replication commands (STOP SLAVE; CHANGE MASTER TO; START SLAVE UNTIL;"...).</p>
+<p>The "match" and related commands utilize Pseudo-GTID and use more elaborate MySQL commands (SHOW BINLOG EVENTS, SHOW RELAYLOG EVENTS).</p>
+<p>So without further ado, here's what each command does (and do run "orchestrator" from the command line to get a man-like explanation of everything, or just <a href="https://github.com/outbrain/orchestrator/wiki/Orchestrator-Manual#executing-via-command-line">go to the manual</a>).<!--more--></p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2015/06/orchestrator-cheatsheet-visualized-7.png"><img class="alignnone size-full wp-image-7251" src="{{ site.baseurl }}/assets/orchestrator-cheatsheet-visualized-7.png" alt="orchestrator-cheatsheet-visualized-7" width="720" height="405" /></a><br />
+<a href="http://code.openark.org/blog/wp-content/uploads/2015/06/orchestrator-cheatsheet-visualized-8.png"><img class="alignnone size-full wp-image-7252" src="{{ site.baseurl }}/assets/orchestrator-cheatsheet-visualized-8.png" alt="orchestrator-cheatsheet-visualized-8" width="720" height="405" /></a><br />
+<a href="http://code.openark.org/blog/wp-content/uploads/2015/06/orchestrator-cheatsheet-visualized-9.png"><img class="alignnone size-full wp-image-7253" src="{{ site.baseurl }}/assets/orchestrator-cheatsheet-visualized-9.png" alt="orchestrator-cheatsheet-visualized-9" width="720" height="405" /></a><br />
+<a href="http://code.openark.org/blog/wp-content/uploads/2015/06/orchestrator-cheatsheet-visualized-10.png"><img class="alignnone size-full wp-image-7254" src="{{ site.baseurl }}/assets/orchestrator-cheatsheet-visualized-10.png" alt="orchestrator-cheatsheet-visualized-10" width="720" height="405" /></a><br />
+<a href="http://code.openark.org/blog/wp-content/uploads/2015/06/orchestrator-cheatsheet-visualized-11.png"><img class="alignnone size-full wp-image-7255" src="{{ site.baseurl }}/assets/orchestrator-cheatsheet-visualized-11.png" alt="orchestrator-cheatsheet-visualized-11" width="720" height="405" /></a><br />
+<a href="http://code.openark.org/blog/wp-content/uploads/2015/06/orchestrator-cheatsheet-visualized-12.png"><img class="alignnone size-full wp-image-7256" src="{{ site.baseurl }}/assets/orchestrator-cheatsheet-visualized-12.png" alt="orchestrator-cheatsheet-visualized-12" width="720" height="405" /></a><br />
+<a href="http://code.openark.org/blog/wp-content/uploads/2015/06/orchestrator-cheatsheet-visualized-13.png"><img class="alignnone size-full wp-image-7257" src="{{ site.baseurl }}/assets/orchestrator-cheatsheet-visualized-13.png" alt="orchestrator-cheatsheet-visualized-13" width="720" height="405" /></a><br />
+<a href="http://code.openark.org/blog/wp-content/uploads/2015/06/orchestrator-cheatsheet-visualized-1.png"><img class="alignnone size-full wp-image-7245" src="{{ site.baseurl }}/assets/orchestrator-cheatsheet-visualized-1.png" alt="orchestrator-cheatsheet-visualized-1" width="720" height="405" /></a><br />
+<a href="http://code.openark.org/blog/wp-content/uploads/2015/06/orchestrator-cheatsheet-visualized-2.png"><img class="alignnone size-full wp-image-7246" src="{{ site.baseurl }}/assets/orchestrator-cheatsheet-visualized-2.png" alt="orchestrator-cheatsheet-visualized-2" width="720" height="405" /></a><br />
+<a href="http://code.openark.org/blog/wp-content/uploads/2015/06/orchestrator-cheatsheet-visualized-3.png"><img class="alignnone size-full wp-image-7247" src="{{ site.baseurl }}/assets/orchestrator-cheatsheet-visualized-3.png" alt="orchestrator-cheatsheet-visualized-3" width="720" height="405" /></a><br />
+<a href="http://code.openark.org/blog/wp-content/uploads/2015/06/orchestrator-cheatsheet-visualized-4.png"><img class="alignnone size-full wp-image-7248" src="{{ site.baseurl }}/assets/orchestrator-cheatsheet-visualized-4.png" alt="orchestrator-cheatsheet-visualized-4" width="720" height="405" /></a><br />
+<a href="http://code.openark.org/blog/wp-content/uploads/2015/06/orchestrator-cheatsheet-visualized-5.png"><img class="alignnone size-full wp-image-7249" src="{{ site.baseurl }}/assets/orchestrator-cheatsheet-visualized-5.png" alt="orchestrator-cheatsheet-visualized-5" width="720" height="405" /></a><br />
+<a href="http://code.openark.org/blog/wp-content/uploads/2015/06/orchestrator-cheatsheet-visualized-6.png"><img class="alignnone size-full wp-image-7250" src="{{ site.baseurl }}/assets/orchestrator-cheatsheet-visualized-6.png" alt="orchestrator-cheatsheet-visualized-6" width="720" height="405" /></a><br />
+<a href="http://code.openark.org/blog/wp-content/uploads/2015/06/orchestrator-cheatsheet-visualized-14.png"><img class="alignnone size-full wp-image-7258" src="{{ site.baseurl }}/assets/orchestrator-cheatsheet-visualized-14.png" alt="orchestrator-cheatsheet-visualized-14" width="720" height="405" /></a><br />
+<a href="http://code.openark.org/blog/wp-content/uploads/2015/06/orchestrator-cheatsheet-visualized-15.png"><img class="alignnone size-full wp-image-7259" src="{{ site.baseurl }}/assets/orchestrator-cheatsheet-visualized-15.png" alt="orchestrator-cheatsheet-visualized-15" width="720" height="405" /></a><br />
+<a href="http://code.openark.org/blog/wp-content/uploads/2015/06/orchestrator-cheatsheet-visualized-16.png"><img class="alignnone size-full wp-image-7260" src="{{ site.baseurl }}/assets/orchestrator-cheatsheet-visualized-16.png" alt="orchestrator-cheatsheet-visualized-16" width="720" height="405" /></a><br />
+<a href="http://code.openark.org/blog/wp-content/uploads/2015/06/orchestrator-cheatsheet-visualized-17.png"><img class="alignnone size-full wp-image-7261" src="{{ site.baseurl }}/assets/orchestrator-cheatsheet-visualized-17.png" alt="orchestrator-cheatsheet-visualized-17" width="720" height="405" /></a><br />
+<a href="http://code.openark.org/blog/wp-content/uploads/2015/06/orchestrator-cheatsheet-visualized-18.png"><img class="alignnone size-full wp-image-7262" src="{{ site.baseurl }}/assets/orchestrator-cheatsheet-visualized-18.png" alt="orchestrator-cheatsheet-visualized-18" width="720" height="405" /></a></p></blockquote>

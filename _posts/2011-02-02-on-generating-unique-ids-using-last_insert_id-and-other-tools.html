@@ -1,0 +1,82 @@
+---
+title: On generating unique IDs using LAST_INSERT_ID() and other tools
+date: 2011-02-02 08:50:02.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- memcached
+- NoSQL
+- Performance
+- Query Cache
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>There's a <a href="http://dev.mysql.com/doc/refman/5.1/en/information-functions.html#function_last-insert-id">trick</a> for using <strong>LAST_INSERT_ID()</strong> to generate sequences in MySQL. Quoting from the Manual:</p>
+<blockquote>
+<ol type="1">
+<li>Create a table to hold the sequence counter and initialize               it:
+<pre>mysql&gt; <strong><code>CREATE TABLE sequence (id INT NOT NULL);</code></strong>
+mysql&gt; <strong><code>INSERT INTO sequence VALUES (0);</code></strong>
+</pre>
+</li>
+<li>Use the table to generate sequence numbers like this:
+<pre>mysql&gt; <strong><code>UPDATE sequence SET id=LAST_INSERT_ID(id+1);</code></strong>
+mysql&gt; <strong><code>SELECT LAST_INSERT_ID();</code></strong>
+</pre>
+</li>
+</ol>
+</blockquote>
+<p>This trick calls for trouble.</p>
+<h4>Contention</h4>
+<p>A customer was using this trick to generate unique session IDs for his JBoss sessions. These IDs would eventually be written back to the database in the form of log events. Business go well, and one day the customer adds three new JBoss servers (doubling the amount of webapps). All of a sudden, nothing works quite as it used to. All kinds of queries take long seconds to complete; load average becomes very high.<!--more--></p>
+<p>A short investigation reveals that a very slight load is enough to make for an accumulation of sequence-UPDATE queries. Dozens of them are active at any given time, waiting for long seconds.</p>
+<p>InnoDB or MyISAM both make for poor response times. No wonder! Everyone's contending for one lock.</p>
+<h4>Not just one</h4>
+<p>Other queries seem to hang as well. Why?</p>
+<p>It is easy to forget or let go unnoticed that there are quite a few global locks involved with each query. If query cache is activated, then any query must pass through that cache, holding the query cache mutex. There's a global mutex on MyISAM's key cache. There's one on InnoDB's buffer pool (see multiple buffer pools in InnoDB 5.5), albeit less of an overhead. And there's the table cache.</p>
+<p>When table cache is enabled, any completed query attempts to return file handles to the cache. Any new query attempts to retrieve handles from the cache. While writing to the cache (extracting, adding), the cache is locked. When everyone's busy doing the sequence-UPDATE, table cache lock is being abused. Other queries are unable to find the time to squire the lock and get on with their business.</p>
+<h4>What can be done?</h4>
+<p>One could try and increase the <strong>table_open_cache</strong> value. That may help to some extent, and for limited time. But the more requests are made, the quicker the problem surfaces again. When, in fact, <em>reducing</em> the <strong>table_open_cache</strong> to zero (well, minimum value is <strong>1</strong>) can make for a great impact. If there's nothing to fight for, everyone just get by on their own.</p>
+<p>I know the following is not a scientific explanation, but it hits me as a good comparison: when my daughter brings a friend over, and there's a couple of toys, both are happy. A third friend makes for a fight: <em>"I saw it first! She took it from me! I was holding it!"</em>. Any parent knows the ultimate solution to this kind of fight: take away the toys, and have them find something else to enjoy doing. OK, sorry for this unscientific display, I had to share my daily stress.</p>
+<p>When no table cache is available, a query will go on opening the table by itself, and will not attempt to return the file handle back to the cache. The file handle will simply be destroyed. Now, usually this is not desired. Caching is good. But in our customer's case, the cost of not using a table cache was minified by the cost of having everyone fight for the sequence table. Reducing the table cache made for an immediate relaxation of the database, with observable poorer responsiveness on peak times, however way better than with large table cache.</p>
+<h4>Other tools?</h4>
+<p>I don't consider the above to be a good solution. It's just a temporary hack.</p>
+<p>I actually don't like the <strong>LAST_INSERT_ID()</strong> trick. Moreover, I don't see that it's the database's job to provide with unique IDs. Let it do relational stuff. If generating IDs is too intensive, let someone else do it.</p>
+<p>NoSQL solutions provide such a service. <a href="http://memcached.org/">Memcached</a>, <a href="http://redis.io/">redis</a>, <a href="http://www.mongodb.org/">MongoDB</a> (and probably more) all provide with increment functions. Check them out.</p>
+<h4>Application level solutions</h4>
+<p>I actually use an application level solution to generate unique IDs. I mean, there's always <strong>GUID()</strong>, but it's result is just too long. Take a look at the following Java code:</p>
+<blockquote>
+<pre>public class Utils {
+  private static long lastUniqueNumber = 0;
+
+  public static synchronized long uniqueNumber() {
+    long unique = System.currentTimeMillis();
+    if (unique &lt;= lastUniqueNumber)
+      unique = lastUniqueNumber + 1;
+    lastUniqueNumber = unique;
+    return unique;
+  }
+}</pre>
+</blockquote>
+<p>Within a Java application this above method returns with unique IDs, up to 1000 per second on average (and it can perform way more than 1000 times per second).</p>
+<p>On consequential executions of applications on the same machine one would still expect unique values due to the time-related nature of values. However, computer time changes. It's possible that <strong>System.currentTimeMillis()</strong> would return a value already used in the past.</p>
+<p>And, what about two processes running on the same machine at the same time? Or on different machine?</p>
+<p>Which is why I use the following combination to generate my unique IDs:</p>
+<ul>
+<li>Server ID (much like MySQL's server_id parameter). this could be the last byte in the server's IP address, or just 4 or 5 bits if not too many players are expected.</li>
+<li>Process ID (plain old <em>pid</em>) which I pass to the Java runtime in the form of system properties. Any two processes running on the same machine are assured to have different IDs. Two consequently spawned processes will have different IDs. The time it would take to cycle the process IDs is way more than would make for a "time glitch" problem as described above</li>
+<li>Current time in milliseconds.</li>
+</ul>
+<p>If you have to have everything withing 64 bit (BIGINT) then you'll have to do bit manipulation, and drop some of the MSB on the milliseconds so as to overwrite with server &amp; process IDs.</p>
+<p>If you are willing to have your IDs unique in the bounds of a given time frame (so, for example, a month from now you wouldn't mind reusing old IDs), then the problem is significantly easier. You may just use "day of month" and "millis since day start" and save those precious bits.</p>
+<h4>Still other?</h4>
+<p>Please share your solutions below!</p>

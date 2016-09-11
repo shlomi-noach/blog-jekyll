@@ -1,0 +1,355 @@
+---
+title: Quoting text JavaScript/Python style
+date: 2011-11-15 08:11:37.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- SQL
+- Syntax
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: daxi06169@163.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Unless your MySQL is configured to use <a href="http://dev.mysql.com/doc/refman/5.1/en/server-sql-mode.html#sqlmode_ansi_quotes"><strong>ANSI_QUOTES</strong></a> in <strong>sql_mode</strong>, you are able to quote your text in one of two forms: using single quotes or double quotes:</p>
+<blockquote>
+<pre>UPDATE world.Country SET HeadOfState = <strong>'Willy Wonka'</strong> WHERE Code=<strong>'USA'</strong>
+UPDATE world.Country SET HeadOfState = <strong>"Willy Wonka"</strong> WHERE Code=<strong>"USA"</strong></pre>
+</blockquote>
+<p>This makes for JavaScript- or Python-style quoting: you quote by your needs. Say you have a text which includes single quotes:</p>
+<blockquote><p><em>It is what you read when you don't have to that determines what you will be when you can't help it.</em> - Oscar Wilde</p></blockquote>
+<p>You wish to insert this text to some tables. You could go through the trouble of escaping it:</p>
+<blockquote>
+<pre>INSERT INTO quotes (quote, author) VALUES (
+  'It is what you read when you don
+</blockquote>
+<p>or you could just wrap it in double quotes:</p>
+<blockquote>
+<pre>INSERT INTO quotes (quote, author) VALUES (
+  "It is what you read when you don't have to that determines what you will be when you can't help it.", 'Oscar Wilde');</pre>
+</blockquote>
+<p>I find this useful when using SQL to generate queries. Take, for example, <a href="http://code.openark.org/blog/mysql/mysql-eval">eval() for MySQL</a>: the statement:<!--more--></p>
+<blockquote>
+<pre>CALL eval('select concat(
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+t have to that determines what you will be when you can
+</blockquote>
+<p>or you could just wrap it in double quotes:</p>
+<blockquote>
+<pre>INSERT INTO quotes (quote, author) VALUES (
+  "It is what you read when you don't have to that determines what you will be when you can't help it.", 'Oscar Wilde');</pre>
+</blockquote>
+<p>I find this useful when using SQL to generate queries. Take, for example, <a href="http://code.openark.org/blog/mysql/mysql-eval">eval() for MySQL</a>: the statement:<!--more--></p>
+<blockquote>
+<pre wp-pre-tag-3></pre>
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+t help it.', 'Oscar Wilde');</pre>
+</blockquote>
+<p>or you could just wrap it in double quotes:</p>
+<blockquote>
+<pre>INSERT INTO quotes (quote, author) VALUES (
+  "It is what you read when you don't have to that determines what you will be when you can't help it.", 'Oscar Wilde');</pre>
+</blockquote>
+<p>I find this useful when using SQL to generate queries. Take, for example, <a href="http://code.openark.org/blog/mysql/mysql-eval">eval() for MySQL</a>: the statement:<!--more--></p>
+<blockquote>
+<pre wp-pre-tag-3></pre>
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+KILL 
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+t have to that determines what you will be when you can
+</blockquote>
+<p>or you could just wrap it in double quotes:</p>
+<blockquote>
+<pre>INSERT INTO quotes (quote, author) VALUES (
+  "It is what you read when you don't have to that determines what you will be when you can't help it.", 'Oscar Wilde');</pre>
+</blockquote>
+<p>I find this useful when using SQL to generate queries. Take, for example, <a href="http://code.openark.org/blog/mysql/mysql-eval">eval() for MySQL</a>: the statement:<!--more--></p>
+<blockquote>
+<pre wp-pre-tag-3></pre>
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+t help it.', 'Oscar Wilde');</pre>
+</blockquote>
+<p>or you could just wrap it in double quotes:</p>
+<blockquote>
+<pre>INSERT INTO quotes (quote, author) VALUES (
+  "It is what you read when you don't have to that determines what you will be when you can't help it.", 'Oscar Wilde');</pre>
+</blockquote>
+<p>I find this useful when using SQL to generate queries. Take, for example, <a href="http://code.openark.org/blog/mysql/mysql-eval">eval() for MySQL</a>: the statement:<!--more--></p>
+<blockquote>
+<pre wp-pre-tag-3></pre>
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+,id) from information_schema.processlist where user=
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+t have to that determines what you will be when you can
+</blockquote>
+<p>or you could just wrap it in double quotes:</p>
+<blockquote>
+<pre>INSERT INTO quotes (quote, author) VALUES (
+  "It is what you read when you don't have to that determines what you will be when you can't help it.", 'Oscar Wilde');</pre>
+</blockquote>
+<p>I find this useful when using SQL to generate queries. Take, for example, <a href="http://code.openark.org/blog/mysql/mysql-eval">eval() for MySQL</a>: the statement:<!--more--></p>
+<blockquote>
+<pre wp-pre-tag-3></pre>
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+t help it.', 'Oscar Wilde');</pre>
+</blockquote>
+<p>or you could just wrap it in double quotes:</p>
+<blockquote>
+<pre>INSERT INTO quotes (quote, author) VALUES (
+  "It is what you read when you don't have to that determines what you will be when you can't help it.", 'Oscar Wilde');</pre>
+</blockquote>
+<p>I find this useful when using SQL to generate queries. Take, for example, <a href="http://code.openark.org/blog/mysql/mysql-eval">eval() for MySQL</a>: the statement:<!--more--></p>
+<blockquote>
+<pre wp-pre-tag-3></pre>
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+webuser
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+t have to that determines what you will be when you can
+</blockquote>
+<p>or you could just wrap it in double quotes:</p>
+<blockquote>
+<pre>INSERT INTO quotes (quote, author) VALUES (
+  "It is what you read when you don't have to that determines what you will be when you can't help it.", 'Oscar Wilde');</pre>
+</blockquote>
+<p>I find this useful when using SQL to generate queries. Take, for example, <a href="http://code.openark.org/blog/mysql/mysql-eval">eval() for MySQL</a>: the statement:<!--more--></p>
+<blockquote>
+<pre wp-pre-tag-3></pre>
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+t help it.', 'Oscar Wilde');</pre>
+</blockquote>
+<p>or you could just wrap it in double quotes:</p>
+<blockquote>
+<pre>INSERT INTO quotes (quote, author) VALUES (
+  "It is what you read when you don't have to that determines what you will be when you can't help it.", 'Oscar Wilde');</pre>
+</blockquote>
+<p>I find this useful when using SQL to generate queries. Take, for example, <a href="http://code.openark.org/blog/mysql/mysql-eval">eval() for MySQL</a>: the statement:<!--more--></p>
+<blockquote>
+<pre wp-pre-tag-3></pre>
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+');</pre>
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+t have to that determines what you will be when you can
+</blockquote>
+<p>or you could just wrap it in double quotes:</p>
+<blockquote>
+<pre>INSERT INTO quotes (quote, author) VALUES (
+  "It is what you read when you don't have to that determines what you will be when you can't help it.", 'Oscar Wilde');</pre>
+</blockquote>
+<p>I find this useful when using SQL to generate queries. Take, for example, <a href="http://code.openark.org/blog/mysql/mysql-eval">eval() for MySQL</a>: the statement:<!--more--></p>
+<blockquote>
+<pre>CALL eval('select concat(
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+t help it.', 'Oscar Wilde');</pre>
+</blockquote>
+<p>or you could just wrap it in double quotes:</p>
+<blockquote>
+<pre>INSERT INTO quotes (quote, author) VALUES (
+  "It is what you read when you don't have to that determines what you will be when you can't help it.", 'Oscar Wilde');</pre>
+</blockquote>
+<p>I find this useful when using SQL to generate queries. Take, for example, <a href="http://code.openark.org/blog/mysql/mysql-eval">eval() for MySQL</a>: the statement:<!--more--></p>
+<blockquote>
+<pre wp-pre-tag-3></pre>
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+KILL 
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+t help it.', 'Oscar Wilde');</pre>
+</blockquote>
+<p>or you could just wrap it in double quotes:</p>
+<blockquote>
+<pre>INSERT INTO quotes (quote, author) VALUES (
+  "It is what you read when you don't have to that determines what you will be when you can't help it.", 'Oscar Wilde');</pre>
+</blockquote>
+<p>I find this useful when using SQL to generate queries. Take, for example, <a href="http://code.openark.org/blog/mysql/mysql-eval">eval() for MySQL</a>: the statement:<!--more--></p>
+<blockquote>
+<pre wp-pre-tag-3></pre>
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+,id) from information_schema.processlist where user=
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+t help it.', 'Oscar Wilde');</pre>
+</blockquote>
+<p>or you could just wrap it in double quotes:</p>
+<blockquote>
+<pre>INSERT INTO quotes (quote, author) VALUES (
+  "It is what you read when you don't have to that determines what you will be when you can't help it.", 'Oscar Wilde');</pre>
+</blockquote>
+<p>I find this useful when using SQL to generate queries. Take, for example, <a href="http://code.openark.org/blog/mysql/mysql-eval">eval() for MySQL</a>: the statement:<!--more--></p>
+<blockquote>
+<pre wp-pre-tag-3></pre>
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+webuser
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+t help it.', 'Oscar Wilde');</pre>
+</blockquote>
+<p>or you could just wrap it in double quotes:</p>
+<blockquote>
+<pre>INSERT INTO quotes (quote, author) VALUES (
+  "It is what you read when you don't have to that determines what you will be when you can't help it.", 'Oscar Wilde');</pre>
+</blockquote>
+<p>I find this useful when using SQL to generate queries. Take, for example, <a href="http://code.openark.org/blog/mysql/mysql-eval">eval() for MySQL</a>: the statement:<!--more--></p>
+<blockquote>
+<pre wp-pre-tag-3></pre>
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+');</pre>
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+t help it.', 'Oscar Wilde');</pre>
+</blockquote>
+<p>or you could just wrap it in double quotes:</p>
+<blockquote>
+<pre>INSERT INTO quotes (quote, author) VALUES (
+  "It is what you read when you don't have to that determines what you will be when you can't help it.", 'Oscar Wilde');</pre>
+</blockquote>
+<p>I find this useful when using SQL to generate queries. Take, for example, <a href="http://code.openark.org/blog/mysql/mysql-eval">eval() for MySQL</a>: the statement:<!--more--></p>
+<blockquote>
+<pre>CALL eval('select concat(
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+KILL 
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+,id) from information_schema.processlist where user=
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+webuser
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>
+');</pre>
+</blockquote>
+<p>is just so more easily written this way:</p>
+<blockquote>
+<pre>CALL eval("select concat('KILL ',id) from information_schema.processlist where user='webuser'");</pre>
+</blockquote>
+<p>I don't suggest one should use this method throughout her application code. Application code works great with auto-escaping string literals. But for the handy DBA or developer, who needs to work some quick queries by hand, this makes for an easier syntax to use.</p>

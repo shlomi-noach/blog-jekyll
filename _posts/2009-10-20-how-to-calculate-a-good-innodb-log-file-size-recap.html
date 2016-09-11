@@ -1,0 +1,55 @@
+---
+title: How to calculate a good InnoDB log file size - recap
+date: 2009-10-20 21:04:40.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- INFORMATION_SCHEMA
+- InnoDB
+- Performance
+- SQL
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Following Baron Schwartz' post: <a href="http://www.mysqlperformanceblog.com/2008/11/21/how-to-calculate-a-good-innodb-log-file-size/">How to calculate a good InnoDB log file size</a>, which shows how to make an estimate for the InnoDB log file size, and based on <a href="http://code.openark.org/blog/mysql/sql-querying-for-status-difference-over-time">SQL: querying for status difference over time</a>, I've written a query to run on MySQL 5.1, which, upon sampling 60 seconds of status, estimates the InnoDB transaction log bytes that are expected to be written in the period of 1 hour.</p>
+<p><em>Recap</em>: this information can be useful if you're looking for a good <strong>innodb_log_file_size</strong> value, such that will not pose too much I/O (smaller values will make for more frequent flushes), not will make for a too long recovery time (larger values mean more transactions to recover upon crash).</p>
+<p>It is assumed that the 60 seconds period represents an average system load, not some activity spike period. Edit the sleep time and factors as you will to sample longer or shorter periods.<!--more--></p>
+<blockquote>
+<pre><strong>SELECT</strong>
+  innodb_os_log_written_per_minute*60
+    <strong>AS</strong> estimated_innodb_os_log_written_per_hour,
+  CONCAT(ROUND(innodb_os_log_written_per_minute*60/1024/1024, 1), 'MB')
+    <strong>AS</strong> estimated_innodb_os_log_written_per_hour_mb
+<strong>FROM</strong>
+  (<strong>SELECT</strong> <strong>SUM</strong>(value) <strong>AS</strong> innodb_os_log_written_per_minute <strong>FROM</strong> (
+    <strong>SELECT</strong> -VARIABLE_VALUE <strong>AS</strong> value
+      <strong>FROM</strong> INFORMATION_SCHEMA.GLOBAL_STATUS
+      <strong>WHERE</strong> VARIABLE_NAME = 'innodb_os_log_written'
+    <strong>UNION ALL</strong>
+    <strong>SELECT</strong> SLEEP(60)
+      <strong>FROM</strong> DUAL
+    <strong>UNION ALL</strong>
+    <strong>SELECT</strong> VARIABLE_VALUE
+      <strong>FROM</strong> INFORMATION_SCHEMA.GLOBAL_STATUS
+      <strong>WHERE</strong> VARIABLE_NAME = 'innodb_os_log_written'
+  ) s1
+) s2
+;</pre>
+</blockquote>
+<p>Sample output:</p>
+<blockquote>
+<pre>+------------------------------------------+---------------------------------------------+
+| estimated_innodb_os_log_written_per_hour | estimated_innodb_os_log_written_per_hour_mb |
++------------------------------------------+---------------------------------------------+
+|                                584171520 | 557.1MB                                     |
++------------------------------------------+---------------------------------------------+</pre>
+</blockquote>

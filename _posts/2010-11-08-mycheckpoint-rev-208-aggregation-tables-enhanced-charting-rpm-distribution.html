@@ -1,0 +1,66 @@
+---
+title: 'mycheckpoint (rev 208): aggregation tables, enhanced charting, RPM distribution'
+date: 2010-11-08 12:45:45.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Monitoring
+- mycheckpoint
+- Open Source
+- python
+- scripts
+- Web
+meta:
+  _edit_last: '2'
+  _wp_old_slug: ''
+  _sg_subscribe-to-comments: lenz@grimmer.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Revision <strong>208</strong> of <a href="../../forge/mycheckpoint">mycheckpoint</a>, a MySQL monitoring solution, has  been released. New and updated in this revision:</p>
+<ul>
+<li><strong>Aggregation tables</strong>: aggregated data makes for fast reports on previously slow queries.</li>
+<li><strong>Enhanced charting</strong>: interactive charts now present time stamps dynamically (see <a href="http://mycheckpoint.googlecode.com/svn/trunk/doc/html/sample/http/mcp_sql00/sv_report_html_brief"><strong>demo</strong></a>); "Zoom in" charts are available (see <a href="http://mycheckpoint.googlecode.com/svn/trunk/doc/html/sample/http/mcp_sql00/zoom/questions"><strong>demo</strong></a>) on <em>mycheckpoint</em>'s HTTP server.</li>
+<li><strong>RPM distribution</strong>: a "noarch" RPM <em>mycheckpoint</em> build is now available.</li>
+<li>Initial work on formalizing test environment</li>
+</ul>
+<p><em>mycheckpoint</em> celebrates one year of existence!</p>
+<h4>Aggregation tables</h4>
+<p>I really wanted to avoid using these: everything was so more beautiful with one single dataset and dozens of supporting views (OK, the views themselves are hardly "beautiful").</p>
+<p>However it was impossible (for my level of expertise) to optimize query performance what with all those views on per-hour and per-day aggregation. The GROUP BYs and the JOINs did not make it possible for condition pushdown (i.e. using MERGE algorithm) where desired.</p>
+<p>As result, mycheckpoint now manages aggregation tables: per-hour and per-day. The impact on sample taking is neglect able (making for two additional fast queries), but the impact on reading aggregated data is overwhelming. Generating a HTML full report could take a few minutes to complete. It now returns in no time. This makes charting more attractive, and allows for enhanced charting, such as zooming in on charts, as described following.</p>
+<p>Aggregation tables will automatically be created and retroactively populated upon using revision 208. There's nothing special to do; be advised that for one single execution of <em>mycheckpoint</em>, many INSERT queries are going to be executed. Shouldn't take more than a couple minutes on commodity hardware and a few months of history.</p>
+<p>It is possible to disable aggregation tables, or make for a complete rebuild of tables; by default, though, aggregation is ON.</p>
+<h4>Enhanced charting</h4>
+<p>Two enhancements here:<!--more--></p>
+<ol>
+<li>The interactive line charts already know how to update legend data as mouse hovers over them. Now they also present accurate date &amp; time. This provides with fully informative charts.</li>
+<li>As with other monitoring tools, it is possible to "zoom in" on a chart: zooming in will present any chart in "last 24 hours", "last 10 days" and "complete history" views, magnified on screen. See <a href="http://mycheckpoint.googlecode.com/svn/trunk/doc/html/sample/http/mcp_sql00/zoom/questions"><strong>demo</strong></a> here.</li>
+</ol>
+<h4>RPM distribution</h4>
+<p>No excuse for this being so late, I know. But RPM distribution is now <a href="http://code.google.com/p/mycheckpoint/">available</a>. Yeepee!</p>
+<p>This is a <em>noarch</em> distribution, courtesy of Python's <a href="http://docs.python.org/distutils/">distutils</a>; you should be able to install the package on any RPM supporting platform. I have only tested in on CentOS; feedback is welcome.</p>
+<h4>Future plans</h4>
+<p>Work is going on. These are the non-scheduled future tasks I see:</p>
+<ul>
+<li>Monitoring InnoDB Plugin &amp; XtraDB status.</li>
+<li>A proper <em>man</em> page.</li>
+<li>Anything else that interests me &amp; the users.</li>
+</ul>
+<h4>Try it out</h4>
+<p>Try out <em>mycheckpoint</em>. It’s a different kind of monitoring    solution. Simple monitoring (charting) is immediate. For more  interesting results you will need basic SQL skills, and in return you’ll  get a lot   of power under your hands.</p>
+<ul>
+<li>Download mycheckpoint <a href="https://code.google.com/p/mycheckpoint/">here</a></li>
+<li>Visit the project’s <a href="../../forge/mycheckpoint">homepage</a></li>
+<li>Browse the <a href="../../forge/mycheckpoint/documentation">documentation</a></li>
+<li>Report <a href="https://code.google.com/p/mycheckpoint/issues/list">bugs</a></li>
+</ul>
+<p><em>mycheckpoint</em> is released under the <a href="http://www.opensource.org/licenses/bsd-license.php">New BSD  License</a>.</p>
+<p>Umm, I'll repeat this last one: <em>mycheckpoint</em> is released under the <a href="http://www.opensource.org/licenses/bsd-license.php">New BSD  License</a>. Still, and will continue to be. Thanks for the <a href="http://code.openark.org/blog/mysql/openark-kit-facebook-online-schema-change-and-thoughts-on-open-source-licenses#comments">good advice</a> by Lenz, Domas and others.</p>

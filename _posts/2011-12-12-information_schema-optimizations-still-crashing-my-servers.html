@@ -1,0 +1,52 @@
+---
+title: 'INFORMATION_SCHEMA Optimizations: still crashing my servers'
+date: 2011-12-12 09:35:19.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- INFORMATION_SCHEMA
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: mysql@myname.nl
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><strong>[Update</strong>: need to take more breaks: now<strong> NOT</strong> crashing my servers! See clarifications below<strong>]</strong></p>
+<p><a href="http://dev.mysql.com/doc/refman/5.1/en/information-schema-optimization.html">INFORMATION_SCHEMA Optimizations</a> are meant to make your <strong>INFORMATION_SCHEMA</strong> queries lighter and safer.</p>
+<p>For example, if you're going to query the <strong>COLUMNS</strong> table for just the columns of a single table, then the following:</p>
+<blockquote>
+<pre>SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='sakila' AND TABLE_NAME='rental'</pre>
+</blockquote>
+<p>makes for an optimization: specifying a literal on <strong>TABLE_SCHEMA</strong> avoid scanning the directories of other schemata. Specifying a literal on <strong>TABLE_NAME</strong> avoids checking up on other tables. So it's a one-schema-one-table read operation, as opposed to <em>"first read every single column from all and any single schema and table, then return only those I'm interested in"</em>.</p>
+<p>Here's the execution plan for the above query:</p>
+<blockquote>
+<pre>*************************** 1. row ***************************
+           id: 1
+  select_type: SIMPLE
+        table: COLUMNS
+         type: ALL
+possible_keys: NULL
+          key: TABLE_SCHEMA,TABLE_NAME
+      key_len: NULL
+          ref: NULL
+         rows: NULL
+        Extra: Using where; Open_frm_only; Scanned 0 databases</pre>
+</blockquote>
+<p>What I tried to do is to read the entire <strong>COLUMNS</strong> table, one schema at a time, one table at a time. I'm good with this taking longer time.</p>
+<p>I have a production system on which reads from <strong>COLUMNS</strong> <em>consistently crash the servers</em>. Well, one read at a time can't do harm, right?<!--more--></p>
+<p><del>Unfortunately, as the title of this posts reveals, even sequential read of <strong>COLUMNS</strong> using <strong>INFORMATION_SCHEMA</strong> optimization does not help: a minute into the process and the client lost connection. The server crashed.</del></p>
+<p><del>I was expecting that table locks would be released, buffers released etc. One at a time, there wouldn't be a congestion of locks, reads, table cache suffocation etc.</del></p>
+<p><del>Was actually having high hopes for this to succeed. I have to find a way in which <strong>INFORMATION_SCHEMA</strong> tables are not dangerous.</del></p>
+<p>A few hours later, and I have both conclusions and achievements.</p>
+<p>There are indeed memory issues with querying from <strong>INFORMATION_SCHEMA</strong> tables. I've found that <strong>VARCHAR(64)</strong> columns can consume <strong>64K</strong> each: I'm reading from large tables of more than <strong>1,000</strong> columns each, while monitoring MySQL's memory consumption. By dividing the increase in memory by the number of rows resulting from a query I sent, and which was for one single columns, I got an almost exact <strong>64K</strong> value per row.</p>
+<p>So a query on <strong>INFORMATION_SCHEMA</strong> consumes much more memory than it should. The good news is that this memory is released once the query terminates. So there is no leak into the session memory.</p>
+<p>This is combined with a <em>mistake of mine</em> in the way I iterated the tables, such that the problem was amplified: I happened to query much more than I needed, and so got my query's memory bloated. That is to say, I used the <strong>INFORMATION_SCHEMA</strong> optimizations only partly right, and so got only part of the savings it could offer me.</p>
+<p>With better pinpointing I'm now actually able to read from <strong>COLUMNS,</strong> without crashing my servers, <em>consistently</em>.</p>
+<p>I will further look into the <strong>64K</strong> issue. That in itself still drains a lot of memory: on my <a href="http://code.openark.org/forge/mycheckpoint">mycheckpoint</a> schema tables a singe table read means &gt; <strong>64MB</strong> of query memory down the drain.</p>

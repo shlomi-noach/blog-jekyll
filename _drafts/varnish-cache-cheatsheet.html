@@ -1,0 +1,38 @@
+---
+layout: post
+title: Varnish cache cheatsheet
+date: 
+type: post
+published: false
+status: draft
+categories:
+- Linux
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>See top requested URLs:</p>
+<blockquote>
+<pre>varnishtop -i RxURL</pre>
+</blockquote>
+<p>See top backend URLs:</p>
+<blockquote>
+<pre>varnishtop -i txurl</pre>
+</blockquote>
+<p>111</p>
+<p>Purge entire cache:</p>
+<blockquote>
+<pre>varnishadm -S /etc/varnish/secret -T 127.0.0.1:6082 "purge req.url ~ .*"</pre>
+</blockquote>
+<p>123</p>
+<p>Count requests for a specific URL (limited by number of total requests):</p>
+<blockquote>
+<pre>time varnishlog -c -i RxURL -I "path/to/page.php" -k 100000 | wc -l</pre>
+</blockquote>
+<p>123</p>

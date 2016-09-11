@@ -1,0 +1,21 @@
+---
+layout: post
+title: Compressing tables with InnoDB Plugin
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>key block size: 32 (nothing), 16, 8, 4, 1</p>
+<p>say key_block_size=4. What's faster? normal compression, or alter+drop all keys but primary, then add keys?</p>

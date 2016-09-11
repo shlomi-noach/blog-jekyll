@@ -1,0 +1,28 @@
+---
+layout: post
+title: QueryScript code samples
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>call run("foreach($s:schema)try{select $s,count(*) from :${s}.tags_archive}catch pass");</p>
+<ul>
+<li>copy all tables (structure only) to new schema:</li>
+</ul>
+<p>call run("foreach ($t, $s: table in bastards_motors_il) create table bastards_meta_il.:$t like bastards_motors_il.:$t");</p>
+<ul>
+<li>copy and fill all tables:</li>
+</ul>
+<p>call run("foreach ($t, $s: table in bastards_motors_il) {create table bastards_meta_il.:$t like bastards_motors_il.:$t; insert into bastards_meta_il.:$t select * from bastards_motors_il.:$t; }");</p>

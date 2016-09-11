@@ -1,0 +1,68 @@
+---
+title: Orchestrator 1.0.4 released
+date: 2014-07-29 13:42:06.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Open Source
+- orchestrator
+- Replication
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+  _oembed_5598f00507321550d86be59b4d42ef5c: '{{unknown}}'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Outbrain's <em>orchestrator</em> Version <strong>1.0.4</strong> <a href="https://github.com/outbrain/orchestrator/releases/tag/v1.0.4">is released</a>.</p>
+<blockquote><p>Quick links: <strong><a href="https://github.com/outbrain/orchestrator/wiki/Orchestrator-Manual">Orchestrator Manual</a></strong>, <strong><a href="https://github.com/outbrain/orchestrator/wiki/FAQ">FAQ</a></strong>, <strong><a href="https://github.com/outbrain/orchestrator/releases">Downloads</a></strong></p></blockquote>
+<p>What's new?</p>
+<h4>Co-masters</h4>
+<p>orchestrator now does a much better visualization of Master-Master replication:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/07/orchestrator-co-masters.png"><img class="alignnone size-full wp-image-6946" src="{{ site.baseurl }}/assets/orchestrator-co-masters.png" alt="orchestrator-co-masters" width="783" height="357" /></a></p></blockquote>
+<p><!--more--></p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/07/orchestrator-co-masters-j.png"><img class="alignnone size-full wp-image-6947" src="{{ site.baseurl }}/assets/orchestrator-co-masters-j.png" alt="orchestrator-co-masters-j" width="776" height="505" /></a></p></blockquote>
+<p>&nbsp;</p>
+<p>The work on making the visualization more appealing also resulted in making a better distinction between the visual tree topology and the replication topology. This in turn also fixes the ruleset for moving slaves in a co-master topology, and lays the ground for future work on co-masters (i.e. Galera; unscheduled).</p>
+<h4>resolve</h4>
+<p>Had a few reports on <em>orchestrator</em> not being able to connect to some topology instances. It seems like the problem is with name resolving. To prove/disprove this, the <strong>resolve</strong> command or <strong>resolve</strong> API call now allows checking for instance connectivity. Orchestrator will first test whether the CNAME at all resolves, then try to dial the TCP address (host + port) to see whether it can make a connection.</p>
+<p>A sample API call would be:</p>
+<blockquote>
+<pre>http://127.0.0.1:3000/api/resolve/myhost.mydomain/3306</pre>
+</blockquote>
+<p>A command line invocation would be:</p>
+<blockquote>
+<pre>orchestrator -c resolve -i myhost.mydomain:3306</pre>
+</blockquote>
+<h4>chef cookbook</h4>
+<p>Silvia Botros of <em>SendGrid</em> has published a generic cookbook for deploying <em>orchestrator</em> via chef: <a href="https://github.com/sendgrid-ops/chef-orchestrator">https://github.com/sendgrid-ops/chef-orchestrator</a></p>
+<p>Thanks, Silvia!</p>
+<h4>Topology Annonymizer Cheatsheet</h4>
+<p>If you want to share your topology graph, but do not wish to expose your host names, open your cluster page and execute the following in your browser's JavaScript console (jQuery is already included by <em>orchestrator)</em>:</p>
+<blockquote>
+<pre>var _=function() {
+  var counter = 0;  
+  var port = 3306;
+  jQuery("h3.popover-title").each(function() {
+    jQuery(this).html("instance-"+(counter++)+":"+port)
+  });
+}();
+
+</pre>
+</blockquote>
+<p>This results in a modified topology such as the one presented above ("instance-11", "instance-12" and so on).</p>
+<h4>Other enhancements since 1.0:</h4>
+<ul>
+<li>Proper error log entry when backend database is not found; also terminates execution.</li>
+<li>Added <strong>--stack</strong> command line. Combined with <strong>--debug</strong> this prints the stack trace upon error.</li>
+<li>When a known instance is not found (gone from the radar), now showing time since last seen instead of irrelevant last known slave lag.</li>
+<li>Various UI enhancements/fixes</li>
+</ul>
+<p><em>Orchestrator</em> is released as open source under the <a href="https://raw.githubusercontent.com/outbrain/orchestrator/master/LICENSE">Apache 2.0 license</a> and is available at: <a href="https://github.com/outbrain/orchestrator">https://github.com/outbrain/orchestrator</a></p>

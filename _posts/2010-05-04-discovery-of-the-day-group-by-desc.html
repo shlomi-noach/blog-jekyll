@@ -1,0 +1,31 @@
+---
+title: 'Discovery of the day: GROUP BY ... DESC'
+date: 2010-05-04 11:38:38.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- SQL
+- Syntax
+meta:
+  _edit_last: '2'
+  _syntaxhighlighter_encoded: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I happened on a query where, by mistake, an</p>
+<p>[sql]<br />
+SELECT ... ORDER BY x DESC LIMIT 1<br />
+[/sql]</p>
+<p>was written as</p>
+<p>[sql]<br />
+SELECT ... GROUP BY x DESC LIMIT 1<br />
+[/sql]</p>
+<p>And it took me by surprise to realize <strong>GROUP BY x DESC</strong> is a valid statement. I looked it up: yep! It's <a href="http://dev.mysql.com/doc/refman/5.0/en/group-by-modifiers.html">documented</a>.</p>
+<p>In MySQL, <strong>GROUP BY</strong> results are sorted according to the group statement. You can override this by adding <strong>ORDER BY NULL</strong> (see <a href="http://code.openark.org/blog/mysql/less-known-sql-syntax-and-functions-in-mysql">past post</a>). I wasn't aware you can actually control the sort order.</p>

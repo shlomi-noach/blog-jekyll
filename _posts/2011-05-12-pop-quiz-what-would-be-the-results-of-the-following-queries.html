@@ -1,0 +1,80 @@
+---
+title: 'Pop quiz: what would be the results of the following queries?'
+date: 2011-05-12 10:53:11.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- SQL
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Here's a quiz for you. The real query I witnessed was very complicated. I've simplified it, but kept a confusing alias. Can you answer the following three questions? Are they even valid?</p>
+<p>Given the following <strong>countries</strong> table data:<!--more--></p>
+<blockquote>
+<pre>+----+------+--------------------------+---------------+------------+
+| id | Code | Name                     | Continent     | Population |
++----+------+--------------------------+---------------+------------+
+|  1 | ANT  | Netherlands Antilles     | North America |     217000 |
+|  2 | MNP  | Northern Mariana Islands | Oceania       |      78000 |
+|  3 | NAM  | Namibia                  | Africa        |    1726000 |
+|  4 | NCL  | New Caledonia            | Oceania       |     214000 |
+|  5 | NER  | Niger                    | Africa        |   10730000 |
+|  6 | NFK  | Norfolk Island           | Oceania       |       2000 |
+|  7 | NGA  | Nigeria                  | Africa        |  111506000 |
+|  8 | NIC  | Nicaragua                | North America |    5074000 |
+|  9 | NIU  | Niue                     | Oceania       |       2000 |
+| 10 | NLD  | Netherlands              | Europe        |   15864000 |
+| 11 | NOR  | Norway                   | Europe        |    4478500 |
+| 12 | NPL  | Nepal                    | Asia          |   23930000 |
+| 13 | NRU  | Nauru                    | Oceania       |      12000 |
+| 14 | NZL  | New Zealand              | Oceania       |    3862000 |
+| 15 | PRK  | North Korea              | Asia          |   24039000 |
++----+------+--------------------------+---------------+------------+</pre>
+</blockquote>
+<h4>Question #1</h4>
+<p>What is the result of:</p>
+<blockquote>
+<pre>SELECT
+  id,
+  Name AS 'n',
+  Continent AS 'c'
+FROM
+  countries
+ORDER BY
+  c
+;</pre>
+</blockquote>
+<h4>Question #2</h4>
+<p>What is the result of:</p>
+<blockquote>
+<pre>SELECT
+  MIN(Name) AS 'n',
+  Continent AS 'c'
+FROM
+  countries
+GROUP BY
+  c
+;</pre>
+</blockquote>
+<h4>Question #3</h4>
+<p>What is the result of:</p>
+<blockquote>
+<pre>SELECT
+  MIN(Name) AS 'n',
+  Continent AS 'c'
+FROM
+  countries
+GROUP BY
+  'c'
+;</pre>
+</blockquote>
+<p>Answers and explanations to be followed shortly in a separate post.</p>

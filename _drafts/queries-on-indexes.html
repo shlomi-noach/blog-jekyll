@@ -1,0 +1,31 @@
+---
+layout: post
+title: queries on indexes
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>a. write these queries: 1...2..3..4..5..6..<br />
+b. how would you improve indexes for these queries?<br />
+solutions:</p>
+<p>1. SELECT Country.name, City.name FROM Country JOIN City ON (Country.CODE = City.CountryCode);</p>
+<p>2. SELECT Country.name, City.name FROM Country JOIN City ON (Country.Capital = City.ID);</p>
+<p>3. SELECT Country.Name FROM Country JOIN CountryLanguage on (CountryLanguage.CountryCode = Country.Code) WHERE Language='English';</p>
+<p>4. SELECT Country.name, City.name FROM Country JOIN City ON (Country.Capital = City.ID)<br />
+WHERE City.Population &gt; 1000000;</p>
+<p>5. SELECT Country.name, City.name FROM Country JOIN City ON (Country.CODE = City.CountryCode)<br />
+WHERE City.Population &gt; 1000000;</p>
+<p>6. SELECT Country.name, City.name FROM Country JOIN City ON (Country.Capital = City.ID)<br />
+WHERE City.Population &gt; 1000000 AND Continent='Europe';</p>

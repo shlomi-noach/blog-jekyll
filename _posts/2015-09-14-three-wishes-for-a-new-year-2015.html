@@ -1,0 +1,32 @@
+---
+title: Three wishes for a new year
+date: 2015-09-14 08:43:20.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags: []
+meta:
+  _sg_subscribe-to-comments: art@dbart.net
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<div>
+<p>Another new year by Jewish calendar. What do I wish for the following year?</p>
+<ol>
+<li>World peace</li>
+<li>Good health to all</li>
+<li>Decent, operations friendly built in online table refactoring</li>
+</ol>
+<p>The existing online ALTER TABLE solution is still not there. It does not take into consideration the load on the server. In replication stream it's serialized just as any other statement. It's not easy to stop/revert in case of problem.</p>
+<p>The existing online-schema-change scripts are still based on <a href="http://code.openark.org/blog/mysql/online-alter-table-now-available-in-openark-kit">my 6-year old original solution</a>, I'm proud to say, but the technology used, i.e. triggers, hasn't really evolved since then. We are still fighting deadlocks induced by the use of triggers and/or concurrent copying of data. There are still limitations on use of foreign keys.</p>
+<p>None of my wishes in previous years [<a href="http://code.openark.org/blog/mysql/three-wishes-for-a-new-year">2010</a>], [<a href="http://code.openark.org/blog/mysql/three-wishes-for-a-new-year-2">2011</a>], [<a href="http://code.openark.org/blog/mysql/three-wishes-for-a-new-year-201">2012</a>], [<a href="http://code.openark.org/blog/mysql/three-wished-for-a-new-year-2013">2013</a>], <a href="http://code.openark.org/blog/mysql/three-wishes-for-a-new-year-3">[2014]</a> came true (and mostly gone worse). I'm still willing to settle for two out of three.</p>
+</div>
+<div class="sharedaddy sd-sharing-enabled"></div>

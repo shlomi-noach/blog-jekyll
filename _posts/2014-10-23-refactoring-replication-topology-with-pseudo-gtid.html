@@ -1,0 +1,74 @@
+---
+title: Refactoring replication topology with Pseudo GTID
+date: 2014-10-23 12:37:17.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- GTID
+- orchestrator
+- Pseudo GTID
+- Replication
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This post describes in detail the method of using Pseudo GTID to achieve unplanned replication topology changes, i.e. connecting two arbitrary slaves, or recovering from a master failure even as all its slaves are hanging in different positions.</p>
+<p>Please read <a href="http://code.openark.org/blog/mysql/pseudo-gtid">Pseudo GTID</a> and <a href="http://code.openark.org/blog/mysql/pseudo-gtid-row-based-replication">Pseudo GTID, RBR</a> as introduction.</p>
+<p>Consider the following case: the master dies unexpectedly, and its three slaves are all hanging, not necessarily at same binary log file/position (network broke down while some slaves managed to salvage more entries into their relay logs than others)</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/10/orchestrator-failed-master.jpeg"><img class="alignnone size-full wp-image-7059" src="{{ site.baseurl }}/assets/orchestrator-failed-master.jpeg" alt="orchestrator-failed-master" width="801" height="365" /></a></p></blockquote>
+<p>(Did you notice the <strong>"Candidate for master"</strong> message? To be discussed shortly)</p>
+<h4>GTID</h4>
+<p>With GTID each transaction (and entry in the binary log) is associated with a unique mark -- the Global Transaction ID. Just pick the slave with the most advanced GTID to be the next master, and just <strong>CHANGE MASTER TO MASTER_HOST='chosen_slave'</strong> on the other slaves, and everything magically works. A slave knows which GTID it has already processed, and can look that entry on its master's binary logs, resuming replication on the one that follows.</p>
+<p>How does that work? The master's binary logs are searched for that GTID entry. I'm not sure how brute-force this is, since I'm aware of a subtlety which requires brute-force scan of all binary logs; I don't actually know if it's always like that.</p>
+<h4>Pseudo GTID</h4>
+<p>We can mimick that above, but our solution can't be as fine grained. With the injection of Pseudo GTID we mark the binary log for unique entries. But instead of having a unique identifier for every entry, we have a unique identifier for every second, 10 seconds, or what have you, with otherwise normal, non-unique entries in between our Pseudo GTID entries.</p>
+<h4>Recognizing which slave is more up to date</h4>
+<p>Given two slaves, which is more up to date?</p>
+<ul>
+<li>If both replicate(d) from same master, a <strong>SHOW SLAVE STATUS</strong> comparison answers (safe method: wait till SQL thread catches up with broken IO thread, compare <strong>relay_master_log_file</strong>, <strong>exec_master_log_pos</strong> on both machines). This is the method by which the above "Candidate for master" message is produced.</li>
+<li>If one is/was descendent of the other, then obviously it is less advanced or equals its ancestor.</li>
+<li>Otherwise we're unsure - still solvable via bi-directional trial &amp; error, as explained later on.</li>
+</ul>
+<p>For now, let's assume we know which slave is more up to date (has received and executed more relay logs). Let's call it <strong>S1</strong>, whereas the less up-to-date will be <strong>S2</strong>. This will make our discussion simpler.<!--more--></p>
+<h4>Prerequisites</h4>
+<ul>
+<li>We require a Pseudo GTID in place: a periodic injection of a known-to-be-unique query, and which we know how to intercept</li>
+<li>We require <strong>log_slave_updates</strong> on all slaves. We will need to parse the binary logs on slaves. I have little trust in the availability of relay logs: these are flushed, rotated and auto-erased all too quickly. The proposed solution does not require any daemon running on the MySQL servers themselves. There will be nothing to back up the relay logs, so I can't trust these to exist. Binary logs, on the other hand, have expiry period in days, and so I can trust them to exist for a duration of a few minutes.</li>
+<li>Normal replication. Not multi threaded. Not multi-source.</li>
+</ul>
+<h4>The process of rematching slaves</h4>
+<p><strong>S1</strong> is more up to date, hence we want to make <strong>S2</strong> a slave of <strong>S1</strong>. We expect the statements/entries found in <strong>S2</strong>'s binary logs to exist in <strong>S1</strong>, in the same order, but somewhere back in the past, padded by additional entries (zero or more) that are not found in <strong>S2</strong>. Steps are:</p>
+<ul>
+<li>Find latest Pseudo-GTID entry in <strong>S2</strong>'s logs. This can be done by iterating <strong>S2</strong>'s binary logs newest to oldest. The first (time DESC) binary log where such entry is found is to be searched for the last entry (latest). Keep record of the binlog <strong>file2:pos2</strong> coordinates.</li>
+<li>Take note of the exact entry made in the above. This is the unique value.</li>
+<li>Search said unique value in <strong>S1</strong>'s binary logs. Since it is unique, your method of search is arbirtary, you just need to find it. Brute-force wise you start looking at newest binary log moving back in time. Not found? Unlikely, since this means the lag diff between <strong>S1</strong> and <strong>S2</strong> is as long as the binlog expiry. We will be handling with failures and with immediate actions; we can expect slave lags in the seconds or in the minutes - we don't even consider the possibility where the entry is not found.</li>
+<li>Take note of the coordinates <strong>file1:pos1</strong> in <strong>S1</strong> where we found the unique value.</li>
+<li>We now iterate <strong>S2</strong>'s binary logs starting with the Pseudo GTID <strong>file2:pos2</strong>. We expect to find each entry in <strong>S1</strong>'s binary logs, successively, starting <strong>file1:pos1</strong>. We verify the entries in both servers are identical. Exceptions above could be:
+<ul>
+<li>Meta-entries (start-of-log, end-of-log, shutdown), in which case we skip to the next entry (this is done in both <strong>S1</strong> and <strong>S2</strong>)</li>
+<li>Local statements executed directly on either <strong>S1</strong> or <strong>S2</strong>, such as <strong>ANALYZE TABLE</strong> or whatever, which make no impact on data -- we may skip these</li>
+<li>Local, evil statements executed directly on the slaves,which make for data impact (<strong>INSERT</strong>, <strong>DELETE</strong>, ...). We choose to fail the operation in such case</li>
+</ul>
+</li>
+<li>After all entries in <strong>S2</strong> (matched by entries in <strong>S1</strong>) are iterated, our <strong>S1</strong> "cursor" now looks at the first statement that never made it to <strong>S2</strong>. This is <strong>file_win:pos_win</strong>, into which we will point <strong>S2</strong>.</li>
+<li>Or, we might find that upon iterating all entries in <strong>S2</strong> we have exactly reached the end of binlog entries for S1: this means both S1 and S2 are actually in identical state. We point <strong>S2</strong> into <strong>S1</strong>'s next-binlog-position.
+<ul>
+<li>This is in fact no different than the previous case, but of particular interest.</li>
+</ul>
+</li>
+<li>Or, we might run out of entries in <strong>S1</strong>. No, we can't, because our assumption was that <strong>S1</strong> is more advanced than (or equally advanced as) <strong>S2</strong>. But this answers the question: "<strong>what if didn't know in advance who's more advanced?</strong>" (no pun intended). In such case we conclude <strong>S2</strong> is actually more advanced than <strong>S1</strong> and we can try the other way around.</li>
+</ul>
+<p>That last bullet is of importance: if you have two slaves whose "family connection" is complex, you can still match one below the other; you may try one way and fail, then try the other way around and succeed.</p>
+<p>Comparison of the events following the Pseudo-GTID is a good way of sanity checking (some meta-stuff should be ignored, like transaction IDs, table IDs, these can vary across servers), and builds up confidence in the correctness of the operation.</p>
+<p>The codebase is actually complete and pushed; I'll release a BETA version or <a href="https://github.com/outbrain/orchestrator">orchestrator</a> next week, that supports Pseudo GTID. Let me tell you, doing this kind of crazy stuff with visual feedback (of course command line is available) is very very cool.</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>

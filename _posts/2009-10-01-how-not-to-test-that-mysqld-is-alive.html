@@ -1,0 +1,64 @@
+---
+title: How NOT to test that mysqld is alive
+date: 2009-10-01 09:17:27.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Analysis
+- Monitoring
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I had a call from a new customer last week. They had issues with their MySQL server. Apparently, it was repeatingly crashing, every few hours. To have their production system kept alive, they used a script to periodically see if MySQL was still alive, and if not - start it.</p>
+<p>I was first thinking in directions of old installations; wrong memory allocations (too little memory for large content; to large memory allocation for weak machine). When I reached the customer's premises, I quickly reviewed general settings, while explaining some basic configuration guidelines. There were peculiarities (e.g. <strong>query_cache_limit</strong> being larger than <strong>query_cache_size</strong>), but nothing to obviously suggest a reason for crash.</p>
+<p>I then observed the error log. Took some time to find it, since the <strong>log_error</strong> parameter appeared twice in the <strong>my.cnf</strong> file; first one appearing at the very beginning, the second (overwriting the first) was far into the file.</p>
+<p>Sure enough, there were a lot of startup messages. And... shutdown messages. In fact, the log looked something like:<!--more--></p>
+<blockquote>
+<pre>090923 17:38:15  mysqld started
+090923 17:38:16  InnoDB: Started; log sequence number 0 3707779031
+090923 17:38:16 [Note] /usr/local/mysql/bin/mysqld: ready for connections.
+Version: '5.0.77-log'  socket: '/tmp/mysql50.sock'  port: 3306  MySQL Community Server (GPL)
+090923 19:53:41 [Note] /usr/local/mysql/bin/mysqld: Normal shutdown
+090923 19:53:56  mysqld started
+090923 19:53:56  InnoDB: Started; log sequence number 0 5288400927
+090923 19:53:56 [Note] /usr/local/mysql/bin/mysqld: ready for connections.
+Version: '5.0.77-log'  socket: '/tmp/mysql50.sock'  port: 3306  MySQL Community Server (GPL)
+090929 22:38:48 [Note] /usr/local/mysql/bin/mysqld: Normal shutdown
+090923 22:38:58  mysqld started
+090923 22:38:58  InnoDB: Started; log sequence number 0 7102832776
+090923 22:38:58 [Note] /usr/local/mysql/bin/mysqld: ready for connections.
+Version: '5.0.77-log'  socket: '/tmp/mysql50.sock'  port: 3306  MySQL Community Server (GPL)
+...</pre>
+</blockquote>
+<p>(The above is just a sample, not the original file).</p>
+<p>Well, the log says there's a lot of <em>normal</em> shutdowns.</p>
+<h4>Looking at the script</h4>
+<p>Next it was time to look at the script which was supposed to verify MySQL was up and running - else wise start it. And it went something like this:</p>
+<blockquote>
+<pre><strong>while</strong> [ 1 ];
+  <strong>if</strong> [`ps aux | grep mysqld | wc -l` <strong>-lt</strong> 2]
+    <strong>then</strong> /etc/init.d/mysql restart
+  ...
+  sleep 60</pre>
+</blockquote>
+<p>The script was looking for all processes, then <strong>grep</strong>ping for <strong>mysqld</strong>, counting number of lines in output. It expected 2 lines: one for the <strong>mysqld</strong> process, one for the <strong>grep mysqld</strong> process itself.</p>
+<p>If you don't know what's wrong with this, a very brief explanation about how pipelines work in unix work it at place:</p>
+<p>Pipelined processes do not execute one after another, or one before another. They are all executed <em>at once</em>. So, "<strong>ps aux | grep mysqld | wc -l"</strong> immediately spawns <strong>ps</strong>, <strong>grep</strong>, <strong>wc</strong>, then sets the standard output of one to the standard input of the other (most simplified description I could think of).</p>
+<p>It is likely that <strong>grep</strong> will outrun <strong>ps</strong> in the race for starting up. So <strong>grep</strong> is started, already waiting for input from <strong>ps</strong>, which then notices both <strong>mysqld</strong> is alive, but also <strong>grep mysqld</strong>, lists them both along with other processes, to be filtered by <strong>grep</strong>, to be counted by <strong>wc </strong>(returning two lines count).</p>
+<p>But this is just because <strong>ps</strong> is heavier than <strong>grep</strong>. It doesn't <em>have</em> to be like that.</p>
+<h4>The less common scenario</h4>
+<p>Every once and again, <strong>ps</strong> outruns <strong>grep</strong> in the race for starting up. It would list the active processes, and no "grep" would appear in the listing. <strong>grep</strong> would then run, filtering the result of <strong>ps</strong>, then to be counted by <strong>wc</strong> -- oh, there is only one line now! The script assumes this means mysqld is down (since it assumed <strong>grep</strong> is always there), and <em>restarts mysqld</em>.</p>
+<p>So, the script which was supposed to take care of MySQL crashes, was actually causing them (though no crash occurred).</p>
+<h4>Better ways to test that MySQL is alive</h4>
+<p>Look for the <em>pid</em> file. This is the standard (that's how the mysql service works). Look for the unix socket file. Both require that you parse the my.cnf file to learn where these files are.</p>
+<p>If you're reluctant to read the configuration files, other options are at hand. OK, look for the process; but use <strong>pgrep mysqld</strong>. No need to list all processes, then <strong>grep</strong> them.</p>
+<p>And best way, that will set your mind at ease even if you're worried that "mysql is running but not responding; it is stuck": connect to MySQL and issue <strong>SELECT 1</strong>, <strong>SELECT NOW()</strong>, <strong>SELECT <em>something</em></strong>. This would be the ultimate test that MySQL is up, listening, responding and valid.</p>

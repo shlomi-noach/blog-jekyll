@@ -1,0 +1,35 @@
+---
+title: To not yum or to not apt-get?
+date: 2010-02-16 13:44:25.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Configuration
+- Installation
+- Linux
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: coolghoul@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I've <a href="http://code.openark.org/blog/mysql/manually-installing-multiple-mysql-instances-on-linux-howto">written</a> shortly on this before. I like <strong>yum</strong>; I love <strong>apt-get</strong>; I prefer <em>not</em> to use them for MySQL installations. I consider a binary tarball to be the best MySQL installation format (source installations being a different case altogether).</p>
+<h4>Why?</h4>
+<p>I use <strong>yum</strong> and <strong>apt-get</strong> whenever I can and for almost all needs (sometimes preferring CPAN for Perl installations). But on a MySQL machine, I avoid doing so. The reason is either dependency hell or dependency mismatch.</p>
+<p>Package managers are supposed to solve the dependency hell issue. But package managers will rarely have an up to date MySQL version.</p>
+<p>I've had several experiences where a simple <strong>yum</strong> installation re-installed the MySQL version. I've had customers calling me up when, having installed something with <strong>yum</strong>, MySQL would not work anymore.<!--more--></p>
+<p><strong>yum install package-which-depends-on-mysql-server</strong> will install MySQL server on your system if it hasn't been installed with <strong>yum</strong>. Are you on CentOS <strong>5.0</strong>? You'll get MySQL <strong>5.0.22</strong>. Oh, did you already have a <strong>RPM</strong> installation for MySQL <strong>5.0.81</strong>? Sorry - it's just been <em>downgraded</em>, plus <em>it won't work</em> anymore since the error messages file has been changed since then.</p>
+<p>Don't press '<strong>Y</strong>' too soon!</p>
+<p>Things are slightly better with <strong>apt-get</strong>. I've encountered less situations where <strong>mysql-server</strong> was on the dependency list. Many times it's just the <strong>libmysqlclient</strong> package or the <strong>mysql-common</strong> one.</p>
+<p>But wait! Did you install <strong>mysql-common</strong>? Bonus! You get the elusive <strong>/etc/mysql/my.cnf</strong> file created, and there goes your server configuration. Future spawns of the MySQL server / clients will read from the wrong configuration file, and will probably fail to load.</p>
+<p>Not to mention neither will help you out with multiple instances installation.</p>
+<h4>My argument</h4>
+<p>A sys admin recently argued with me that it was wrong of me to have the entire machine set up with <strong>yum</strong>, but have MySQL installed with binary tarball. He argued that it broke the entire setup. I expressed my opinion: <em>on a MySQL dedicated server, MySQL gets to be prioritized. It's special</em>. It is the reason for the existence of the machine. I would imagine that same would hold for Apache on an Apache dedicated machine, for Sendmail on a Sendmail dedicated machine, etc. As a DBA, I want to have best control of the MySQL installation; I want to be able to upgrade minor versions quickly: I often find newer versions to solve bugs I was concerned with; I want to be able to install multiple instances; I want to be able to downgrade without having to remove and uninstall the previous version.</p>
+<p>I want to have control. World domination aside, that is.</p>

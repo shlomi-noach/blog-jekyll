@@ -1,0 +1,31 @@
+---
+layout: post
+title: On trusting replica data
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags:
+- data integrity
+- Replication
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Do you trust replica data? Should you? There's a few surprising considerations to trusting replica data.</p>
+<h3>Is replica in sync?</h3>
+<p>We commonly agree that the move from Statement Based Replication (SBR) to Row Based Replication (RBR) reduces or eliminates data drift. With SBR there are various statements that can cause data drift between master. Common example is <strong>DELETE FROM my_table WHERE something LIMIT 10</strong>, where the order of iterated (hence DELETEd) rows is non-deterministic (should provide a deterministic <strong>ORDER BY</strong>).</p>
+<p>Tools like <a href="https://www.percona.com/doc/percona-toolkit/2.2/pt-table-checksum.html">pt-table-checksum</a> or <a href="https://www.percona.com/doc/percona-toolkit/2.2/pt-table-sync.html">pt-table-sync</a> assist us in finding or fixing data drift problems.</p>
+<p>What is the source of truth?</p>
+<p>Suppose we suspect replica is inconsistent with the master. What is then the source of truth?</p>
+<p>We like to think the master is the source of truth. It is the one telling us "OK" on transaction commit.</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>

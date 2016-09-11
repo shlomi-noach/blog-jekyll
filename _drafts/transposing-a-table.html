@@ -1,0 +1,39 @@
+---
+layout: post
+title: Transposing a table
+date: 
+type: post
+published: false
+status: draft
+categories: []
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>123</p>
+<pre>SELECT CONCAT_WS('|', ID, Name, CountryCode, District, Population) AS concatenated_columns FROM city;
+
+SELECT
+  GROUP_CONCAT(SUBSTRING_INDEX(SUBSTRING_INDEX(concatenated_columns, '|', tinyint_asc.value), '|', -1) ORDER BY id SEPARATOR '|') AS concatenated_columns
+FROM
+  tinyint_asc
+INNER JOIN (
+  SELECT
+    id,
+    CONCAT_WS('|', ID, Name, CountryCode, District, Population) AS concatenated_columns
+  FROM
+    city
+  ) sel_graph
+WHERE
+  tinyint_asc.value BETWEEN 1 AND (CHAR_LENGTH(concatenated_columns)-CHAR_LENGTH(REPLACE(concatenated_columns, '|', ''))+1)
+GROUP BY
+  tinyint_asc.value
+ORDER BY
+  tinyint_asc.value DESC;</pre>
+<p>123</p>

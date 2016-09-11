@@ -1,0 +1,73 @@
+---
+title: Reading RBR binary logs with pt-query-digest
+date: 2015-01-26 17:50:46.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Analysis
+- Percona Toolkit
+- python
+- Replication
+- scripts
+meta:
+  _edit_last: '2'
+  _oembed_76126f57627bf323534c7eb41321b7e2: '{{unknown}}'
+  _syntaxhighlighter_encoded: '1'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>For purposes of auditing anything that goes on our servers we're looking to parse the binary logs of all servers (masters), as with "<a href="http://code.openark.org/blog/mysql/anemomaster-dml-visibility-your-must-do-for-tomorrow">Anemomaster</a>". With Row Based Replication this is problematic since <strong>pt-query-digest</strong> <a href="https://bugs.launchpad.net/percona-toolkit/+bug/1377887">does not support parsing RBR binary logs</a> (true for <strong>2.2.12</strong>, latest at this time).</p>
+<p>I've written a simple script that translates RBR logs to SBR-like logs, with a little bit of cheating. My interest is that <strong>pt-query-digest</strong> is able to capture and count the queries, nothing else. By doing some minimal text manipulation on the binary log I'm able to now feed it to <strong>pt-query-digest</strong> which seems to be happy.</p>
+<p>The script of course does not parse the binary log directly; furthermore, it requires the binary log to be extracted via:</p>
+<blockquote>
+<p>[code lang="bash"]mysqlbinlog --verbose --base64-output=DECODE-ROWS your-mysql-binlog-filemame.000001[/code]</p>
+</blockquote>
+<p>The above adds the interpretation of the RBR entires in the form of (unconventional) statements, commented, and strips out the cryptic RBR text. All that is left is to do a little manipulation on entry headers and uncomment the interpreted queries.</p>
+<p>The script can be found in <a href="https://gist.github.com/shlomi-noach/cc243fd690403e7617e3">my gist repositories</a>. Current version is as follows:<!--more--></p>
+<blockquote>
+<p>[code lang="python"]<br />
+#!/usr/bin/python<br />
+#<br />
+# Convert a Row-Based-Replication binary log to Statement-Based-Replication format, cheating a little.<br />
+# This script exists since Percona Toolkit's pt-query-digest cannot digest RBR format. The script<br />
+# generates enough for it to work with.<br />
+# Expecting standard input<br />
+# Expected input is the output of &quot;mysqlbinlog --verbose --base64-output=DECODE-ROWS &lt;binlog_file_name&gt;&quot;<br />
+# For example:<br />
+# $ mysqlbinlog --verbose --base64-output=DECODE-ROWS mysql-bin.000006 | python binlog-rbr-to-sbr.py | pt-query-digest --type=binlog --order-by Query_time:cnt --group-by fingerprint<br />
+#</p>
+<p>import fileinput</p>
+<p>def convert_rbr_to_pseudo_sbr():<br />
+    inside_rbr_statement = False<br />
+    for line in fileinput.input():<br />
+        line = line.strip()<br />
+        if line.startswith(&quot;#&quot;) and &quot;end_log_pos&quot; in line:<br />
+            for rbr_token in [&quot;Update_rows:&quot;, &quot;Write_rows:&quot;, &quot;Delete_rows:&quot;, &quot;Rows_query:&quot;, &quot;Table_map:&quot;,]:<br />
+                if rbr_token in line:<br />
+                    line = &quot;%s%s&quot; % (line.split(rbr_token)[0], &quot;Query\tthread_id=1\texec_time=0\terror_code=0&quot;)<br />
+        if line.startswith(&quot;### &quot;):<br />
+            inside_rbr_statement = True<br />
+            # The &quot;### &quot; commented rows are the pseudo-statement interpreted by mysqlbinlog's &quot;--verbose&quot;,<br />
+            # and which we will feed into pt-query-digest<br />
+            line = line[4:]<br />
+        else:<br />
+            if inside_rbr_statement:<br />
+                print(&quot;/*!*/;&quot;)<br />
+            inside_rbr_statement = False<br />
+        print(line) </p>
+<p>convert_rbr_to_pseudo_sbr()<br />
+[/code]</p>
+</blockquote>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>

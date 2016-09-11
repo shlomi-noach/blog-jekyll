@@ -1,0 +1,28 @@
+---
+title: 'MySQL Conference 2009 daily summary: Wednesday'
+date: 2009-04-24 22:27:59.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- mysqlconf
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Busy day again: today the Percona conference joined the regular schedule, so more stuff to attend!</p>
+<p>What did I attend?</p>
+<p>Maria In Depth, Monty Widenius, MontyProgram AB (Percona conference): Monty was discussing Maria performance-wise as opposed to his later session which was feature-wise). He did delve just a little bit into the decision making issues in MySQL and in his new company. He also spoke (and I believe this took the most weight of the session, even if not the most time) of his new company, what he wants to achieve and how.</p>
+<p><a href="http://www.mysqlconf.com/mysql2009/public/schedule/detail/6876">Build Your Own MySQL Time Machine</a>, (Sun Microsystems), Mats Kindahl (Sun Microsystems). A web based utility for creating online backups and performing a point in time restoration was presented. The system is based on MySQL 6.0's new backup mechanism, and runs on a slave. The presenters showed how easy it would be to say "I would like to restore data to as it was yesterday 14:56pm". Hope to see such final product in the future!</p>
+<p><!--more-->Fighting MySQL Replication Lag, Peter Zaitsev (Percona conference). Peter explained the causes for replication lag, the types of measurements which should be made, how to make them, and of course, hot to avoid replication lag. He discussed solutions starting from tuning queries in such way that the slave need not repeat complicated work done by the master; ways of warming up the slaves (for example, using Maatkit's mk-slave-prefetch) and more. It was an interesting short session. I must say that the short session idea is a pretty good one. It keeps you awake and concentrated.</p>
+<p><a href="http://www.mysqlconf.com/mysql2009/public/schedule/detail/6933">Monitoring 101: Simple Stuff to Save Your Bacon</a> Ronald  Bradford (42SQL): Ronald made a convincing argument for using proper and system wide monitoring mechanisms, by following some customer stories. He presented OS level (disk, memory, CPU, network) monitoring and diagnosing utilities; has lay down the basics for monitoring MySQL (SHOW STATUS, SHOW PROCESSLIST etc.), and finally discussed some common monitoring utilities. It was a good overview of the needs and capabilities of monitoring.</p>
+<p><a href="http://www.mysqlconf.com/mysql2009/public/schedule/detail/6714">Innodb Database Recovery Techniques</a> Peter Zaitsev: Peter presented some sophisticated techniques, some of which were developed by Percona, to recover from InnoDB corruption. He also explained the innodb recovery mechanism and the innodb_recovery_level parameter.</p>
+<p>Quick wins with third party MySQL patches, Morgan Tocker, Percona (Percona conference): Morgan presented some of the Percona patches. Again, this was a short session, and to the point.</p>
+<p>In between I entered and left some more talks, which did not catch my attention. A busy day, all in all!</p>

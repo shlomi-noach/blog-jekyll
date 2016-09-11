@@ -1,0 +1,31 @@
+---
+title: Those oversized, undersized variables defaults
+date: 2010-06-09 06:35:08.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Configuration
+- sql_mode
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: awfief@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Some <strong>mysqld</strong> parameters are far from having reasonable defaults. Most notable are the engine-specific values, and in particular the InnoDB parameters.</p>
+<p>Some of these variables have different defaults as of MySQL 5.4. <strong>innodb_buffer_pool_size</strong>, for example, is <strong>128M</strong> on 5.4. <strong>innodb_log_file_size</strong>, however, has changed back and forth, as far as I understand, and is down to <strong>5M</strong> again. These settings are still the same on 5.5.</p>
+<p>I wish to present some not-so-obvious parameters which, in my opinion, have poor defaults, for reasons I will explain.</p>
+<ul>
+<li><strong>group_concat_max_len</strong>: This parameter limits the maximum text length of a <strong>GROUP_CONCAT</strong> concatenation result. It defaults to <strong>1024</strong>. I think this is a very low value. I have been using <strong>GROUP_CONCAT</strong> more and more, recently, to solve otherwise difficult problems. And in most cases, <strong>1024</strong> was just too low, resulting in <a href="http://code.openark.org/blog/mysql/but-i-do-want-mysql-to-say-error">silent</a> (<em>Argh!</em>) truncating of the result, thus returning incorrect results. It is interesting to learn that the maximum value for this parameter is limited by <strong>max_packet_size</strong>. I would suggest, then, that this parameter should be altogether removed, and have the <strong>max_packet_size</strong> limitation as the only limitation. Otherwise, I'd like it to have a very large default value, in the order of a few MB.</li>
+<li><strong>wait_timeout</strong>: Here's a parameter whose default value is over permissive. <strong>wait_timeout</strong> enjoys an <strong>8 hour</strong> default. I usually go for <strong>5-10 minutes</strong>. I don't see a point in letting idle connections waste resources for 8 hours. Applications which hold up such connections should be aware that they're doing something wrong, in the form of a forced disconnection. Connection pools work beautifully with low settings, and can themselves do keepalives, if they choose to.</li>
+<li><strong>sql_mode</strong>: I've <a href="http://code.openark.org/blog/mysql/do-we-need-sql_mode">discussed this</a> in length before. My opinion unchanged.</li>
+<li><strong>open_files_limit</strong>: What with the fact connections, threads, table descriptors, table file descriptors (depending on how you use InnoDB), temporary file tables -- all are files on unix-like systems, and considering this is an inexpensive payment, I think <strong>open_files_limit</strong> should default to a few thousands. Why risk the crash of "too many open files"?</li>
+</ul>
+<p><!--more-->No setting will ever be perfect for everyone, I know. But there are those parameters which you automatically set values for when you do a new install. These should be at focus and their defaults change.</p>

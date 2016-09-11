@@ -1,0 +1,38 @@
+---
+title: 'Speaking at FOSDEM: Pseudo GTID and easy replication management'
+date: 2015-01-29 21:06:10.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Pseudo GTID
+- Replication
+- Speaking
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+  _oembed_e1d484790afddbaf46a7603b27a887b0: '<iframe src="https://www.slideshare.net/slideshow/embed_code/key/xnbYxVn86UhAZp"
+    width="427" height="356" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"
+    style="border:1px solid #CCC; border-width:1px; margin-bottom:5px; max-width:
+    100%;" allowfullscreen> </iframe> <div style="margin-bottom:5px"> <strong> <a
+    href="https://www.slideshare.net/shlominoach/pseudo-gtid-easy-replication-topology-management-fosdem"
+    title="Pseudo gtid &amp; easy replication topology management" target="_blank">Pseudo
+    gtid &amp; easy replication topology management</a> </strong> from <strong><a
+    href="http://www.slideshare.net/shlominoach" target="_blank">Shlomi Noach</a></strong>
+    </div>'
+  _oembed_time_e1d484790afddbaf46a7603b27a887b0: '1473138233'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This coming Sunday I'll be presenting <a href="https://fosdem.org/2015/schedule/event/pseudo_gtid/">Pseudo GTID and easy replication management</a> at FOSDEM, Brussels.</p>
+<p>There's been a lot of development on <a href="http://code.openark.org/blog/mysql/refactoring-replication-topology-with-pseudo-gtid">Pseudo GTID</a> these last few weeks. In this talk I'll show you how you can use Pseudo GTID instead of "normal" GTID to easily repoint your slaves, recover from intermediate master failure, promote slaves to masters as well as emply crash safe replication without crash safe replication.</p>
+<p>Moreover, I will show how you can achieve all the above with <em>less constraints</em> than GTID, and for bulk operations -- with <em>less overhead</em> and in <em>shorter time</em>. You will also see that Pseudo GTID is a non intrusive solution which does not require you to change anything in your topologies.</p>
+<p>Moral: I'll try and convince you to <em>drop your plans for using GTID</em> in favor of <em>Pseudo GTID</em>.</p>
+<p>We will be employing Pseudo GTID as the basis for high availability and failover at Booking.com on many topologies, and as a safety mechanism in other topologies where we will employ <a href="http://blog.booking.com/mysql_slave_scaling_and_more.html">Binlog servers</a>.</p>
+<p>http://www.slideshare.net/shlominoach/pseudo-gtid-easy-replication-topology-management-fosdem</p>

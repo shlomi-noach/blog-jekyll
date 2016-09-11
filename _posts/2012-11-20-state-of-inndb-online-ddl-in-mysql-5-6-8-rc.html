@@ -1,0 +1,123 @@
+---
+title: State of InnDB Online DDL in MySQL 5.6.8-RC
+date: 2012-11-20 11:49:14.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- InnoDB
+- New Features
+- openark kit
+- Review
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><strong>5.6.8-rc</strong> is out, and so I'm following up on InnoDB's online DDL new feature: the ability to SELECT, INSERT, DELETE, UPDATE a table even while an ALTER TABLE is executing on same table.</p>
+<h4>The brief summary</h4>
+<p>Not as advertised; many things can't be done.</p>
+<h4>The longer review</h4>
+<p>I'm using <strong>5.6.8-rc 64bit</strong> binary distribution for Linux, installed via <a href="http://mysqlsandbox.net/">mysqlsandbox</a>. My hardware is irrelevant, but the fact I'm testing on my laptop assists me in that <strong>ALTER TABLE</strong> operations take a while, so that I'm able to easily type commands in two terminals and have the time to watch them being executed. Query cache is disabled.<!--more--></p>
+<p>I'm using the sakila sample database, and in particular I'm working with the rental table. Here's the table definition:</p>
+<blockquote>
+<pre>CREATE TABLE `rental` (
+  `rental_id` int(11) NOT NULL AUTO_INCREMENT,
+  `rental_date` datetime NOT NULL,
+  `inventory_id` mediumint(8) unsigned NOT NULL,
+  `customer_id` smallint(5) unsigned NOT NULL,
+  `return_date` datetime DEFAULT NULL,
+  `staff_id` tinyint(3) unsigned NOT NULL,
+  `last_update` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`rental_id`),
+  UNIQUE KEY `rental_date` (`rental_date`,`inventory_id`,`customer_id`),
+  KEY `idx_fk_inventory_id` (`inventory_id`),
+  KEY `idx_fk_customer_id` (`customer_id`),
+  KEY `idx_fk_staff_id` (`staff_id`),
+  CONSTRAINT `fk_rental_staff` FOREIGN KEY (`staff_id`) REFERENCES `staff` (`staff_id`) ON UPDATE CASCADE,
+  CONSTRAINT `fk_rental_inventory` FOREIGN KEY (`inventory_id`) REFERENCES `inventory` (`inventory_id`) ON UPDATE CASCADE,
+  CONSTRAINT `fk_rental_customer` FOREIGN KEY (`customer_id`) REFERENCES `customer` (`customer_id`) ON UPDATE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=16050 DEFAULT CHARSET=utf8</pre>
+</blockquote>
+<p>Highlights for the table: <strong>AUTO_INCREMENT PRIMARY KEY</strong>, some columns indexed, some not, and Foreign Keys in place. Pretty much a standard table. It contains <strong>16,044</strong> rows. Row format is <strong>COMPACT</strong>.</p>
+<p>What I want to know is: which DDL commands allow for which online DML commands?</p>
+<p>So, on terminal #1 I will issue queries like:</p>
+<blockquote>
+<pre>node1 5.6.8-rc-log sakila&gt; alter table <strong>sakila.rental</strong> ROW_FORMAT=COMPACT <strong>/* or whatever */</strong>;
+Query OK, 0 rows affected (10.57 sec)
+Records: 0  Duplicates: 0  Warnings: 0</pre>
+</blockquote>
+<p>And during the above operation, I will execute the following on terminal #2:</p>
+<ol>
+<li><strong>select max(rental_id) from sakila.rental;</strong> this queries the AUTO_INCREMENT value, which is of course a PRIMARY KEY</li>
+<li><strong>select min(rental_date) from sakila.rental</strong>; there is an index on rental_date, and normal execution plan is to optimize table away and just use the index</li>
+<li><strong>select min(return_date) from sakila.rental</strong>; there is no index on return_date, and full table scan is required</li>
+<li><strong>update rental set return_date = return_date + interval 1 second where rental_id=3</strong>; the UPDATE uses the PRIMARY KEY</li>
+<li><strong>update rental set return_date = return_date + interval 1 second where return_date = NOW()</strong>; won't actually affect anything, but requires full scan.</li>
+</ol>
+<p>So here are the results:</p>
+<blockquote>
+<pre>+-------------------------------------------------------------+-------+---------------------------+---------------+---------------------+-------------------------+--------------+---------------------+
+| ALTER statement                                             | Time  | General comments          | select max PK | select min by index | select min by full scan | update by PK | update by full scan |
++-------------------------------------------------------------+-------+---------------------------+---------------+---------------------+-------------------------+--------------+---------------------+
+| ROW_FORMAT=COMPACT                                          | 10.92 |                           | <span style="color: #008000;">Instant</span>       | <span style="color: #008000;">Instant</span>             | <span style="color: #008000;">Instant</span>                 | <span style="color: #800000;">blocked</span>      | <span style="color: #800000;">blocked</span>             |
+| AUTO_INCREMENT=16051                                        |  0.06 | Instant, no table rebuild | N/A           | N/A                 | N/A                     | N/A          | N/A                 |
+| ADD INDEX(last_update)                                      |  2.37 |                           | <span style="color: #800000;">blocked</span>       | <span style="color: #800000;">blocked</span>             | <span style="color: #800000;">blocked</span>                 | <span style="color: #800000;">blocked</span>      | <span style="color: #800000;">blocked</span>             |
+| ADD INDEX(last_update), ALGORITHM=INPLACE                   |  1.83 |                           | <span style="color: #800000;">blocked</span>       | <span style="color: #800000;">blocked</span>             | <span style="color: #800000;">blocked</span>                 | <span style="color: #800000;">blocked</span>      | <span style="color: #800000;">blocked</span>             |
+| ADD INDEX(last_update), ALGORITHM=INPLACE, LOCK=NONE        |  0.00 | ERROR 1235 (42000): ...   | N/A           | N/A                 | N/A                     | N/A          | N/A                 |
+| ADD COLUMN c CHAR(1) NOT NULL                               | 11.20 |                           | <span style="color: #008000;">Instant</span>       | <span style="color: #008000;">Instant</span>             | <span style="color: #008000;">Instant</span>                 | <span style="color: #800000;">blocked</span>      | <span style="color: #800000;">blocked</span>             |
+| ADD COLUMN c CHAR(1) NOT NULL, ALGORITHM=INPLACE, LOCK=NONE |  0.00 | ERROR 1235 (42000): .     | N/A           | N/A                 | N/A                     | N/A          | N/A                 |
++-------------------------------------------------------------+-------+---------------------------+---------------+---------------------+-------------------------+--------------+---------------------+</pre>
+</blockquote>
+<p>Rather surprising, I would say.</p>
+<ul>
+<li><em>None</em> of my tests resolved with online write (<strong>UPDATE</strong>). At best I could get online read (<strong>SEELCT</strong>).<br />
+<strong></strong></li>
+<li><strong>AUTO_INCREMENT</strong> is instantaneous. High time for that! It's just some number in the <strong>.frm</strong> file, never understood the need for table rebuild.</li>
+<li>Apparently <strong>ADD COLUMN</strong> is <em>more online</em> than <strong>ADD INDEX</strong>, and I've tested this again and again and again to make sure I was doing it right. This is quite weird, even according to the <a href="http://dev.mysql.com/doc/refman/5.6/en/innodb-online-ddl.html">docs</a>.</li>
+<li>In none of the above tests (and others, non listed), have I been able to specify <strong>LOCK=NONE</strong>. It's always <strong>ERROR 1235 (42000): This version of MySQL doesn't yet support 'alter table sakila.rental &lt;whatever&gt;, algorithm=inplace, lock=none'</strong>.</li>
+</ul>
+<p>So what's so online about this? Online reads are nice, but most everyone cannot accept blocking writes (for same reason no one would use <em>mysqlhotcopy</em>, also so wrongly named). This leaves us again with <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-online-alter-table.html">oak-online-alter-table</a> and <a href="http://www.percona.com/doc/percona-toolkit/2.1/pt-online-schema-change.html">pt-online-schema-change</a>.</p>
+<h4>The butler did it</h4>
+<p>Apologies to the butler, the <strong>FOREIGN KEY</strong>s did it. Let's try the same again without foreign keys:</p>
+<blockquote>
+<pre>node1 5.6.8-rc-log sakila&gt; create table rental2 like rental;
+node1 5.6.8-rc-log sakila&gt; insert into rental2 select * from rental;
+node1 5.6.8-rc-log sakila&gt; rename table rental to rental_old, rental2 to rental;
+Query OK, 0 rows affected (0.31 sec)</pre>
+</blockquote>
+<p>Here are the results:</p>
+<blockquote>
+<pre>+-------------------------------------------------------------+-------+---------------------------+----------------+---------------------+-------------------------+----------------+---------------------+
+| ALTER statement                                             | Time  | General comments          | select max PK  | select min by index | select min by full scan | update by PK   | update by full scan |
++-------------------------------------------------------------+-------+---------------------------+----------------+---------------------+-------------------------+----------------+---------------------+
+| ROW_FORMAT=COMPACT                                          | 11.03 |                           | <span style="color: #008000;">Instant</span>        | <span style="color: #008000;">Instant</span>             | <span style="color: #008000;">Instant</span>                 | <span style="color: #008000;">Instant</span>        | <span style="color: #008000;">Instant</span>             |
+| AUTO_INCREMENT=16051                                        |  0.05 | Instant, no table rebuild | N/A            | N/A                 | N/A                     | N/A            | N/A                 |
+| ADD INDEX(last_update)                                      |  2.04 |                           | * <span style="color: #ff6600;">Inconsistent</span> | * <span style="color: #ff6600;">Inconsistent</span>      | * <span style="color: #ff6600;">Inconsistent</span>          | <span style="color: #800000;">blocked</span>        | <span style="color: #800000;">blocked</span>             |
+| ADD INDEX(last_update), ALGORITHM=INPLACE, LOCK=NONE        |  3.14 |                           | * <span style="color: #ff6600;">Inconsistent</span> | * <span style="color: #ff6600;">Inconsistent</span>      | * <span style="color: #ff6600;">Inconsistent</span>          | <span style="color: #800000;">blocked</span>        | <span style="color: #800000;">blocked</span>             |
+| ADD COLUMN c CHAR(1) NOT NULL                               |    ** |                           | * <span style="color: #ff6600;">Inconsistent</span> | * <span style="color: #ff6600;">Inconsistent</span>      | * <span style="color: #ff6600;">Inconsistent</span>          | * <span style="color: #ff6600;">Inconsistent</span> | * <span style="color: #ff6600;">Inconsistent</span>      |
+| ADD COLUMN c CHAR(1) NOT NULL, ALGORITHM=INPLACE, LOCK=NONE |    ** |                           | * <span style="color: #ff6600;">Inconsistent</span> | * <span style="color: #ff6600;">Inconsistent</span>      | * <span style="color: #ff6600;">Inconsistent</span>          | * <span style="color: #ff6600;">Inconsistent</span> | * <span style="color: #ff6600;">Inconsistent</span>      |
++-------------------------------------------------------------+-------+---------------------------+----------------+---------------------+-------------------------+----------------+---------------------+</pre>
+</blockquote>
+<p>What's going on here?</p>
+<ul>
+<li><strong>ALGORITHM=INPLACE, LOCK=NONE</strong> is accepted! Bad, bad foreign keys!<br />
+<strong></strong></li>
+<li><strong>* ADD INDEX</strong> usually allows for concurrent reads, but after repeated tests <strong>SELECT</strong>s start to block. Then they don't work concurrently anymore until table is recreated. But even that not always, so I'm not sure what the inconsistency is.</li>
+<li><strong>* ADD COLUMN</strong> is still more concurrent than <strong>ADD INDEX</strong>, and actually allows for concurrent writes! Though, inconsistently. Sometimes it does not allow for concurrent writes.</li>
+<li><strong>** ADD COLUMN</strong> runtime highly affected by concurrent queries. It wents as high as <strong>45</strong> seconds on my laptop. Now, to make things clear, I'm not running an automated benchmark here: I'm copying+pasting the statements from my editor to the mysql CLI. So, maybe <strong>10</strong> or <strong>15</strong><strong>SELECT</strong> and <strong>UPDATE</strong> queries executes. How does that justify <strong>35</strong> seconds delay in table rebuild?</li>
+</ul>
+<h4>Some conclusions:</h4>
+<ul>
+<li>The documentation does not specify anything about <strong>FOREIGN KEY</strong>s crashing the party. It should.</li>
+<li>The documentation specifically mentions the <strong>ADD/DROP INDEX</strong> statements to be online. <strong>ADD INDEX</strong> is less online than <strong>ADD COLUMN</strong>.</li>
+<li>Everything is still shaky. Sometimes things work, sometimes they don't.</li>
+<li>Runtimes are unproportionally affected by concurrent queries.</li>
+<li>For the meantime, I keep to my online alter table scripts. Been using them for <strong>3.5</strong> years now.</li>
+</ul>

@@ -1,0 +1,99 @@
+---
+title: 'Pop quiz answered: "what would be the results of the following queries?"'
+date: 2011-05-12 16:20:55.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- SQL
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>The quiz presented poses with an uncommon, though valid SQL syntax: <em>one is allowed to use quoted name aliases</em>. Thus, it is valid to write:</p>
+<blockquote>
+<pre>SELECT Name AS 'n', Continent AS 'c' FROM countries</pre>
+</blockquote>
+<p>But what does the above mean? Let's see the results of our three questions:<!--more--></p>
+<h4>Question #1</h4>
+<blockquote>
+<pre>SELECT
+  id,
+  Name AS 'n',
+  Continent AS 'c'
+FROM
+  countries
+ORDER BY
+  c
+;
++----+--------------------------+---------------+
+| id | n                        | c             |
++----+--------------------------+---------------+
+| 15 | North Korea              | Asia          |
+| 12 | Nepal                    | Asia          |
+| 11 | Norway                   | Europe        |
+| 10 | Netherlands              | Europe        |
+|  8 | Nicaragua                | North America |
+|  1 | Netherlands Antilles     | North America |
+|  3 | Namibia                  | Africa        |
+|  5 | Niger                    | Africa        |
+|  7 | Nigeria                  | Africa        |
+|  9 | Niue                     | Oceania       |
+|  4 | New Caledonia            | Oceania       |
+|  2 | Northern Mariana Islands | Oceania       |
+| 13 | Nauru                    | Oceania       |
+| 14 | New Zealand              | Oceania       |
+|  6 | Norfolk Island           | Oceania       |
++----+--------------------------+---------------</pre>
+</blockquote>
+<p>Result is sorted by continent, as may be expected. We have aliased continent as <strong>'c'</strong>, and <strong>ORDER BY c</strong> went well. The quotes were meaningless here.</p>
+<h4>Question #2</h4>
+<blockquote>
+<pre>SELECT
+  MIN(Name) AS 'n',
+  Continent AS 'c'
+FROM
+  countries
+GROUP BY
+  c
+;
++----------------------+---------------+
+| n                    | c             |
++----------------------+---------------+
+| Nepal                | Asia          |
+| Netherlands          | Europe        |
+| Netherlands Antilles | North America |
+| Namibia              | Africa        |
+| Nauru                | Oceania       |
++----------------------+---------------+</pre>
+</blockquote>
+<p>As with first query, the quoted <strong>'c'</strong> acts just like non-quoted <strong>c</strong>.</p>
+<h4>Question #3</h4>
+<blockquote>
+<pre>SELECT
+  MIN(Name) AS 'n',
+  Continent AS 'c'
+FROM
+  countries
+GROUP BY
+  'c'
+;
++---------+---------------+
+| n       | c             |
++---------+---------------+
+| Namibia | North America |
++---------+---------------+</pre>
+</blockquote>
+<p>Obviously something went wrong here. The query is valid, yet returns a single row. Why is that?</p>
+<p>What we've just done is to group by the <em>constant</em> <strong>'c'</strong>, not on the <em>alias</em> <strong>c</strong>. Results are complete wrong.</p>
+<p>This query is a simplified version of a true customer's query. The <strong>GROUP BY</strong> clause included some <strong>5</strong> fields, the constant literal being one of them. The results of that query were used in very important business decision making. Well, decisions were misinformed...</p>
+<h4>Quoted aliases?</h4>
+<p>I'm not sure why anyone would want these. Why is this even a valid syntax?</p>
+<p>Multi-word aliases? Seems like wrong coding convention. But, if you must, do not use single quotes: use <em>`backticks`</em>.</p>

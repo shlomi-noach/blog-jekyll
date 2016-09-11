@@ -1,0 +1,64 @@
+---
+title: Hierarchical data in INFORMATION_SCHEMA and derivatives
+date: 2013-01-08 13:19:56.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- INFORMATION_SCHEMA
+- SQL
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Just how often do you encounter hierarchical data? Consider a table with some parent-child relation, like the this classic <strong>employee</strong> table:</p>
+<blockquote>
+<pre>CREATE TABLE employee (
+  employee_id INT UNSIGNED PRIMARY KEY,
+  employee_name VARCHAR(100),
+  manager_id INT UNSIGNED,
+  CONSTRAINT `employee_manager_fk` FOREIGN KEY (manager_id) REFERENCES employee (employee_id)
+) engine=innodb
+;
++-------------+---------------+------------+
+| employee_id | employee_name | manager_id |
++-------------+---------------+------------+
+|           1 | Rachel        |       NULL |
+|           2 | John          |          1 |
+|           3 | Stan          |          1 |
+|           4 | Naomi         |          2 |
++-------------+---------------+------------+</pre>
+</blockquote>
+<p>Questions like <em>"What is the (nested) list of employees managed by Rachel?"</em> or <em>"Get Naomi's managers chain of command"</em> are classical questions. There are sometimes dependencies: if John leaves, does that mean Naomi loses her job, or does she get promoted, or something else? If John and Stan are on sick leave, does Rachel have any reason to come to work?</p>
+<p>Hierarchical data is not limited to a single-table structure. Sometimes it takes a combination of a few tables (it's just a <strong>JOIN</strong>) to make out the parent-child relation.</p>
+<p>Hierarchical data is difficult to manage with SQL. This is especially true for MySQL, which does not support the <strong>WITH</strong> recursive query syntax.</p>
+<h4>Where can you find hierarchical data?</h4>
+<p>Even if you do not provide it by yourself, MySQL's <strong>INFORMATION_SCHEMA</strong> has some for you. Partly obvious, partly implicit, here are some examples:<!--more--></p>
+<h4>Foreign Keys</h4>
+<p>This is probably the most obvious hierarchical dataset in <strong>INFORMATION_SCHEMA</strong>. The <strong>KEY_COLUMN_USAGE</strong> table lists the table dependencies based on foreign key constraints. It's a bit confusing, as it also lists <strong>UNIQUE</strong> constraints, and the complete list of FKs are in <strong>REFERENTIAL_CONSTRAINTS</strong> -- but the latter table does not list the dependencies. You typically want to join both tables to get the complete information.</p>
+<p>So, taking <strong>sakila</strong>'s DVD rental shop sample,  <strong>film_actor</strong> table depends on <strong>film</strong> as well as on <strong>actor</strong> via foreign keys. <strong>film</strong> can depend on the <strong>category</strong> table, etc. The hierarchies can turn to be very complex, with multiple roots an very deep branches.</p>
+<p>Dependency questions are very clear when speaking of foreign keys: what happens when we delete some <strong>film</strong> record? Does it hold that we also delete all references to that film on <strong>film_actor</strong>? Or do we deny deletion of said film in such case?</p>
+<h4>Redundant Keys</h4>
+<p>The <strong>KEY (col1, col2)</strong> makes the <strong>KEY (col1)</strong> redundant. The latter is not strictly required (though you may wish to keep it for covering index performance reason). The list of <em>dominant-redundant</em> keys makes for hierarchical data. It is typically very shallow (keys can only be redundant within the scope of a single table -- how deep can you get with such small dataset?)</p>
+<p>There is no immediate reference in <strong>INFORMATION_SCHEMA</strong> as for redundant keys, but it can be inferred by self joining the <strong>STATISTICS</strong> table onto itself. It is not immediate, since you need to do some aggregation and check for particular cases. For example, <strong>UNIQUE KEY (col1, col2)</strong> is actually made redundant by <strong>UNIQUE KEY (col1)</strong>, which is just the opposite from our previous example.</p>
+<p><a href="http://code.google.com/p/common-schema">common_schema</a> provides with this implicit information now turned explicit, in the for of the <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/redundant_keys.html">redundant_keys</a> view: the <strong>redundant_index_name</strong> and <strong>dominant_index_name</strong> columns make for parent-child relationship.</p>
+<p>Dependency questions are a bit redundant here: the general objective is to <em>not have</em> dependencies. So get rid of redundant keys - and do so wisely. There's a good discussion of index redundancies on <strong>redundant_keys</strong>'s <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/redundant_keys.html">documentation</a>.</p>
+<h4>Locked transactions</h4>
+<p>A transaction is locked. It is locked because another transaction holds some locks needed by locked transaction. But this transaction in itself can obtain locks needed by yet other transactions. And so we can get a hierarchy of locked transaction. The "parent" is the one blocking the "child".</p>
+<p>Combining InnoDB's <strong>INNODB_TRX</strong> - <strong>INNODB_LOCK_WAITS</strong> - <strong>INNODB_TRX</strong> tables, we get this information. <em>common_schema</em> provides with this inferred data in the form of <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/innodb_locked_transactions.html">innodb_locked_transactions</a>.</p>
+<p>Hierarchies in locked-transactions could be deep, and they can most commonly be <em>wide</em>. A single transaction can lock dozens of others.</p>
+<p>Dependency questions are <em>"would killing this transaction release all other waiting transactions?"</em>; <em>"What is </em>the one<em> transaction I need to kill in order to release the bottleneck?"</em>; <em>"Why are these transactions related in the first place? Can I remove this dependency?"</em>. etc.</p>
+<h4>Locks</h4>
+<p>You can look at the same dataset as above from a different angle. Instead of looking at transaction-lock-transaction, you can look at lock-transaction-lock. Which locks are causing other locks to be held? This is counter-intuitive to our understanding of how things work, but is valid nonetheless.</p>
+<h4>Views</h4>
+<p>A <strong>VIEW</strong> can query a table or another view. It can join multiple views. This hierarchy of view-reading-from-view can turn out to be complex; if not for the human mind then for the optimizer.</p>
+<p>Surprisingly, there is no data in <strong>INFORMATION_SCHEMA</strong>, other than the <strong>CREATE VIEW</strong> clause, to help us out in resolving these dependencies. Even more surprising is MySQL's own inability to get clear conclusions itself. The view definition clause is parsed, re-parsed and re-evaluated whenever information on "parent" views is required. For example, try to <strong>DESCRIBE</strong> a view. How does MySQL deduce the data types of columns? It dives in head first into the hierarchy, crawls and parses view definitions, till it resolves the answer. The <a href="http://code.openark.org/forge/mycheckpoint">mycheckpoint</a> projects uses view hierarchies intensively. It draws powers from the hierarchy and produces some surprising data (<a href="http://code.openark.org/forge/mycheckpoint/documentation/generating-google-charts">charts</a> from raw data, for example). But it also suffers from MySQL indirect inference of views. Checking up a deep-nested <em>mycehckpoint</em> view in <strong>INFORMATION_SCHEMA</strong> makes for a heavyweight dive for MySQL into locks and table handles.</p>
+<p>Dependency questions are <em>"what is the type of this column?"</em>, <em>"are there any <strong>TEMPTABLE</strong> views along the chain of execution? Or are all <strong>MERGE</strong> views?"</em> and more.</p>

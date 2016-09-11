@@ -1,0 +1,88 @@
+---
+title: Unwalking a string with GROUP_CONCAT
+date: 2009-06-16 07:54:49.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Books
+- SQL
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>"Walking a string" is an SQL technique to convert a single value into multiple rows result set. For example, walking the string <strong>'hello'</strong> results with 5 rows, each of which contains a single character from the text.</p>
+<p>I'll present a brief example of walking a string, and then show how to "unwalk" the string: do the reverse operation.</p>
+<p>To walk a string, an integers table is required (or this could be a good use for <a href="http://www.mysqlconf.com/mysql2009/public/schedule/detail/6891">SeqEngine</a>):<!--more--></p>
+<blockquote>
+<pre>CREATE TABLE `int_table` (
+  `int_col` int(11) NOT NULL,
+  PRIMARY KEY  (`int_col`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1
+
+-- ...
+-- INSERTS follow here
+-- ...
+
+mysql&gt; SELECT * FROM int_table;
++---------+
+| int_col |
++---------+
+|       0 |
+|       1 |
+|       2 |
+|       3 |
+|       4 |
+|       5 |
+|       6 |
+|       7 |
+|       8 |
+|       9 |
++---------+
+10 rows in set (0.00 sec)</pre>
+</blockquote>
+<p>To convert a string to rows of characters, we join the text with the integers table (we assume there are enough numbers for covering the length of the text):</p>
+<blockquote>
+<pre>mysql&gt; SELECT
+         SUBSTRING(s, int_col+1, 1) AS c
+       FROM int_table, (SELECT 'hello' AS s) sel1
+       WHERE int_col &lt; char_length(s);
++---+
+| c |
++---+
+| h |
+| e |
+| l |
+| l |
+| o |
++---+
+5 rows in set (0.00 sec)</pre>
+</blockquote>
+<p>More on this can be found in the excellent <a href="http://www.amazon.com/Cookbook-Cookbooks-OReilly-Anthony-Molinaro/dp/0596009763">SQL Cookbook</a>.</p>
+<h4>Unwalking the string</h4>
+<p>Doing the inverse action - combining the string back from the multiple rows, can be easily done using <strong>GROUP_CONCAT</strong>. It's interesting to learn that<strong> GROUP_CONCAT</strong> does not actually require any <strong>GROUP BY</strong> clause. When no such clause is provided in the SQL query, all searched rows are used.</p>
+<p>Let's assume now that we have a table of character values, which we want to concatenate back to a complete string. We can easily build this table:</p>
+<blockquote>
+<pre>CREATE TABLE characters AS
+  SELECT
+    SUBSTRING(s, int_col+1, 1) AS c
+  FROM int_table, (SELECT 'hello' AS s) sel1
+  WHERE int_col &lt; char_length(s);</pre>
+</blockquote>
+<p>To reconstruct the text, we simply use MySQL's <strong>GROUP_CONCAT</strong> with an empty separator:</p>
+<blockquote>
+<pre>mysql&gt; SELECT GROUP_CONCAT(c separator '') AS s FROM characters;
++-------+
+| s     |
++-------+
+| hello |
++-------+
+1 row in set (0.00 sec)</pre>
+</blockquote>

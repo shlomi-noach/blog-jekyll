@@ -1,0 +1,127 @@
+---
+title: Replication analysis with mycheckpoint
+date: 2009-11-11 05:50:28.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Analysis
+- Monitoring
+- mycheckpoint
+- Replication
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: joinfu@sun.com
+  _oembed_cc378ec3d344a8dec852c1b985d207c2: '{{unknown}}'
+  _oembed_e3c56f5989dcfac169637c8a08a5c9b5: '{{unknown}}'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I would like to show how <a href="http://code.openark.org/forge/mycheckpoint">mycehckpoint</a> (see <a href="http://code.openark.org/blog/mysql/announcing-mycheckpoint-lightweight-sql-oriented-monitoring-for-mysql">announcement</a>) can be put to use for analyzing various replication metrics.</p>
+<h4>Lagging slaves</h4>
+<p>A slave has been monitored. Monitoring started at a time when it was way behind master (about two days lag), but it has since caught up. This can be easily verified by the following chart:</p>
+<blockquote>
+<pre /><img class="alignnone" title="seconds_behind_master" src="{{ site.baseurl }}/assets/chart?cht=lc&amp;chs=400x200&amp;chts=303030,12&amp;chtt=Nov+5,+10:00++-++Nov+10,+08:00+(4+days,+22+hours)&amp;chdl=seconds_behind_master&amp;chdlp=b&amp;chco=ff8c00&amp;chd=s:976431zzzywutrpnliiifdbZYXVTRRRPNLJHEBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&amp;chxt=x,y&amp;chxr=1,0,169811&amp;chxl=0:||Nov+6,+09:00|Nov+7,+09:00|Nov+8,+08:00|Nov+9,+08:00|&amp;chxs=0,505050,10" alt="" width="400" height="200" />
+</blockquote>
+The above chart can be obtained by viewing the HTML report:
+<blockquote>
+<pre>SELECT <strong>html</strong> FROM sv_report_html</pre>
+</blockquote>
+<p>Or by directly issuing the query:</p>
+<blockquote>
+<pre>mysql&gt; SELECT <strong>seconds_behind_master</strong> FROM sv_report_chart_hour\G
+*************************** 1. row ***************************
+seconds_behind_master: http://chart.apis.google.com/chart?cht=lc&amp;chs=400x200&amp;chts=303030,12&amp;chtt=Nov+5,+10:00++-++Nov+10,+08:00+(4+days,+22+hours)&amp;chdl=seconds_behind_master&amp;chdlp=b&amp;chco=ff8c00&amp;chd=s:976431zzzywutrpnliiifdbZYXVTRRRPNLJHEBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&amp;chxt=x,y&amp;chxr=1,0,169811&amp;chxl=0:||Nov+6,+09:00|Nov+7,+09:00|Nov+8,+08:00|Nov+9,+08:00|&amp;chxs=0,505050,10</pre>
+</blockquote>
+<p>This is all nice. But I'm also interested in the <em>rate</em> at which slave lag decreased. Many ignore this important metric: just how fast does your slave replicate?</p>
+<h4><!--more-->Slave catchup speed</h4>
+<p>So we're looking for the <em>slope</em> of the above graph. Luckily, the slope is nothing but the difference in <strong>seconds_behind_master</strong> divided by elapsed time. <em>mycheckpoint</em> supports the <strong>*_psec</strong> metrics for all known variables.</p>
+<p>Again, we can just look at the HTML report, or we can issue:</p>
+<blockquote>
+<pre>mysql&gt; SELECT <strong>seconds_behind_master_psec</strong> FROM sv_report_chart_hour\G
+*************************** 1. row ***************************
+seconds_behind_master_psec: http://chart.apis.google.com/chart?cht=lc&amp;chs=400x200&amp;chts=303030,12&amp;chtt=Nov+5,+10:00++-++Nov+10,+08:00+(4+days,+22+hours)&amp;chdl=seconds_behind_master_psec&amp;chdlp=b&amp;chco=ff8c00&amp;chd=s:fbdebXU0wvOgaYXVUIutFTacefXXS4xhYRTJAKf90444444444444444444444482444444445444444444444472544444444444444444444481544444&amp;chxt=x,y&amp;chxr=1,-2.35,0.19&amp;chxl=0:||Nov+6,+09:00|Nov+7,+09:00|Nov+8,+08:00|Nov+9,+08:00|&amp;chxs=0,505050,10</pre>
+</blockquote>
+<p>And get this chart:</p>
+<blockquote>
+<pre /><img class="alignnone" title="seconds_behind_master_psec" src="{{ site.baseurl }}/assets/chart?cht=lc&amp;chs=400x200&amp;chts=303030,12&amp;chtt=Nov+5,+10:00++-++Nov+10,+08:00+(4+days,+22+hours)&amp;chdl=seconds_behind_master_psec&amp;chdlp=b&amp;chco=ff8c00&amp;chd=s:fbdebXU0wvOgaYXVUIutFTacefXXS4xhYRTJAKf90444444444444444444444482444444445444444444444472544444444444444444444481544444&amp;chxt=x,y&amp;chxr=1,-2.35,0.19&amp;chxl=0:||Nov+6,+09:00|Nov+7,+09:00|Nov+8,+08:00|Nov+9,+08:00|&amp;chxs=0,505050,10" alt="" width="400" height="200" />
+</blockquote>
+The numbers show a reasonable slave catchup speed (lower is better). For example, a <strong>-1</strong> value indicates that the slave is replicating twice as fast as the master. So if we're 10 minutes behind, catch up will occur 10 minutes from now (the slave will cover for the missing 10 minutes plus the future 10 minutes by which the master will be writing). At times, replication went very fast (slope as low as <strong>-2.25</strong> on average), and at times is was very slow (<strong>-0.25</strong>).
+
+But all negative numbers are good! They mean slave is faster than master. Indeed, once the slave caught up, numbers climbed to <strong>0</strong>: the slave has since been running at same speed as the master.
+<h4>Estimating slave catchup time</h4>
+When we have a lagging slave, there's nothing more interesting to known than "when will it finally catch up?". We can do the math: calculating slope, extrapolating the expected point in time where the lag drops to <strong>0</strong>; or we can just ask!
+
+Let's first ask the hard way, then the human way:
+
+Querying the history of estimations:
+<blockquote>
+<pre>SELECT ts, <strong>estimated_slave_catchup_seconds</strong> FROM sv_report_hour;
++---------------------+---------------------------------+
+| ts                  | estimated_slave_catchup_seconds |
++---------------------+---------------------------------+
+| 2009-11-06 16:00:00 |                          142984 |
+| 2009-11-06 17:00:00 |                           47988 |
+| 2009-11-06 18:00:00 |                           31416 |
+| 2009-11-06 19:00:00 |                           22896 |
+| 2009-11-06 20:00:00 |                           20202 |
+| 2009-11-06 21:00:00 |                           13062 |
+| 2009-11-06 22:00:00 |                            7932 |
+| 2009-11-06 23:00:00 |                            5220 |
+| 2009-11-07 00:00:00 |                            2740 |
+| 2009-11-07 01:00:00 |                            NULL |
+| 2009-11-07 02:00:00 |                             463 |
+| 2009-11-07 03:00:00 |                            NULL |
+| 2009-11-07 04:00:00 |                            NULL |
+| 2009-11-07 05:00:00 |                            NULL |
+| 2009-11-07 06:00:00 |                            NULL |
+...
++---------------------+---------------------------------+</pre>
+</blockquote>
+<p>(NULL occurs when slave has caught up; so nothing to estimate)</p>
+<p>Had we been checking up on human reports at the time of lag, we would see something like:</p>
+<blockquote>
+<pre>mysql&gt; SELECT <strong>report</strong> FROM sv_report_human_hour ORDER BY ID DESC LIMIT 1\G
+*************************** 1. row ***************************
+report:
+Report period: 2009-11-06 16:00:00 to 2009-11-06 17:00:00. Period is 60 minutes (1.00 hours)
+Uptime: 100.0% (Up: 1 days, 05:34:00 hours)
+
+...
+...
+...
+
+Replication:
+    Master status file number: 541, position: 825383347
+    Relay log space limit: 10737418240, used: 4512632192  (42.0%)
+    Seconds behind master: 47185
+    <strong>Estimated time for slave to catch up: 142984 seconds (1 days, 15:43:05 hours)  ETA: 2009-11-08 07:43:05</strong></pre>
+</blockquote>
+<p>The human report suggested it would take more than a day and a half for replication to catch up; it also provided with ETA: '<strong></strong><strong>2009-11-08 07:43:05</strong>'.</p>
+<p>As an interesting note, to issue the above report I <em>went back in time</em> and issued:</p>
+<blockquote>
+<pre>SELECT report FROM sv_report_human_hour <strong>WHERE ts='2009-11-06 16:00:00'</strong>\G</pre>
+</blockquote>
+<p>It's possible to retroactively generate report, for as long as data still exists.</p>
+<h4>Checking up on relay log space</h4>
+<p>Slaves are limited in relay log space. They can only accumulate as much relay logs.</p>
+<p>Usually the slave SQL thread is slower than the IO thread, which means when the slave lags behind, it writes more and more relay logs, while having hard time reading them. Once it runs out of relay log space, it stops asking the master for more binary logs, and waits for relay log space to free.</p>
+<p>How much relay log space should a slave have?</p>
+<p>Well, if you're not worries about disk space, let it have as much as it would like to; but let's look at the implications of relay log space limit. Again, by either looking at the HTML report or by directly issuing:</p>
+<blockquote>
+<pre>mysql&gt; SELECT relay_log_used_mb FROM sv_report_chart_hour\G
+*************************** 1. row ***************************
+relay_log_used_mb: http://chart.apis.google.com/chart?cht=lc&amp;chs=400x200&amp;chts=303030,12&amp;chtt=Nov+5,+10:00++-++Nov+10,+09:00+(4+days,+23+hours)&amp;chdl=relay_log_space_limit_mb|relay_log_space_mb&amp;chdlp=b&amp;chco=ff8c00,4682b4&amp;chd=s:999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999,9999999999989570xytsuxursojfhcabWRSOJEGBCBCDEGBCEBDEFGBEGBDFBCEFGBCDEGBDFBDFCFACEGBCDEGBCBBDEFACEFBCEGBCDEFABCEBEDFACDEF&amp;chxt=x,y&amp;chxr=1,0,10240.10309792&amp;chxl=0:||Nov+6,+09:00|Nov+7,+09:00|Nov+8,+09:00|Nov+9,+09:00|&amp;chxs=0,505050,10</pre>
+</blockquote>
+<p>We get:</p>
+<blockquote>
+<pre /><img class="alignnone" title="relay_log_used_mb" src="{{ site.baseurl }}/assets/chart?cht=lc&amp;chs=400x200&amp;chts=303030,12&amp;chtt=Nov+5,+10:00++-++Nov+10,+09:00+(4+days,+23+hours)&amp;chdl=relay_log_space_limit_mb|relay_log_space_mb&amp;chdlp=b&amp;chco=ff8c00,4682b4&amp;chd=s:999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999,9999999999989570xytsuxursojfhcabWRSOJEGBCBCDEGBCEBDEFGBEGBDFBCEFGBCDEGBDFBDFCFACEGBCDEGBCBBDEFACEFBCEGBCDEFABCEBEDFACDEF&amp;chxt=x,y&amp;chxr=1,0,10240.10309792&amp;chxl=0:||Nov+6,+09:00|Nov+7,+09:00|Nov+8,+09:00|Nov+9,+09:00|&amp;chxs=0,505050,10" alt="" width="400" height="200" />
+</p></blockquote>
+<p>I see that 2 days lag (comparing with the above charts) will cause the relay log space to fill up. I would consider this to be OK, since I don't normally expect such lags. I can see that a one-day lag is well within relay log space. I conclude that the <strong>relay_log_space_limit</strong> server variable is properly configured in my case.</p>
+<div id="_mcePaste" style="overflow: hidden; position: absolute; left: -10000px; top: 19px; width: 1px; height: 1px;">http://chart.apis.google.com/chart?cht=lc&amp;chs=400x200&amp;chts=303030,12&amp;chtt=Nov+5,+10:00++-++Nov+10,+08:00+(4+days,+22+hours)&amp;chdl=seconds_behind_master_psec&amp;chdlp=b&amp;chco=ff8c00&amp;chd=s:fbdebXU0wvOgaYXVUIutFTacefXXS4xhYRTJAKf90444444444444444444444482444444445444444444444472544444444444444444444481544444&amp;chxt=x,y&amp;chxr=1,-2.35,0.19&amp;chxl=0:||Nov+6,+09:00|Nov+7,+09:00|Nov+8,+08:00|Nov+9,+08:00|&amp;chxs=0,505050,10</div>

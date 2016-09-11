@@ -1,0 +1,105 @@
+---
+title: 'common_schema, rev. 178: foreach(), repeat_exec(), Roland Bouman, query analysis'
+date: 2011-12-01 11:33:01.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Analysis
+- common_schema
+- Development
+- Open Source
+- Stored routines
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>, revision <strong>178</strong> is now released, with major additions. This revision turns <em>common_schema</em> into a <em>framework</em>, rather than a set of views and functions.</p>
+<p><em>common_schema</em> provides with query scripting, analysis &amp; informational views, and a function library, allowing for easier administration and diagnostics for MySQL. It introduces SQL based tools which simplify otherwise complex shell and client scripts, allowing the DBA to be independent of operating system, installed packages and dependencies.</p>
+<p>There's no Perl nor Python, and no dependencies to install. It's just a <em>schema</em>.</p>
+<p>Some highlights for the new revision:</p>
+<ul>
+<li><strong>foreach()</strong>, aka <strong>$()</strong>: loop through a collection, execute callback commands per element.</li>
+<li><strong>repeat_exec()</strong>: a repeat-until device: execute queries until some condition holds.</li>
+<li><strong>exec_file()</strong>: execute files a-la SOURCE, but on server side</li>
+<li><strong>Query analysis</strong>: analyze query text, view or routine definitions to detect dependency objects.</li>
+<li>Improvements to views and routines, new routines introduced.</li>
+</ul>
+<p>Let's take a closer look:</p>
+<h4>rpbouman</h4>
+<p>I'm very happy to have <a href="http://rpbouman.blogspot.com/">Roland Bouman</a> working on this project. He introduced some sophisticated code without which some functionality could not take place. I'm sure I don't need to introduce his great capabilities; I'll just pass the note that it is very good working with him!</p>
+<h4>foreach()</h4>
+<p>Introducing a looping device which can iterate a collection and execute callback commands.</p>
+<p>What's a collection? A range of numbers; a set of constants; the result set of a <strong>SELECT</strong> query; tables in your database and more.</p>
+<p>What is a callback? A query or set of queries to invoke on the specific elements in the collection. For example:</p>
+<blockquote>
+<pre>call <strong>foreach</strong>(<span style="color: #808000;">'table in sakila'</span>, <span style="color: #000080;">'ALTER TABLE ${schema}.${table} ENGINE=InnoDB ROW_FORMAT=COMPRESSED'</span>);</pre>
+</blockquote>
+<p>I'll publish dedicated posts on <em>foreach()</em>, aka <em>$()</em>, following this post. Official documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/foreach.html">here</a>.</p>
+<h4>repeat_exec()</h4>
+<p>Repeat executing queries in a given interval, until some condition holds.</p>
+<p>What kind of condition? You can loop forever, or until a given time has passed, a given number of iteration has passed.<!--more--></p>
+<p>You can iterate until no rows are affected by your commands (your callbacks), or until some dynamic condition holds (a query evaluates to <strong>true</strong>).</p>
+<p>For example: purge rows from a table until no more rows are affected; in interval of <strong>3</strong> second:</p>
+<blockquote>
+<pre>call <strong>repeat_exec</strong>(3, 'DELETE FROM test.event WHERE ts &lt; CURDATE() ORDER BY id LIMIT 1000', 0);</pre>
+</blockquote>
+<p>Official documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/repeat_exec.html">here</a>.</p>
+<h4>exec_file()</h4>
+<p>If you need to execute commands from a file, you usually invoke SOURCE:</p>
+<blockquote>
+<pre>mysql&gt; SOURCE '/tmp/somefile.sql';</pre>
+</blockquote>
+<p>Or you invoke mysql client and redirect its input to read from file:</p>
+<blockquote>
+<pre>bash$ mysql some_db &lt; /tmp/somefile.sql</pre>
+</blockquote>
+<p><strong>SOURCE</strong> is a MySQL client command. The file must reside on your client. Running the <strong>mysql</strong> client is great, but you need to work it out from <em>outside</em> the server.</p>
+<p><em>call_exec()</em> will let you import a file <em>on server side</em>, from <em>within the server</em>:</p>
+<blockquote>
+<pre>call <strong>exec_file</strong>('/tmp/some_file.sql');</pre>
+</blockquote>
+<p>You will need to have the file readable; it is limited to 64K at this moment; it may not use DELIMITER, and it may not include dynamic SQL. These are the limitations.</p>
+<p>Official documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/exec_file.html">here</a>.</p>
+<h4>exec() / exec_single()</h4>
+<p>All of the above rely on the <em>exec()</em> / <em>exec_single()</em> routines, which dynamically execute a set of queries. One one hand, it's no big deal: they only have to use prepared statements in order to invoke the queries. But then, they knows how to parse multiple queries (find the ";" delimiter correctly), plus they allow for configuration: if you set <strong>@common_schema_dryrun</strong>, queries are not actually executes; just printed out. If you set <strong>@common_schema_verbose</strong>, queries are verbosed in addition to being executed. Since all execution routines rely on these,we get a standardized pattern.</p>
+<p>Official documentation <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/exec_single.html">is</a> <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/exec.html">here</a>.</p>
+<h4>Query analysis</h4>
+<p>Query parsing routines allow for detection of dependencies within queries. While not full-blown SQL parser, these allow one to realize on which tables or routines a view depends on; or a routines depends on; or an event; or just any query.</p>
+<p>These routines can analyze the text of not only a <strong>SELECT</strong> query, but also <strong>UPDATE</strong>, <strong>DELETE</strong>, <strong>CREATE</strong>, etc. They can read the code of a stored routines, including queries and control flow constructs; thus, they are also able to analyze events and triggers.</p>
+<p>At this stage forward-dependencies resolution is supported. This can eventually lead to dependency graphs or to reverse-dependency resolution (i.e. "which view, routine, trigger or event depend on table <strong>t</strong>?")</p>
+<p>Example:</p>
+<blockquote>
+<pre>mysql&gt; call <strong>get_view_dependencies</strong>('sakila', 'actor_info');
++-------------+---------------+-------------+--------+
+| schema_name | object_name   | object_type | action |
++-------------+---------------+-------------+--------+
+| sakila      | actor         | table       | select |
+| sakila      | category      | table       | select |
+| sakila      | film          | table       | select |
+| sakila      | film_actor    | table       | select |
+| sakila      | film_category | table       | select |
++-------------+---------------+-------------+--------+</pre>
+</blockquote>
+<p>The query analysis routines are in BETA stage.</p>
+<p>Official documentation is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_analysis_routines.html">here</a>.</p>
+<h4>Test quite</h4>
+<p><em>common_schema</em> is now tested. Not all code is as yet under tests; all new code is, and some of the older code. Work is in progress to add more and more tests.</p>
+<h4>Further changes:</h4>
+<ul>
+<li><strong>candidate_keys</strong> does not give higher score for <strong>PRIMARY KEY</strong>s any longer. It ranks all unique keys according to its own heuristic; it also provides with the  <strong>is_primary</strong> and <strong>is_nullable</strong> columns.</li>
+<li>Added <strong>candidate_keys_recommended</strong> view, recommending best candidate key per table (while noting whether it qualifies as <strong>PRIMARY KEY</strong> in terms of <strong>NULL</strong>able columns).</li>
+<li>Added many text parsing and text manipulation routines, such as better trim, tokenizing, etc. Improved existing code significantly.</li>
+</ul>
+<h4>Get it</h4>
+<p><em>common_schema</em> is <a href="http://code.google.com/p/common-schema/">available for downloaded</a>. It is released under the <strong>BSD</strong> license, and is free.</p>
+<p>I've put very hard work into <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/introduction.html">common_schema's documentation</a>. It is very thorough and provides with clear examples. The documentation is also available for download.</p>
+<p>If you encounter problems, <a href="http://code.google.com/p/common-schema/issues/list">please report on the issues page</a>.</p>
+<p><em>common_schema</em> is meant to be downloaded &amp; installed on any MySQL server. It provides with general and essential functionality. Spread the word!</p>

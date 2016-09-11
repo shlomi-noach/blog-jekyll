@@ -1,0 +1,201 @@
+---
+title: Using memcached functions for MySQL; an automated alternative to Query Cache
+date: 2008-12-15 07:56:14.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- memcached
+- python
+- Query Cache
+- Triggers
+meta:
+  _edit_last: '2'
+  _oembed_55835302a9154b1a33fa9bef669291f7: '<iframe src="http://www.slideshare.net/slideshow/embed_code/28163348"
+    width="427" height="356" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"
+    style="border:1px solid #CCC; border-width:1px 1px 0; margin-bottom:5px; max-width:
+    100%;" allowfullscreen> </iframe> <div style="margin-bottom:5px"> <strong> <a
+    href="https://www.slideshare.net/shlominoach/commonschema-22" title="common_schema
+    2.2 DBA&#x27;s framework for MySQL" target="_blank">common_schema 2.2 DBA&#x27;s
+    framework for MySQL</a> </strong> from <strong><a href="http://www.slideshare.net/shlominoach"
+    target="_blank">Shlomi Noach</a></strong> </div>'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>There's a lot of buzz around memcached. memcached is widely used, and has clients for many programming languages and platforms. <a href="http://tangent.org/">TangentOrg</a> have developed a memcached client in the form of MySQL UDFs (User Defined Functions).</p>
+<p>I wish to discuss the memcached functions for MySQL: if and how they should be used.</p>
+<p>Disclaimer: I do not work with memcached functions for MySQL on a production system; all that is written here reflects my opinion on how things should be done.</p>
+<p>With memcached functions for MySQL, we can do the following:</p>
+<blockquote>
+<pre><strong>SELECT </strong>memc_set('mykey', 'The answer is 42');
+<strong>SELECT </strong>memc_get('mykey');</pre>
+</blockquote>
+<p>(See my previous post on how to <a title="Installing memcached functions for MySQL" href="http://code.openark.org/blog/mysql/installing-memcached-functions-for-mysql">install memcached functions for MySQL</a>).</p>
+<h4>In what scenario should we use these functions?</h4>
+<p>I believe memcached is the right tool for the application level. I am less enthusiastic about using it from MySQL. Sure, pushing it down to MySQL centralizes everything. Instead of having all my application code (PHP, Java etc.) access memcached separately, they can all access one single MySQL node, which gets to access memcached. I see two problems with this approach:<!--more--></p>
+<ul>
+<li>Doing this adds load on the database. I think the greatest advantage of memcached is that it allows us to alleviate load from the database. By pushing everything into MySQL we counter that benefit. We pay here both for loading the MySQL network and for the CPU consumed by MySQL to do the job. In a distributed application which used memcached, every server gets to take some of the load.</li>
+<li>It seems to me as a flawed design. The database should be at an end point, and should not rely on anything except the operating system, file system and network. Sure, there could be applications talking to the database, but the database should be able to work all by itself. By putting memcached <em>behind</em> the database, we make the database dependent upon an external application.</li>
+</ul>
+<h4>How about memcached <em>increments</em>?</h4>
+<p>memcached provides an increment mechanism, which can be used by MySQL to create distinct PRIMARY KEYs, like sequences in other databases. While this seems attractive, this feature fits most into the second point above: it makes MySQL completely dependant on memcached. So if memcached is down, MySQL is unable to generate keys.</p>
+<h4>memcahced invalidation</h4>
+<p>I believe a very good use would be to let MySQL invalidate cached data. Not set or get anything, just invalidate. To explain, let's compare with MySQL's query cache. I'll be using <a title="MySQL's world database setup" href="http://dev.mysql.com/doc/world-setup/en/world-setup.html">MySQL's world database</a>.</p>
+<p>It is a known issue with the query cache, that if you change (INSERT/UPDATE/DELETE) data within a certain table, all queries involved with that table are invalidated. Take a look at the following:</p>
+<blockquote>
+<pre><strong>SELECT </strong>* <strong>FROM </strong>City <strong>WHERE </strong>CountryCode='BLZ';
+<strong>UPDATE </strong>City <strong>SET </strong>Population=Population+1 <strong>WHERE </strong>CountryCode='CHE';
+<strong>SELECT </strong>* <strong>FROM </strong>City <strong>WHERE </strong>CountryCode='BLZ';</pre>
+</blockquote>
+<p>The UPDATE does not affect the results for the SELECT query. Nevertheless, the second SELECT does not return from the query cache, since it's invalidated by the UPDATE.</p>
+<p>memcached can be used to solve this problem in a programmatic way. Let's look at a short python program:<strong> memcached_test.py</strong>. What is does (see blue highlighted rows) is connect to memcached; connect to MySQL, and try to get the results for following from memcached:</p>
+<blockquote>
+<pre><strong>SELECT </strong>* <strong>FROM </strong>City <strong>WHERE </strong>CountryCode='BLZ';
+<strong>SELECT </strong>* <strong>FROM </strong>City <strong>WHERE </strong>CountryCode='CHE';</pre>
+</blockquote>
+<p>If these results are in memcached, they are returned immediately. If not, they are retrieved from MySQL, then inserted into memcached. The results for 'CHE' are under the 'City:CHE' key, and 'BLZ' is under 'City:BLZ'.</p>
+<blockquote>
+<pre><strong>import </strong>MySQLdb
+<strong>import </strong>memcache
+
+<strong>def </strong>select_cities_by_country(country_code):
+	key = <span style="color: #993300;"><strong>"City:"</strong></span>+country_code
+	<span style="color: #3366ff;">cities = memcache_client.get(key)</span>
+	<strong>if </strong>cities:
+		found_in_memcached = <strong>True</strong>
+	<strong>else</strong>:
+		cursor = conn.cursor()
+		cursor.execute(<span style="color: #993300;"><strong>"""
+			SELECT Name, CountryCode,
+			Population FROM City
+			WHERE CountryCode=%s"""</strong></span>,
+				country_code)
+		<span style="color: #3366ff;">cities = cursor.fetchall()</span>
+		<span style="color: #3366ff;">memcache_client.set(key, cities, 100)</span>
+		cursor.close()
+		found_in_memcached = <strong>False</strong>
+	<strong>for </strong>row <strong>in </strong>cities:
+		print <span style="color: #993300;"><strong>"%s, %s: %d"</strong></span> % (row[0], row[1], row[2])
+	print <span style="color: #993300;"><strong>"%s found in memcached? %s\n"</strong></span> % (
+                country_code, found_in_memcached)
+
+conn = <strong>None</strong>
+<strong>try</strong>:
+	<strong>try</strong>:
+		conn = MySQLdb.connect(
+			host=<span style="color: #993300;"><strong>"localhost"</strong></span>,
+                        user=<span style="color: #993300;"><strong>"myuser"</strong></span>,
+			passwd=<span style="color: #993300;"><strong>"mypassword"</strong></span>,
+			unix_socket=<span style="color: #993300;"><strong>"/tmp/mysql.sock"</strong></span>,
+                        db=<span style="color: #993300;"><strong>"world"</strong></span>)
+		memcache_client = memcache.Client([<span style="color: #993300;"><strong>"127.0.0.1:11211"</strong></span>])
+
+		select_cities_by_country(<span style="color: #993300;"><strong>"BLZ"</strong></span>);
+		select_cities_by_country(<span style="color: #993300;"><strong>"CHE"</strong></span>);
+	<strong>except </strong>Exception, err:
+		print err
+<strong>finally</strong>:
+	<strong>if </strong>conn:
+		conn.close()</pre>
+</blockquote>
+<p>Let's run this program. This is a first time run, so obviously nothing is in memcached:</p>
+<blockquote>
+<pre><strong>$ python memcached_test.py</strong>
+Belize City, BLZ: 55810
+Belmopan, BLZ: 7105
+<strong>BLZ </strong>found in memcached? <strong>False</strong>
+
+Zurich, CHE: 336800
+Geneve, CHE: 173500
+Basel, CHE: 166700
+Bern, CHE: 122700
+Lausanne, CHE: 114500
+<strong>CHE </strong>found in memcached? <strong>False</strong></pre>
+</blockquote>
+<p>Immediately executed again, we get results from memcached:</p>
+<blockquote>
+<pre><strong>$ python memcached_test.py</strong>
+Belize City, BLZ: 55810
+Belmopan, BLZ: 7105
+<strong>BLZ </strong>found in memcached? <strong>True</strong>
+
+Zurich, CHE: 336800
+Geneve, CHE: 173500
+Basel, CHE: 166700
+Bern, CHE: 122700
+Lausanne, CHE: 114500
+<strong>CHE </strong>found in memcached? <strong>True</strong></pre>
+</blockquote>
+<p>We are going to execute the following query:</p>
+<blockquote>
+<pre><strong>UPDATE </strong>City <strong>SET </strong>Population=Population+1 <strong>WHERE </strong>CountryCode='CHE';</pre>
+</blockquote>
+<p>But nothing as yet will invalidate our memcached values. Let's set up TRIGGERs on the City table:</p>
+<blockquote>
+<pre><strong>DELIMITER </strong>$$
+
+<strong>DROP TRIGGER IF EXISTS</strong> City_AI $$
+<strong>CREATE TRIGGER</strong> City_AI <strong>AFTER INSERT ON</strong> City
+<strong>FOR EACH ROW
+BEGIN
+  SELECT</strong> memc_delete(<strong>CONCAT</strong>('City:',<strong>NEW</strong>.CountryCode)) <strong>INTO </strong>@discard;
+<strong>END</strong>;
+$$
+
+<strong>DROP TRIGGER IF EXISTS</strong> City_AU $$
+<strong>CREATE TRIGGER</strong> City_AU <strong>AFTER UPDATE ON</strong> City
+<strong>FOR EACH ROW
+BEGIN
+  SELECT</strong> memc_delete(<strong>CONCAT</strong>('City:',<strong>OLD</strong>.CountryCode)) <strong>INTO </strong>@discard;
+  <strong>SELECT </strong>memc_delete(<strong>CONCAT</strong>('City:',<strong>NEW</strong>.CountryCode)) <strong>INTO </strong>@discard;
+<strong>END</strong>;
+$$
+
+<strong>DROP TRIGGER IF EXISTS</strong> City_AD $$
+<strong>CREATE TRIGGER</strong> City_AD <strong>AFTER DELETE ON</strong> City
+<strong>FOR EACH ROW
+BEGIN
+  SELECT</strong> memc_delete(<strong>CONCAT</strong>('City:',<strong>OLD</strong>.CountryCode)) <strong>INTO </strong>@discard;
+<strong>END</strong>;
+$$
+
+<strong>DELIMITER </strong>;</pre>
+</blockquote>
+<p>These triggers will cause any change to a city invalidates all cities in the same country. Naive? Far less than MySQL's query cache. Let's put this to the test:</p>
+<blockquote>
+<pre>mysql&gt; <strong>UPDATE </strong>City <strong>SET </strong>Population=Population+1 <strong>WHERE </strong>CountryCode='CHE';
+Query OK, 5 rows affected (0.01 sec)
+Rows matched: 5  Changed: 5  Warnings: 0</pre>
+</blockquote>
+<p>And run out python program one last time:</p>
+<blockquote>
+<pre><strong>$ python memcached_test.py</strong>
+Belize City, BLZ: 55810
+Belmopan, BLZ: 7105
+<strong>BLZ </strong>found in memcached? <span style="color: #339966;"><strong>True</strong></span>
+
+Zurich, CHE: 336801
+Geneve, CHE: 173501
+Basel, CHE: 166701
+Bern, CHE: 122701
+Lausanne, CHE: 114501
+<strong>CHE </strong>found in memcached? <span style="color: #339966;"><strong>False</strong></span></pre>
+</blockquote>
+<p>Right! The 'CHE' values were invalidated, and could not be found in memcaches. 'BLZ', however, wasn't disturbed.</p>
+<p>We can further improve our invalidation mechanism to check only for changes for desired columns. This will require some more code in our triggers.</p>
+<h4>Notes</h4>
+<p>The triggers themselves pose a performance penalty on our code. It is assumed that SELECTs are more important here, or else we would not use caching at all. At any case, the example provided here has not been benchmarked, and its value can only be estimated in your real life situation.</p>
+<h4>Conclusion</h4>
+<p>I believe invalidation is the most interesting part of memcached functions for MySQL. It makes the most sense:</p>
+<ul>
+<li>No data passes between MySQL and memcached.</li>
+<li>The application isn't even aware that MySQL is talking to memcached. MySQL does everything internally using triggers.</li>
+<li>MySQL does not depend on memcached. If memcached goes away, the triggers will simply have no effect. It is still possible that due to temporary network failure, an invalidation is skipped. But memcached supports us by adding a timeout for cached values, so we have some kind of "backup plan".</li>
+</ul>
+<p>Please share below your insights and real life experience with memcached functions for MySQL.</p>

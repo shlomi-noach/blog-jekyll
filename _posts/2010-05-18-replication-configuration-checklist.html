@@ -1,0 +1,66 @@
+---
+title: Replication configuration checklist
+date: 2010-05-18 09:27:06.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Configuration
+- Replication
+meta:
+  _edit_last: '2'
+  _oembed_55835302a9154b1a33fa9bef669291f7: '<iframe src="http://www.slideshare.net/slideshow/embed_code/28163348"
+    width="427" height="356" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"
+    style="border:1px solid #CCC; border-width:1px 1px 0; margin-bottom:5px; max-width:
+    100%;" allowfullscreen> </iframe> <div style="margin-bottom:5px"> <strong> <a
+    href="https://www.slideshare.net/shlominoach/commonschema-22" title="common_schema
+    2.2 DBA&#x27;s framework for MySQL" target="_blank">common_schema 2.2 DBA&#x27;s
+    framework for MySQL</a> </strong> from <strong><a href="http://www.slideshare.net/shlominoach"
+    target="_blank">Shlomi Noach</a></strong> </div>'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This post lists the essential and optional settings for a replication environment.</p>
+<p>It does not explain how to create replicating slaves. See <a href="http://dev.mysql.com/doc/refman/5.1/en/replication-howto.html">How To Setup Replication</a> for that. However, not all configuration options are well understood, and their roles in varying architectures can change.</p>
+<p>Here are the settings for a basic Master/Slave(s) replication architecturee.</p>
+<h4>Essential</h4>
+<ul>
+<li><strong>log-bin</strong>: enable binary logs on the master. Replication is based on the master logging all modifying queries (<strong>INSERT</strong>/<strong>CREATE</strong>/<strong>ALTER</strong>/<strong>GRANT</strong> etc.), and the slaves being able to replicate them.</li>
+<li><strong>server-id</strong>: each machine must have a <em>unique</em> <strong>server-id</strong>. A slave will not replay queries originating from a server with the same <strong>server-id</strong> as its own.</li>
+<li><strong>GRANT</strong>: grant a user with <strong>REPLICATION SLAVE</strong>. The host list must include all replication slave hosts.</li>
+<li><strong>expire-logs-days</strong>: automatically clean up master's binary logs older than given value. By default, binary logs are never removed.</li>
+</ul>
+<p>When working with Master/Slaves replication, one should be prepared to master failure and slave promotion to master. It may be desirable to identify a particular slave as primary candidate for promotion.</p>
+<p><!--more-->Just setting up the <strong>log-bin</strong> will yield with warnings in the MySQL's error log. The binary logs are named, by default, after the host's name. If that should change - MySQL will not be able to find the binary logs anymore (expecting a name which does previous logs did not use). It is therefore recommended to use:</p>
+<blockquote>
+<pre>log-bin=mychachine-bin</pre>
+</blockquote>
+<p>or</p>
+<blockquote>
+<pre>log-bin=mysql-bin</pre>
+</blockquote>
+<h4>Essential/Optional</h4>
+<ul>
+<li><strong>log-bin</strong>: enable on a slave, so that in case it is promoted to master, the rest of the slaves can replicate using its binary logs. Enabling binary logging cannot be done on a live server: this parameter requires MySQL restart.</li>
+<li><strong>GRANT</strong>: include the master's host, so that when a slave promotes to master, the master can become a slave and continue replicating.</li>
+<li><strong>log-slave-updates</strong>: together with <strong>log-bin</strong>, enable on slave so that master's binary logs are propagated and logged by the slave. This is required if the slave takes the role of a master in a chained replication setup.</li>
+<li><strong>expire-logs-days</strong>: set this flag on slave as well [tnx Sheeri].</li>
+<li><strong>read-only</strong>: set on slave(s). Refuses any modifying query (INSERT, DELETE, ALTER, DROP etc.) for non-<strong>SUPER</strong> privileged users [tnx Ryan].</li>
+<li><strong>sync-binlog</strong>: flush binary log to disk per transaction commit. Use this on master for safer replication; however note that increased I/O is expected [tnx Harrison].</li>
+</ul>
+<h4>Extra</h4>
+<ul>
+<li><strong>report-host</strong>, <strong>report-port</strong>: the host and port identifying the slave when looking at SHOW SLAVE HOSTS on master. Set this up on all hosts. See <a href="http://code.openark.org/blog/mysql/the-importance-of-report_host-report_port">further discussion here</a>.</li>
+<li><strong>max-binlog-size</strong>: the maximum size for a binary log / relay log file, after which it is rotated.</li>
+</ul>
+<h4>Expert</h4>
+<ul>
+<li><strong>binlog-do-db</strong>, <strong>binlog-do-table</strong>, <strong>replicate-do-db</strong>, <strong>...</strong>: filter queries by either not writing them to binary log, or not reading them from the logs.</li>
+</ul>
+<p>The reason I list the above as "Expert" is not because one must have a super-brain to set them up. That part is easy enough. But they lead to some dangerous situations, sometimes seemingly harmless. It takes great care to control the application and developers from creating those situations. See <a href="http://dev.mysql.com/doc/refman/5.1/en/replication-rules.html">documentation here</a>. See also discussion <a href="http://code.openark.org/blog/mysql/quick-reminder-avoid-using-binlog-do-db">here</a> and <a href="http://www.mysqlperformanceblog.com/2009/05/14/why-mysqls-binlog-do-db-option-is-dangerous/">here</a>.</p>

@@ -1,0 +1,56 @@
+---
+title: Killing InnoDB idle transactions
+date: 2012-12-04 14:23:12.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- INFORMATION_SCHEMA
+- InnoDB
+- scripts
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>The issue of terminating long-time idle open InnoDB transaction has been discussed recently by many. I wish to add my share, by proposing a quick and clean solution via <a href="http://code.google.com/p/common-schema/">common_schema</a>.</p>
+<p><em>common_schema <strong>1.2</strong></em> provides with the <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/innodb_transactions.html"><strong>innodb_transactions</strong></a> view, which relies on <strong>INNODB_TRX</strong> - one of the InnoDB Plugin views in <strong>INFORMATION_SCHEMA</strong> - as well as on <strong>PROCESSLIST</strong>, and so is able to determine with certainty that a transaction has been idle for a long time.</p>
+<p><strong>innodb_transactions</strong> offers us with a <strong>sql_kill_query</strong> column, which produces a <strong>'KILL QUERY 12345'</strong> type of value. So we can:</p>
+<blockquote>
+<pre>SELECT <strong>sql_kill_query</strong> FROM <strong>innodb_transactions</strong> WHERE <strong>trx_idle_seconds &gt;= 10; 
+</strong>+-------------------+
+| sql_kill_query    |
++-------------------+
+| KILL QUERY 292509 |
+| KILL QUERY 292475 |
++-------------------+<strong> </strong></pre>
+</blockquote>
+<p><em>common_schema</em>'s useful <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html"><strong>eval()</strong></a> routine allows us to actually invoke those <strong>KILL</strong> statements, all in a one-liner:</p>
+<blockquote>
+<pre>call <strong>eval</strong>(<span style="color: #003366;">'SELECT <strong>sql_kill_query</strong> FROM innodb_transactions WHERE <strong>trx_idle_seconds &gt;= 10</strong>'</span>);</pre>
+</blockquote>
+<h4>Technical details<!--more--></h4>
+<ul>
+<li><strong>trx_idle_seconds</strong> notes the time, in seconds, the transaction has been idle, or 0 if the transaction is not idle at all.</li>
+<li><strong>sql_kill_query</strong> is a self-generated SQL query which kills the running query, e.g. <strong>'KILL QUERY 12345'</strong>.</li>
+<li><strong>eval()</strong> takes a query as text, retrieves the SQL resulting column, and executes it live.</li>
+</ul>
+<h4>Background details</h4>
+<p>The connection between <strong>INNODB_TRX</strong> and <strong>PROCESSLIST</strong> is not synchronous. It is possible that by the time one is querying <strong>INNODB_TRX</strong>, <strong>PROCESSLIST</strong> data may change (e.g. next query is already replacing the one you were considering in <strong>INNODB_TRX</strong>). But in our case it is of little consequence: we are interested in transactions that have been idle for quite some time. Say, <strong>10</strong> seconds. So we are not troubled by having <strong>200</strong> queries per second changing under our hands.</p>
+<p>If the transaction has been asleep for <strong>10</strong> seconds, and we decide to kill it, well, it is possible that just as we kill it it will turn active again. It's a risk we take no matter what kind of solution we apply, since there's no atomic "get-status-and-kill" operation on InnoDB transactions.</p>
+<p>The above solution is manual: one must invoke the query which kills the idle transactions. This is as opposed to a built-in server feature which does the same. Events can used to semi-automate this: one can call upon this query once every <strong>10</strong> seconds, for example.</p>
+<p>See the many related and inspiring solutions below:</p>
+<ul>
+<li><a href="http://mysqlblog.fivefarmers.com/2012/08/28/identifying-and-killing-blocking-transactions-in-innodb/">Identifying and killing blocking transactions in InnoDB</a></li>
+<li><a href="http://www.markleith.co.uk/2011/05/31/finding-and-killing-long-running-innodb-transactions-with-events/">Finding and killing long running InnoDB transactions with Events</a></li>
+<li><a href="http://datacharmer.blogspot.co.il/2008/10/using-event-scheduler-to-purge-process.html">Using the event scheduler to purge the process list</a></li>
+<li><a href="http://www.mysqlperformanceblog.com/2011/03/08/how-to-debug-long-running-transactions-in-mysql/">How to debug long-running transactions in MySQL</a></li>
+<li><a href="http://yoshinorimatsunobu.blogspot.co.il/2011/04/tracking-long-running-transactions-in.html">Tracking long running transactions in MySQL</a></li>
+</ul>

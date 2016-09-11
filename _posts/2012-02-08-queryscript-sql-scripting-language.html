@@ -1,0 +1,61 @@
+---
+title: 'QueryScript: SQL scripting language'
+date: 2012-02-08 11:43:19.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Administration
+- common_schema
+- Development
+- Open Source
+- QueryScript
+- scripts
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: jounijarvis@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Introducing <strong><a href="http://www.queryscript.com/">QueryScript</a></strong>: a programming language aimed for SQL scripting, seamlessly combining scripting power such as flow control &amp; variables with standard SQL statements or RDBMS-specific commands.</p>
+<p>QueryScript is available fro MySQL via <a href="http://code.google.com/p/common-schema">common_schema</a>, which adds MySQL-specific usage.</p>
+<p><em>What does QueryScript look like?</em> Here are a few code samples:</p>
+<p>Turn a bulk DELETE operation into smaller tasks. Throttle in between.</p>
+<blockquote>
+<pre>while (DELETE FROM archive.events WHERE ts &lt; CURDATE() LIMIT 1000)
+{
+  throttle 2;
+}</pre>
+</blockquote>
+<p>Convert all InnoDB tables in the 'sakila' database to compressed format:</p>
+<blockquote>
+<pre>foreach ($table, $schema, $engine: table in sakila)
+{
+  if ($engine = 'InnoDB')
+    ALTER TABLE :$schema.:$table ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8;
+}</pre>
+</blockquote>
+<p>Shard your data across multiple schemata:</p>
+<blockquote>
+<pre>foreach($shard: {USA, GBR, JAP, FRA})
+{
+  CREATE DATABASE db_:$shard;
+  CREATE TABLE db_:$shard.city LIKE world.City;
+  INSERT INTO db_:$shard.city SELECT * FROM world.City WHERE CountryCode = $shard;
+}</pre>
+</blockquote>
+<p><!--more-->This tight integration between script and SQL, with the power of iteration, conditional statements, variables, variable expansion, throttling etc., makes QueryScript a power tool, with capabilities superseding those of stored routines, and allowing for simplified, dynamic code.</p>
+<p>QueryScript code is interpreted. It's just a text, so it can be read from a @user_defined_variable, a table column, text file, what have you. For example:</p>
+<blockquote>
+<pre>mysql&gt; <strong>set</strong> @script := "while (TIME(SYSDATE()) &lt; '17:00:00') SELECT * FROM world.City WHERE id = 1 + FLOOR((RAND()*4079));";
+mysql&gt; <strong>call</strong> run(@script);</pre>
+</blockquote>
+<p>For more details, consult the <strong><a href="http://www.queryscript.com/">QueryScript</a></strong> site.</p>
+<p>If you're a MySQL user/DBA, better read the <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script.html"><strong>common_schema QueryScript documentation</strong></a>, to better understand the specific <em>common_schema</em> implementation and enhanced features.</p>
+<p><em>common_schema</em>, including the QueryScript interpreter, can be downloaded from the <a href="http://code.google.com/p/common-schema">common_schema project page</a>.</p>

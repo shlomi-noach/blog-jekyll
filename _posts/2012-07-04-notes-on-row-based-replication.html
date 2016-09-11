@@ -1,0 +1,42 @@
+---
+title: Notes on row based replication
+date: 2012-07-04 10:00:24.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Replication
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>MySQL's <a href="http://dev.mysql.com/doc/refman/5.1/en/replication-formats.html">Row Based Replication</a> (RBR) succeeds (though not replaces) Statement Based Replication (SBR), as of version <strong>5.1</strong>.</p>
+<p>Anyone who is familiar with replication data drift -- the unexplained growing data difference between master &amp; slave -- might wish to look into row based replication. On multiple servers I'm handling the change to RBR has eliminated (to the best of my findings) replication data drift.</p>
+<p>This is easily explained, as RBR writes particular row IDs into the binary log. You no longer need to hope the statement</p>
+<blockquote>
+<pre>DELETE FROM my_table ORDER BY my_column LIMIT 100</pre>
+</blockquote>
+<p>acts deterministically on all servers (is <strong>my_column</strong> UNIQUE?). With row based replication the particular rows deleted on the master are then deleted on the slave.</p>
+<p>Here are three notes on RBR:<!--more--></p>
+<ul>
+<li><em>Binary log size:</em></li>
+</ul>
+<p style="padding-left: 30px;">With statement based replication the binary log merely logs the statement - typically a short text. But RBR logs the row IDs and changes made to data.</p>
+<p style="padding-left: 30px;">After we finally got used to cheap huge disks, and forgot about the need for cleaning up the binary logs, RBR introduces bloated logs. On some servers I'am again confounded by the fact that <strong>3</strong> days worth of logs will hog my entire disk space.</p>
+<ul>
+<li><em>Forgiveness</em></li>
+</ul>
+<p style="padding-left: 30px;">RBR is not as forgiving as SBR. With SBR, you could <strong>DELETE</strong> some rows from the master. If they're already missing on the slave, no problem here. With RBR, such an incident makes for replication failure (RBR: <em>"I'm supposed to DELETE rows 3, 4, 5 but can't find them! I can't to my job like this! Heeelp!"</em>)</p>
+<p style="padding-left: 30px;">This is not a bad thing: you get an early alert that <em>something went wrong</em>.</p>
+<ul>
+<li><em>Less slave effort</em></li>
+</ul>
+<p style="padding-left: 30px;">On the up side, the slave does not need to do much thinking. Given a DELETE command, the slave does not need to look up those rows <strong>WHERE some_condition IS TRUE</strong>. Instead, the master does all the hard work, the slave just gets the IDs of rows to delete.</p>
+<p style="padding-left: 30px;">I find that this boosts up replication speed in some scenarios, and in particular the scenario of data cleanup: those nightly/weekly purging of old, unused data. If you look hard and all you find are <strong>5</strong> rows to delete, all the slave needs to do is to delete those indicated <strong>5</strong> rows. With single-threaded replication this makes a real difference.</p>

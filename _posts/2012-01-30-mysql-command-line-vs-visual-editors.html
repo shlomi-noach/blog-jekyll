@@ -1,0 +1,39 @@
+---
+title: MySQL command line vs. visual editors
+date: 2012-01-30 17:04:34.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- command line
+- Opinions
+- scripts
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: buphoff@cchit.org
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Students in my training classes usually prefer to use some kind of visual editor for MySQL. Typically this would be the software they're using at work. Sometimes they just bring over their laptops with the software installed. Or they would use MySQL Workbench, which is what I usually have pre-installed on their desktops.</p>
+<p>I see MySQL Workbench, SQLyog, Toad for MySQL, or several more.</p>
+<p>I always humbly suggest they <em>close down their software and open up a command line</em>.</p>
+<p>It isn't fancy. It may not even be convenient (especially on Windows, in my opinion). And repeating your last command with a minor modification requires a lot of key stroking. Or you would copy+paste from some text editor. Most students will give it a shot, then go back to their favorite editor.</p>
+<p>Well, again and again I reach the same conclusion:</p>
+<h4>Visual editors are not as trustworthy as the command line.</h4>
+<p>Time and again students show me something on their editor. Behavior seems strange to me. Opening up a console shows a completely different picture.</p>
+<p>Things like:<!--more--></p>
+<ul>
+<li>The visual editor would open a new connection for every new query (oh, so the <strong>@user_defined_variable</strong> I've just assigned turns <strong>NULL</strong>, or the <strong>TEMPORARY TABLE</strong> disappears).</li>
+<li>The visual editor will only show <strong>1,000</strong> results, via <strong>LIMIT 0,1000</strong>. "But the same query runs <em>so much faster</em> on my machine!". Well, sure, a <strong>filesort</strong> of <strong>1,000,000</strong> rows that can satisfy the first <strong>1,000</strong> will quit early!</li>
+<li>The visual editor shows table definition graphically. "I didn't realize the index did(n't) cover this and that columns. I didn't realize it only covered first <strong>n</strong> characters of my <strong>VARCHAR</strong>.". That's because you can't beat <strong>SHOW CREATE TABLE</strong>, the definite table structure description.</li>
+<li>The visual editor allows for export/import/copy/transfer of tables and rows with just one click! "Why is it so complicated in the command line to purge <strong>1,000,000</strong> rows from a table?". Ummm, did you realize the visual editor would typically use a naive approach of doing everything in one huge transaction?</li>
+<li>The visual editor is smart. But sometimes you don't want smart. You just <a href="http://www.devart.com/blogs/dbforge/index.php/mind-data-modifications-via-data-editor-in-dbforge-studio-for-mysql.html">assume simple</a>. I personally take great precaution with <em>smart</em> solutions. Luckily, with scripts you have so much greater control (i.e. command line options, "dry-run" mode, etc.) that I have greater confidence in them.</li>
+</ul>
+<p>I do like it when a visual editor plays it both <em>smart</em> and <em>safe</em>, in such way that before doing its smart work it actually presents you with <em>the query it's going to issue</em>. Which is why I always considered MySQL Query Browser (now replaced by Workbench) to be the visual editor of choice in my classes.</p>
+<p>But, at the end of the day, I strongly believe: if you don't know how to do it with command line, you can't really know how it's done.</p>

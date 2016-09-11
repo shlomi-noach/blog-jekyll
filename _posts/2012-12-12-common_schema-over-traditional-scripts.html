@@ -1,0 +1,87 @@
+---
+title: common_schema over traditional scripts
+date: 2012-12-12 13:55:44.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- openark kit
+- python
+- QueryScript
+- scripts
+- Stored routines
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>If you are familiar with both <a href="http://code.openark.org/forge/openark-kit">openark kit</a> and <a href="http://code.google.com/p/common-schema">common_schema</a>, you'll notice I've incorporated some functionality already working in <em>openark kit</em> into <em>common_schema</em>, essentially rewriting what used to be a Python script into SQL/<a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script.html">QueryScript</a>.</p>
+<p>What was my reasoning for rewriting good code? I wish to explain that, and provide with a couple examples.</p>
+<p>I'm generally interested in pushing as much functionality into the MySQL server. When using an external script, one:</p>
+<ul>
+<li>Needs the right dependencies (OS, Perl/Python version, Perl/Python modules).</li>
+<li>Needs to provide with connection params,</li>
+<li>Needs to get acquainted with a lot of command line options,</li>
+<li>Is limited by whatever command line options are provided.</li>
+<li>Has to invoke that script (duh!) to get the work done.</li>
+</ul>
+<p>This last bullet is not so trivial: it means you can't work some operation with your favorite GUI client, because it has no notion of your Perl script; does not run on the same machine where your Python code resides; simply can't run those scripts for you.</p>
+<p>With server-side code, functionality is accessible via any client. You run your operation via a query (e.g. <strong>CALL some_procedure</strong>). That can be done from your GUI client, your command line client, your event scheduler, your cronjob, all equally. You only need access to your MySQL server, which is trivial.</p>
+<p>Of course, server side scripting is <a href="http://code.openark.org/blog/mysql/things-that-cant-and-some-that-can-be-done-from-within-a-mysql-stored-routine">limited</a>. Some stuff simply can't be written solely on server side. If you want to consult your replicating slave; gracefully take action on user's <strong>Ctrl+C</strong>, send data over the web, you'll have to do it with an external tool. There are actually a lot of surprising limitations to things one would assume <em>are</em> possible on server side. You may already know how frustrated I am by the fact one can <a href="http://code.openark.org/blog/mysql/reading-results-of-show-statements-on-server-side">hardly</a> get info from <strong>SHOW</strong> commands.</p>
+<h4>But, when it works, it shines</h4>
+<p>Let's review a couple examples. The first one is nearly trivial. The second less so.<!--more--></p>
+<h4>Example: getting AUTO_INCREMENT "free space"</h4>
+<p><em>openark kit</em> offers <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-show-limits.html">oak-show-limits</a>. It's a tool that tells you if any of your <strong>AUTO_INCREMENT</strong> columns are running out of space (and so you might want to <strong>ALTER</strong> that <strong>INT</strong> to <strong>BIGINT</strong>).</p>
+<p>It's a very simple Python script. It gets your <strong>MAX(auto_increment_column) FROM tables_with_auto_increment</strong>, and compares that <strong>MAX</strong> value to the column type. It pre-computes:</p>
+<blockquote>
+<pre>max_values['tinyint'] = 2**8
+max_values['smallint'] = 2**16
+max_values['mediumint'] = 2**24
+max_values['int'] = 2**32
+max_values['bigint'] = 2**64</pre>
+</blockquote>
+<p>takes care of <strong>SIGNED/UNSIGNED</strong>, and does the math. Why is this tool such a perfect candidate for <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/auto_increment_columns.html">replacement on server side</a>? For two reasons.</p>
+<p>First, It turns out it takes very little effort to <a href="http://code.openark.org/blog/mysql/checking-for-auto_increment-capacity-with-single-query">build a query</a> which does the same. In which case it is also easy to build a view which provides the same.</p>
+<p>Second, there's this thing with command line arguments. The <em>openark</em> tool provides with <strong>--threshold</strong> (only output those columns where capacity is larger than <strong>x%</strong>), <strong>--database</strong> (only scan given database), <strong>--table</strong> (only for tables matching name), <strong>--column</strong> (only for columns matching name).</p>
+<p>I don't like this. See, the above is essentially an extra layer for saying:</p>
+<ul>
+<li><strong>WHERE</strong> auto_increment_ratio &gt;= x</li>
+<li><strong>WHERE</strong> table_schema = ...</li>
+<li><strong>WHERE</strong> table_name = ...</li>
+<li><strong>WHERE</strong> column_name = ...</li>
+</ul>
+<p>The command line arguments each take the role of some <strong>WHERE/AND</strong> condition.Wow, what a <strong>1-1</strong> mapping. How about if I wanted the results sorted in some specific order? I would have to add a command line argument for that! How about only listing the <strong>SIGNED</strong> columns? I would have to add a command line argument for that, too! How about showing top <strong>10</strong>? Yes, another command line argument!</p>
+<p>Some of the above can be solved via shell scripting (<strong>sort -k 3 -n</strong>, <strong>head -n 10</strong>, etc.). But, hey, we're OK with SQL, aren't we? Why add now these <em>two extra layers</em>? Get to know all the command line options, get to script it? I love scripting, but this is an abuse.</p>
+<p>So it makes much more sense, in my opinion, to <strong>SELECT * FROM auto_increment_columns WHERE table_schema='my_db' AND auto_increment_ratio &gt;= 0.8 ORDER BY auto_increment_ratio DESC LIMIT 10</strong>. It doesn't require SQL-fu skills, just basic SQL skills which every DBA and DB user are expected to have. And it allows one to work from whatever environment one feels comfortable with. Heck, with your GUI editor you can probably get off with it by right-clicking and left-clicking your mouse buttons, never typing one character.</p>
+<h4>Example: blocking user accounts</h4>
+<p>The above mapped very easily to a query, and was just a read-only query. What if we had to modify data? <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-block-account.html">oak-block-accounts</a> is a tool which allows one to block grantees from logging in, then releasing them later on. <em>common_schema</em> offers <a href="common-schema.googlecode.com/svn/trunk/common_schema/doc/html/sql_accounts.html">sql_accounts</a> and <a href="file:///home/shlomi/workspace/common_schema/doc/html/eval.html">eval()</a>.</p>
+<p>Let's skip the command line arguments issue, as it is identical to the above. How should we best provide with "taking action" interface? A script would have no problem to first <strong>SELECT</strong> stuff, then <strong>UPDATE</strong>, or <strong>SET PASSWORD</strong>, or <strong>DROP</strong> etc. How easy is it to do the same on server side?</p>
+<p>The immediate solution is to write a stored procedure to do that. I reject the idea. Why? Because the procedure would look like this:</p>
+<blockquote>
+<pre>PROCEDURE block_account(user VARCHAR(64), host VARCHAR(64), only_if_empty_password BOOL, ...);</pre>
+</blockquote>
+<p>Can you see where I'm getting at? Doing the above re-introduces command line options, this time disguised as procedure parameters. We would again have to list all available filtering methods, only this time things are worse: since stored procedures have no such notion as overloading, and change to the params will break compatibility. Once we introduce this routine, we're stuck with it.</p>
+<p><em>common_schema</em> tries to stay away as far as it can from this pitfall. It presents another solution: the <em>view</em> solution. Just as with <em>auto_increment_columns</em>, <strong>SELECT</strong> your way to get the right rows. But this time, the result is a SQL query:</p>
+<blockquote>
+<pre>mysql&gt; SELECT <strong>sql_block_account</strong> FROM <strong>sql_accounts</strong> <strong>WHERE USER = 'gromit'</strong>;
++-------------------------------------------------------------------------------------+
+| sql_block_account                                                                   |
++-------------------------------------------------------------------------------------+
+| SET PASSWORD FOR 'gromit'@'localhost' = '752AA50E562A6B40DE87DF0FA69FACADD908EA32*' |
++-------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>Do your own <strong>WHERE</strong>/<strong>AND</strong> combination in SQL. But, how to take action? Our view cannot take the actual action for us!</p>
+<p><em>eval()</em> is at the core of many common_schema operations, like this one:</p>
+<blockquote>
+<pre>CALL <strong>eval</strong>(<span style="color: #000080;">"SELECT <strong>sql_block_account</strong> FROM <strong>sql_accounts WHERE USER = 'gromit'</strong>"</span>);</pre>
+</blockquote>
+<p>The <strong>SET PASSWORD</strong> query just got evaluated. Meaning it was executed. <em>eval()</em> is a very powerful solution.</p>
+<h4>Conclusion</h4>
+<p>I prefer stuff on server side. It requires basic SQL skills (or a smart GUI editor), and allows you easy access to a lot of functionality, removing dependency requirements. It is not always possible, and external scripts can do miracles not possible on server side, but server side scripting has its own miracles.</p>

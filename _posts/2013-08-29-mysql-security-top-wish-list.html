@@ -1,0 +1,37 @@
+---
+title: MySQL security top wish list
+date: 2013-08-29 07:28:48.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Security
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Security seems to have no boundaries. I've been tightening our database security lately, and it seems like this could go on forever: from app to console to privileges to server, there are so many aspects to managing database security. Unfortunately, this is a field where MySQL is in particular weak, and with very little work done in the many years I've been working with MySQL.</p>
+<p>My very own top-wanted security features for MySQL follows. Surely this is but a small subset, your mileage may vary.</p>
+<h4>Autherntication-only SSL</h4>
+<p>By default, MySQL client API is unencrypted and <del>passwords are sent in cleartext</del>. MySQL supports SSL, but it an "all or nothing" deal: if you want to use SSL, then everything goes by SSL: any query, SELECT, DDL and whatnot.</p>
+<p><strong>[UPDATE]</strong>: Thanks to Davi &amp; Jan for correcting me on this: passwords are <em>not</em> sent via cleartext. I'm not sure by which constellation I saw cleartext passwords being sent -- but obviously that was long time ago. Just verified via <em>tcpdump</em>, got <strong>"mysql_native_password"</strong> message and no cleartext password. Lesson learned!</p>
+<h4>Roles</h4>
+<p>Need I elaborate? This is a fundamental construct in a database grant system. The effort of maintaining multiple accounts with similar/identical privileges is overwhelming. (PS I haven't used <a href="http://www.securich.com/">Securich</a> to date)</p>
+<h4>Host aggregation</h4>
+<p>In MySQL the combination of user+host makes for a distinct account. Thus, <strong>'gromit'@'192.168.%'</strong> is a completely different account than <strong>'gromit'@'10.10.%'</strong>. I get the idea: you can have more privileges to, say, <strong>gromit@localhost</strong> than for <strong>gromit@'192.%'</strong>. In practice, this only makes a headache. In all my years, I have <em>never</em> encountered nor designed a privilege set where two accounts of the same user had different set of privileges. Never ever ever. It is confusing and pointless: if an account has a different set of roles, just call it by another name!<!--more--></p>
+<p>Had we had roles, that would be less painful; but my opinion is that an account should be identified by user only, not by user+host. The 'host' part should just indicate the whitelist of machines from which the user is allowed to connect.</p>
+<h4>Host blacklist</h4>
+<p>Speaking of whitelist, it would be great to have a host blacklist. If I wanted to grant access to 'gromit'@'192.168.%' except for '192.168.10.%' -- well, I would have to whitelist all the possible subnets. I can't exclude a set of hosts.</p>
+<h4>Catalogues</h4>
+<p>Another common construct not available in MySQL: a level above "schema" and below "server". The need for catalogues is in particular obvious when you want to grant some user SELECT access to all your schemas. Ahem, excluding, of course, the <strong>mysql</strong> schema... If I could create a "user catalogue", as opposed to "system catalogue", then I would have been able to <strong>GRANT SELECT ON CATALOGUE user.* TO my_user@localhost</strong>, and this would apply to all databases in that catalogue.</p>
+<h4>Privileges auditing</h4>
+<p>I've spent the last week or so restricting privileges to all accounts. This is hard work, because you want to make sure you're not revoking privileges which are required by the system (in which case I would either choose not to revoke, or create a new dedicated account with requested set of privileges). It would be so much fun if I could turn a flag on, like <strong>"SET GLOBAL audit_privileges := 1"</strong>, and have a <strong>++counter</strong> for every time a privilege check is made per account.</p>
+<p>I guess we could go on... On a brighter note, I've been using the audit plugin interface by writing a login audit plugin with very good results (= good auditing &amp; important insights); the (simple) code will be released shortly as open source; I'll write more on this at a later stage.</p>

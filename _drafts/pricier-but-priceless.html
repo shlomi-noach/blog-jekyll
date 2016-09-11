@@ -1,0 +1,42 @@
+---
+layout: post
+title: Pricier, but priceless
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags:
+- Analysis
+- Opinions
+- Performance
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I am not in the position nor habit to tell people how to spend their money. In particular, I cannot pass judgement on a customer's decision to invest this or that amount of money on hardware.</p>
+<p>However some recommendations seem to me elementary. If someone were to tell me it's too hot outside, his head aches and his eyes blinded by the sun, I would recommend that person to get himself a decent wide brimmed hat. It may cost a couple of dollars, but would definitely improve his day! It doesn't have to be real-leather original Australian cowboy hat. Just some hat; and there lies the difference.</p>
+<p>In the world of MySQL I've met many companies, architectures, deployments. In many cases the situation was "this is what we've got, it'll be very hard to buy more, let's see what we can do with what we have". Fair enough! But in some, it was just plain wrong to do that.</p>
+<p>Here are a couple pointers I've gathered.</p>
+<h4>Use a decent staging machine</h4>
+<p>There's a common practice, which says "we cannot afford to invest in very good machines for testing; let's test on weaker machines: that will assure us our application runs well on our expensive production system".</p>
+<p>I know the drill, I do it myself. But just make sure not to go too far with this. A customer was complaining his MySQL was not performing well on his test environment. "There's no production yet, but we're concerned about the poor performance". However it turned out the MySQL machine used for testing was an old "white-box" desktop hardware: one single core CPU, 1GB of RAM, a single 7.2k rpm SATA disk. I'm not sure about the model.</p>
+<p><em>Disclaimer: I am *not* a hardware expert.</em></p>
+<p>But it is safe to assume any machine they put to production will look *very* different than the one they tested on. A single core single CPU will not do well on high concurrent environment; the disk will not perform well, there is no RAID, no BBU; there is very little memory by today's standards.</p>
+<p>An investment of 1,500$ to 2,000$ can yield with small but decent machines, e.g. DELL R210 or HP ProLiant 100 series (naming brands I'm more familiar with), with a quad core CPU, RAID 1 with two SAS disks, BBU, and some 4GB of memory. This should be a very reasonable number, compared to salaries, rental fees etc.</p>
+<h4>Try Amazon's next to lowest EC2 offer</h4>
+<p>Amazon's "Small" EC2 offer is significantly cheaper than the next one ("Large"). It is roughly 75% cheaper on rental rate.</p>
+<p>It is also significantly weaker! With just 1.7GB RAM on Small vs 7.5 on Large, one compute unit vs four, not to mention 32 bit architecture on Small vs. 64 bit on Large.</p>
+<p>Yes, you can run a MySQL server on the Small offer. But to answer the question "would it help if I upgraded to Large?", the answer would be most definitively "yes!" if you were at all expecting load on your machine, or large volumes of data.</p>
+<p>Just so that I'm not misunderstood: I'm not suggesting a hardware upgrade is the first thing you should do. You should optimize your schema, your queries, your settings. This may be enough!</p>
+<p>On high load systems that I've seen though, the Small offer was never adequate, with a significant boost in performance (responsiveness, throughput) when upgrading from Small to Large.</p>
+<p>I'm suggesting it's worth the extra price, if one wants to take his database seriously.</p>
+<h4>Humble advice</h4>
+<p>Proper testing, benchmarking and QA are all an essential part of any product development. The above cases present real customer cases, and several of these, where more decent hardware proved to be pricier, but priceless.</p>
+<p>Again, cash limitation is to be respected. Some lower bounds should be set, though, and respected as well. This is my humble advice.</p>

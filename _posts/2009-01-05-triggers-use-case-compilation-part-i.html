@@ -1,0 +1,245 @@
+---
+title: Triggers Use Case Compilation, Part I
+date: 2009-01-05 11:55:15.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Security
+- Triggers
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I've run by quite a few triggers lately on production systems. In previous posts, I've written about problems solved with triggers. So here's a compilation of some solutions based on triggers; and some problems which are not (yet?) solvable due to current triggers limitations.</p>
+<p>Triggers can be used to:</p>
+<ul>
+<li>Maintain integrity</li>
+<li>Enhance security</li>
+<li>Enhance logging</li>
+<li>Assist with archiving</li>
+<li>Restrict table size</li>
+<li>Manage caching</li>
+<li>Manage counters</li>
+</ul>
+<p>Triggers are not fast. In fact, they can add quite an overhead if misused. Some of the triggers presented here are known to work on real life production systems, though, and work well. But make sure you benchmark before embarking on extensive application changes.<!--more--></p>
+<p>I'll be using <a title="MySQL's world database setup" href="http://dev.mysql.com/doc/world-setup/en/world-setup.html">MySQL's world database</a> in some of the examples.</p>
+<h4>Maintaining value integrity</h4>
+<p>MySQL can enforce (is you're using the right sql_mode), some of the values you set for a column. For example, you should not be allowed to set a TINYINT column value to 500. You may not be allowed to set NULL, or you may have to provide default values.</p>
+<p>However, within allowed range, SQL or MySQL in general won't help you. Assume you have a "percent" column, which holds integer values 0..100. It would be a TINYINT, of course. But setting the value to 103 is perfectly valid in MySQL's point of view, though not so in yours.</p>
+<p>This is where triggers come in handy. With a trigger, you may truncate illegal values or completely abort the operation if something doesn't seem right. For example, we may wish to enforce a city's district to be non-empty. We may also wish to ensure that the city's population does not exceed its country's population:</p>
+<blockquote>
+<pre>DELIMITER $$
+DROP TRIGGER IF EXISTS City_bu $$
+CREATE TRIGGER City_bu BEFORE UPDATE ON City
+FOR EACH ROW
+BEGIN
+  DECLARE country_population INT;
+
+  IF (CHAR_LENGTH(NEW.District) = 0) THEN
+    SELECT 0 FROM `District must not be empty` INTO @error;
+  END IF;
+
+  SELECT MAX(Population) FROM Country
+    WHERE Code = NEW.CountryCode INTO country_population;
+  IF (NEW.Population &gt; country_population) THEN
+    SELECT 0 FROM `City population cannot exceed that of country!` INTO @error;
+  END IF;
+END $$
+DELIMITER ;</pre>
+</blockquote>
+<p>For example:</p>
+<blockquote>
+<pre>mysql&gt; UPDATE City SET Population=100000000 WHERE Name='London';
+<span style="color: #993300;">ERROR 1146 (42S02): Table 'world.City population cannot exceed that of country!' doesn't exist</span></pre>
+</blockquote>
+<p>We force the trigger to fail under certain circumstances. Since this is a BEFORE INSERT trigger, failure of the trigger causes aborting the INSERT itself.</p>
+<h4>Forcing referential integrity</h4>
+<p>If you're using MyISAM, Memory or even Maria or Falcon, you don't get to use Foreign Keys. MySQL's plan is to add foreign keys for all storage engines. The plan is on print for quite a few years now. Till then, you may use triggers to simulate foreign keys, including cascading deletes and updates.</p>
+<p>Let's consider the tables <strong>City</strong> and <strong>Country</strong>. If we could, we would add the contraint that <strong>City.CountryCode</strong> references <strong>Country.Code</strong>. How can this be achieved with triggers? Here's a partial solution, showing a DELETE CASCADE:</p>
+<blockquote>
+<pre>DELIMITER $$
+
+DROP TRIGGER IF EXISTS City_bi $$
+CREATE TRIGGER City_bi BEFORE INSERT ON City
+FOR EACH ROW
+BEGIN
+  IF (NOT EXISTS (SELECT NULL FROM Country WHERE Code=NEW.CountryCode)) THEN
+    SELECT 0 FROM `CountryCode does not exist in Country table` INTO @error;
+  END IF;
+END $$
+
+DROP TRIGGER IF EXISTS Country_ad $$
+CREATE TRIGGER Country_ad AFTER DELETE ON Country
+FOR EACH ROW
+BEGIN
+  DELETE FROM City WHERE CountryCode = OLD.Code;
+END $$
+
+DELIMITER ;</pre>
+</blockquote>
+<p>Trying out some queries:</p>
+<blockquote>
+<pre>mysql&gt; INSERT INTO City (Name, CountryCode) VALUES ('zzimbwawa', 'ZWZ');
+<span style="color: #993300;">ERROR 1146 (42S02): Table 'world.CountryCode does not exist in Country table' doesn't exist
+</span>
+mysql&gt; INSERT INTO City (Name, CountryCode) VALUES ('zzimbwawa', 'GBR');
+Query OK, 1 row affected (0.00 sec)
+
+mysql&gt; SELECT COUNT(*) FROM City WHERE CountryCode = 'GBR';
++----------+
+| COUNT(*) |
++----------+
+|       82 |
++----------+
+1 row in set (0.01 sec)
+
+mysql&gt; DELETE FROM Country WHERE Code='GBR';
+Query OK, 1 row affected (0.04 sec)
+
+mysql&gt; SELECT COUNT(*) FROM City WHERE CountryCode = 'GBR';
++----------+
+| COUNT(*) |
++----------+
+|        0 |
++----------+
+1 row in set (0.00 sec)</pre>
+</blockquote>
+<p>The above example is partial. It does not handle UPDATEs on both tables. You may also modify it to simulate ON DELETE SET NULL instead of ON DELETE CASCADE.</p>
+<h4>Maintaining denormalized data integrity</h4>
+<p>Denormalized tables can hold data duplicated in several places. When such data changes in one place, triggers can help out with updating the change in the rest occurrences. A <a href="http://karlssonondatabases.blogspot.com/2008/12/using-triggers-for-performance.html">post</a> was recently written which discusses this issue.</p>
+<h4>Archiving</h4>
+<p>Assume the following table:</p>
+<blockquote>
+<pre>DROP TABLE IF EXISTS `logs`;
+CREATE TABLE  `logs` (
+  `id` int(11) NOT NULL auto_increment,
+  `subject` varchar(64) NOT NULL,
+  `message` varchar(255) NOT NULL,
+  `severity` tinyint(4) NOT NULL default '0',
+  PRIMARY KEY  (`id`)
+);</pre>
+</blockquote>
+<p>Logs are something that you want to cleanup regularly, on one hand, but keep at a safe place on the other hand. Let's create a <strong>logs_archive</strong> table:</p>
+<blockquote>
+<pre>CREATE TABLE logs_archive LIKE logs;</pre>
+</blockquote>
+<p>We can automatically move records from the logs table to the logs_archive table:</p>
+<blockquote>
+<pre>DELIMITER $$
+DROP TRIGGER IF EXISTS logs_bd $$
+CREATE TRIGGER logs_bd BEFORE DELETE ON logs
+FOR EACH ROW
+BEGIN
+  INSERT INTO logs_archive SELECT * FROM logs WHERE id=OLd.id;
+END $$
+DELIMITER ;</pre>
+</blockquote>
+<p>Example:</p>
+<blockquote>
+<pre>mysql&gt; INSERT INTO logs (subject, message) VALUES ('info', 'new user created');
+Query OK, 1 row affected (0.00 sec)
+
+mysql&gt; INSERT INTO logs (subject, message) VALUES ('info', 'cleanup completed');
+Query OK, 1 row affected (0.00 sec)
+
+mysql&gt; SELECT * FROM logs;
++----+---------+-------------------+----------+
+| id | subject | message           | severity |
++----+---------+-------------------+----------+
+|  1 | info    | new user created  |        0 |
+|  2 | info    | cleanup completed |        0 |
++----+---------+-------------------+----------+
+2 rows in set (0.00 sec)
+
+mysql&gt; DELETE FROM logs WHERE id = 1;
+Query OK, 1 row affected (0.01 sec)
+
+mysql&gt; SELECT * FROM logs;
++----+---------+-------------------+----------+
+| id | subject | message           | severity |
++----+---------+-------------------+----------+
+|  2 | info    | cleanup completed |        0 |
++----+---------+-------------------+----------+
+1 row in set (0.01 sec)
+
+mysql&gt; SELECT * FROM logs_archive;
++----+---------+------------------+----------+
+| id | subject | message          | severity |
++----+---------+------------------+----------+
+|  1 | info    | new user created |        0 |
++----+---------+------------------+----------+
+1 row in set (0.00 sec)</pre>
+</blockquote>
+<p>We can see that the <strong>logs_archive</strong> table has been filled with rows deleted from <strong>logs</strong> table.</p>
+<h4>Logging</h4>
+<p>Triggers can be used to automatically log significant events. As an example, let's say I have a social network application, in which an 'online_user' table lists those users which have logged in and have not yet logged out (hence they are assumed to be online):</p>
+<blockquote>
+<pre>DROP TABLE IF EXISTS `online_user`;
+CREATE TABLE `online_user` (
+  `online_user_id` int(11) NOT NULL auto_increment,
+  `login` VARCHAR(64) CHARSET ascii NOT NULL,
+  `ipv4` INT UNSIGNED NOT NULL,
+  `ts` TIMESTAMP,
+  PRIMARY KEY  (`online_user_id`)
+);</pre>
+</blockquote>
+<p>Our application knows how to handle this table. I can enhance my database with logging by adding a logs table, and additional triggers:</p>
+<blockquote>
+<pre>DROP TABLE IF EXISTS `logs`;
+CREATE TABLE `logs` (
+  `logs_id` int(11) NOT NULL auto_increment,
+  `ts` TIMESTAMP,
+  `message` VARCHAR(255) CHARSET utf8 NOT NULL,
+  PRIMARY KEY  (`logs_id`)
+);
+
+DELIMITER $$
+
+DROP TRIGGER IF EXISTS online_user_ai $$
+CREATE TRIGGER online_user_ai AFTER INSERT ON online_user
+FOR EACH ROW
+BEGIN
+  INSERT INTO logs (message) VALUES (CONCAT('User ',NEW.login, ' has logged in from ', INET_NTOA(NEW.ipv4)));
+END $$
+
+DROP TRIGGER IF EXISTS online_user_ad $$
+CREATE TRIGGER online_user_ad AFTER DELETE ON online_user
+FOR EACH ROW
+BEGIN
+  INSERT INTO logs (message) VALUES (CONCAT('User ',OLD.login, ' has logged out'));
+END $$
+
+DELIMITER ;</pre>
+</blockquote>
+<p>Let's see the effect of managing online users:</p>
+<blockquote>
+<pre>INSERT INTO online_user (login, ipv4) VALUES ('john', 123456);
+INSERT INTO online_user (login, ipv4) VALUES ('mark', 654321);
+SELECT SLEEP(12);
+DELETE FROM online_user WHERE login = 'john';</pre>
+</blockquote>
+<p>Checking up on the logs table, we get:</p>
+<blockquote>
+<pre>mysql&gt; SELECT * FROM `logs`;
++---------+---------------------+------------------------------------------+
+| logs_id | ts                  | message                                  |
++---------+---------------------+------------------------------------------+
+|       1 | 2008-12-22 11:16:31 | User john has logged in from 0.1.226.64  |
+|       2 | 2008-12-22 11:16:31 | User mark has logged in from 0.9.251.241 |
+|       3 | 2008-12-22 11:16:43 | User john has logged out                 |
++---------+---------------------+------------------------------------------+
+3 rows in set (0.00 sec)</pre>
+</blockquote>
+<p>The <strong>logs</strong> table can be used for logging any change in any table. The application need not be aware what exactly is being logged.</p>
+<p>If the <strong>logs</strong> table uses the MyISAM storage engine, the triggers may want to replace the <strong>INSERT</strong> with an <strong>INSERT DELAYED</strong>, so that they return immediately without waiting for locks on the <strong>logs</strong> table. Assuming no crash occurs right after, a separate thread will collect all inserts on the <strong>logs</strong> table, and handle them in its own free time.</p>
+<h4>More to come</h4>
+<p>More triggers use case, as well as limitations and workarounds, will be presented in following posts.</p>
+<p><a title="Triggers Use Case Compilation, Part II" href="http://code.openark.org/blog/mysql/triggers-use-case-compilation-part-ii">Triggers Use Case Compilation, Part II</a></p>

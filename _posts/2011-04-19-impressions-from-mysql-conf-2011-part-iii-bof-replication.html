@@ -1,0 +1,45 @@
+---
+title: 'Impressions from MySQL conf 2011, part III: BoF Replication'
+date: 2011-04-19 06:11:14.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- mysqlconf
+- Replication
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This post continues my impressions from some of the talks I've been to. I'll dedicate this post to a single session.</p>
+<h4>Wednesday</h4>
+<ul>
+<li>BoF: Replication, Lars Thalmann<em>, </em>Mat Keep<em> (Oracle)</em></li>
+</ul>
+<p>Lars Thallman presented the MySQL 5.5 replication features, as well as the expected 5.6 features. Among other features, one could notice parallel replication, binlog checksums, sub-second resolution and more. There was an open discussion about these features, asking for comments; looking for new ideas and suggestion from the audience.</p>
+<p>I can't possibly cover it all. I'll note two discussion I participated in, and which have interested me. This also serves for noting down to myself my ideas and thoughts.<!--more--></p>
+<h4>Parallel replication</h4>
+<p>As the trend goes, parallel replication will be implemented by having a thread per schema. My own contribution to the discussion is that with such paradigm, the slave may be at any state inconsistent with the master. That is, at any point in time it can be in such state that has never existed in any point in time on the master. This is because it is possible that one or more of the replication threads executes much faster than one or more of the others.</p>
+<p>We have discussed the meaning of <strong>STOP SLAVE</strong>. I have suggested that <strong>STOP SLAVE</strong> works in such way that it stops in a consistent slave. Lars suggested there could be normal <strong>STOP SLAVE</strong> and <strong>STOP SLAVE CONSISTENT</strong>.</p>
+<p>It has been noted that we may not care about the slave being inconsistent, as the prerequisite for parallel replication is that the distinct schemata are independent of one another. After some thought, I disagree. Today parallel replication may be implemented on different schemata; tomorrow - based on finer parameters. I think it's best to prepare for the inevitable future. Besides, <strong>STOP SLAVE INCONSISTENT</strong> is such an easy feature to implement!</p>
+<h4>Slave analysis</h4>
+<p>I also had a long time feature request. While writing management tools, I realized it is difficult to learn the topology of a replication environment by simple interrogation. If you connect to a master, you can either issue <strong>SHOW PROCESSLIST</strong> to detect the slaves, or <strong>SHOW SLAVE HOSTS</strong>.</p>
+<p>The former does not tell you the port on which the slaves are listening. The latter requires that you <a href="http://code.openark.org/blog/mysql/the-importance-of-report_host-report_port">configure <strong>report_host</strong> and <strong>report_port</strong> properly</a>.</p>
+<p>What I would like to see is a <strong>SHOW SLAVES STATUS</strong> command (or similar <strong>INFORMATION_SCHEMA</strong> table) <em>on the master</em>. Such that it lists connected slaves, one per row, with the following details:</p>
+<ul>
+<li><strong>Slave_host</strong> (this is easy, already exists in <strong>SHOW PROCESSLIST</strong>)</li>
+<li><strong>Slave_port</strong> (slave should send this kind of information to master upon first connect)</li>
+<li><strong>Slave_master_log_file</strong> (last log file requested by slave)</li>
+<li><strong>Slave_master_log_pos</strong> (last log pos requested by slave)</li>
+<li><strong>Slave_seconds_behind_master</strong> (slave should report this upon each request)</li>
+<li><strong>Slave_server_id</strong> (slave should send this upon connect)</li>
+</ul>
+<p>By reading <strong>Slave_host</strong>, <strong>Slave_port</strong> &amp; <strong>Slave_server_id</strong>, it makes it easy for us to build replication topology. It's a single operation to detect a master's slaves. It takes recursive steps to build entire topology.</p>
+<p>By reading the <strong>Slave_master_log_file</strong>, <strong>Slave_master_log_pos</strong>, we can easily determine that binary logs <em>up to that point</em> have already been written to the slave's relay log. This makes it easier to decide how to purge master logs. <strong>Slave_seconds_behind_master </strong>completes the replication picture.</p>

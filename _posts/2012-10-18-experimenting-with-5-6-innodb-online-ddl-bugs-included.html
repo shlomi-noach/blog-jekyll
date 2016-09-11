@@ -1,0 +1,142 @@
+---
+title: Experimenting with 5.6 InnoDB Online DDL (bugs included)
+date: 2012-10-18 14:41:46.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- InnoDB
+- New Features
+- openark kit
+- Opinions
+- scripts
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: hickey.liu@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>MySQL <strong>5.6</strong> offers the groundbreaking online DDL operations for InnoDB. Most common use cases will enjoy this feature, and the need for <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-online-alter-table.html">online alter table</a> scripts will decrease. This is a killer feature!</p>
+<p>I've put this new feature to the usability test. How did it go? Not too well, I'm afraid.</p>
+<p>[Updates to this text inline], also see <a href="http://code.openark.org/blog/mysql/innodb-ddl-kudos-to-quick-responders-on-bugs-mysql-com">this followup</a>.</p>
+<h4>sakila &amp; DDL</h4>
+<p><a href="http://dev.mysql.com/doc/sakila/en/index.html">sakila</a> is still a very useful database. I say "still" because it is not very large, and computing power is getting stronger; yet on my laptop some operations can still take many seconds to complete, which is just fine for my tests.</p>
+<p>Sakila tables are mostly InnoDB, and rental being the largest, I do:</p>
+<blockquote>
+<pre>node1 (sakila) &gt; <strong>alter table sakila.rental engine=InnoDB;</strong>
+Query OK, 16044 rows affected (<strong>6.94</strong> sec)
+Records: 16044  Duplicates: 0  Warnings: 0</pre>
+</blockquote>
+<p>So what can be executed during these <strong>6.94</strong> seconds? In a second terminal, I try the following:<!--more--></p>
+<h4>Meta</h4>
+<blockquote>
+<pre>node1 (sakila) &gt; show create table sakila.rental\G
+*************************** 1. row ***************************
+       Table: rental
+Create Table: CREATE TABLE `rental` (
+  `rental_id` int(11) NOT NULL AUTO_INCREMENT,
+  `rental_date` datetime NOT NULL,
+  `inventory_id` mediumint(8) unsigned NOT NULL,
+  `customer_id` smallint(5) unsigned NOT NULL,
+  `return_date` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `staff_id` tinyint(3) unsigned NOT NULL,
+  `last_update` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`rental_id`),
+  UNIQUE KEY `rental_date` (`rental_date`,`inventory_id`,`customer_id`),
+  KEY `idx_fk_inventory_id` (`inventory_id`),
+  KEY `idx_fk_customer_id` (`customer_id`),
+  KEY `idx_fk_staff_id` (`staff_id`),
+  CONSTRAINT `fk_rental_customer` FOREIGN KEY (`customer_id`) REFERENCES `customer` (`customer_id`) ON UPDATE CASCADE,
+  CONSTRAINT `fk_rental_inventory` FOREIGN KEY (`inventory_id`) REFERENCES `inventory` (`inventory_id`) ON UPDATE CASCADE,
+  CONSTRAINT `fk_rental_staff` FOREIGN KEY (`staff_id`) REFERENCES `staff` (`staff_id`) ON UPDATE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=16050 DEFAULT CHARSET=utf8
+1 row in set (<strong>1.08 sec</strong>)</pre>
+</blockquote>
+<p><strong>1.08</strong> seconds for <strong>SHOW CREATE TABLE</strong>. Consider: up till <strong>5.5</strong> you can't run <strong>SHOW CREATE TABLE</strong> while an <strong>ALTER</strong> was running on that table.</p>
+<h4>Read</h4>
+<p>While ALTER TABLE runs, I execute:</p>
+<blockquote>
+<pre>node1 (sakila) &gt; select min(rental_date), max(return_date) from sakila.rental;
++---------------------+---------------------+
+| min(rental_date)    | max(return_date)    |
++---------------------+---------------------+
+| 2005-05-24 22:53:30 | 2005-09-02 02:35:22 |
++---------------------+---------------------+
+1 row in set (2.77 sec)</pre>
+</blockquote>
+<p>So <strong>2.77</strong> seconds for a query which uses a full table scan to return. I'm not measuring performance here; am satisfies that query did actually succeed even while table was being altered.</p>
+<h4>Read &amp; bug</h4>
+<p>But, unfortunately, being the type of geek who likes to make trouble, I am also able to consistently fail the <strong>ALTER TABLE</strong>. Hang it, actually:</p>
+<p>See session <strong>#1</strong>:</p>
+<blockquote>
+<pre>node1 (sakila) &gt; alter table sakila.rental engine=innodb; 
+
+... (waiting forever)</pre>
+</blockquote>
+<p>And session <strong>#2</strong>:</p>
+<blockquote>
+<pre>node1 (sakila) &gt; show processlist;
++----+----------+-----------+--------+---------+------+---------------------------------+-----------------------------------------+
+| Id | User     | Host      | db     | Command | Time | State                           | Info                                    |
++----+----------+-----------+--------+---------+------+---------------------------------+-----------------------------------------+
+|  6 | msandbox | localhost | sakila | Query   |  <strong>219</strong> | <strong>Waiting for table metadata lock</strong> | <strong>alter table sakila.rental engine=innodb</strong> |
+|  4 | msandbox | localhost | sakila | Query   |    0 | init                            | show processlist                        |
++----+----------+-----------+--------+---------+------+---------------------------------+-----------------------------------------+</pre>
+</blockquote>
+<p>Read all about it in <a href="http://bugs.mysql.com/bug.php?id=67286">bug report #67286</a> .</p>
+<h4>Write: not so simple</h4>
+<p>The following <strong>UPDATE</strong> query hangs till the <strong>ALTER</strong> process is over:</p>
+<blockquote>
+<pre>node1 (sakila) &gt; update sakila.rental set return_date=now() where rental_id = floor(rand()*100);
+Query OK, 3 rows affected, 1 warning (6.10 sec)</pre>
+</blockquote>
+<p>No online DDL for writes?</p>
+<p>Was I unfair? Is "ENGINE=InnoDB" really an online DDL operation? OK, let's try with:</p>
+<blockquote>
+<pre>alter table sakila.rental <strong>row_format=compact</strong>;</pre>
+</blockquote>
+<p>Which is documented as one of the supported online DDL operations. Same.</p>
+<p>The <a href="http://dev.mysql.com/doc/refman/5.6/en/innodb-online-ddl.html">manual</a> says I can define the <strong>ALGORITHM</strong> and the <strong>LOCK</strong> properties for the <strong>ALTER TABLE</strong> operation. But is gives no example, so I try my own:</p>
+<blockquote>
+<pre>node1 (sakila) &gt; alter table sakila.rental row_format=compact <strong>ALGORITHM=INPLACE LOCK=NONE</strong>;
+ERROR 1064 (42000): You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'ALGORITHM=INPLACE LOCK=NONE' at line 1</pre>
+</blockquote>
+<p>Ummm.... then maybe:</p>
+<blockquote>
+<pre>node1 (sakila) &gt; alter table sakila.rental <strong>ALGORITHM=INPLACE LOCK=NONE</strong> row_format=compact;
+ERROR 1064 (42000): You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'LOCK=NONE row_format=compact' at line 1</pre>
+</blockquote>
+<p>OK, how about:</p>
+<blockquote>
+<pre>node1 (sakila) &gt; alter table sakila.rental <strong>ALGORITHM=INPLACE</strong> row_format=compact <strong>LOCK=NONE</strong>;
+ERROR 1064 (42000): You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'row_format=compact LOCK=NONE' at line 1</pre>
+</blockquote>
+<p>Reading, rereading, re-verifying <a href="http://dev.mysql.com/doc/refman/5.6/en/alter-table.html">the manual</a> -- I am typing a valid statement! What's wrong here?</p>
+<p>Yes, I'm on <strong>5.6.7-rc-log</strong>. No, I can't find, in <strong>5.6</strong> documentation and slides from <a href="https://oracleus.activeevents.com/connect/search.ww?event=openworld#loadSearch-event=openworld&amp;searchPhrase=&amp;searchType=session&amp;tc=0&amp;sortBy=&amp;p=&amp;i%2810942%29=15982&amp;i%2811425%29=&amp;i%2810053%29=&amp;i%2811404%29=&amp;i%2811562%29=&amp;i%2811488%29=&amp;i%2810089%29=&amp;i%2811840%29=">MySQL connect</a>, any code sample that actually uses <strong>ALGORITHM</strong> and <strong>LOCK</strong> (!?)</p>
+<p><strong>[UPDATE]</strong>, as Marc Alff point out, I did in fact use the wrong syntax, and was missing commas. The right syntax is:</p>
+<blockquote>
+<pre>node1 (sakila) &gt; <strong>alter table sakila.rental row_format=compact, algorithm=inplace, lock=none;</strong>
+ERROR 1235 (42000): This version of MySQL doesn't yet support 'alter table sakila.rental row_format=compact, algorithm=inplace, lock=none'</pre>
+</blockquote>
+<p>Unfortunately this still results with an error. Another attempt shows that:</p>
+<blockquote>
+<pre>node1 (sakila) &gt; alter table sakila.rental row_format=compact, algorithm=inplace, lock=shared;
+Query OK, 0 rows affected (11.08 sec)</pre>
+</blockquote>
+<p>works well. So, apparently, you can only run <em>this type</em> of <strong>ALTER TABLE</strong> a with a <strong>SHARED</strong> lock. The bad news?</p>
+<blockquote>
+<pre>node1 (sakila) &gt; alter table sakila.rental <strong>add index(return_date)</strong>, algorithm=inplace, lock=<strong>none</strong>;
+ERROR 1235 (42000): This version of MySQL doesn't yet support 'alter table sakila.rental add index(return_date), algorithm=inplace, lock=none'
+node1 (sakila) &gt; alter table sakila.rental <strong>add column c char</strong>, algorithm=inplace, lock=<strong>none</strong>;
+ERROR 1235 (42000): This version of MySQL doesn't yet support 'alter table sakila.rental add column c char, algorithm=inplace, lock=none'</pre>
+</blockquote>
+<p>So I'm not sure as yet what kind of DDL operations are available with <strong>LOCK=NONE</strong>.</p>
+<h4>Conclusion</h4>
+<p>Little success with online DDL. SHARED-only is many times as good as completely blocked.</p>
+<p>My personal conclusion is (and I do take into account <strong>5.6</strong> is RC at this time, not GA): <em>not there yet!</em> Stick to <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/introduction.html">openark-kit</a>, <a href="http://www.percona.com/doc/percona-toolkit/2.1/">Percona-toolkit</a> or <a href="http://www.facebook.com/notes/mysql-at-facebook/online-schema-change-for-mysql/430801045932">Facebook OSC</a> for some time. They all provide with online-alter-table operations via external scripts.</p>

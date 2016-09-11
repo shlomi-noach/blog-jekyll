@@ -1,0 +1,66 @@
+---
+layout: post
+title: Database security and Sequences, Part II
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Sequences make for an easy unique key generation, on a DBA's part, but an exposure vulnerability on the application side.</p>
+<p>I wish to discuss an aspect of security which is not related to hacking down passwords or working SQL injections: the aspect of observation. By merely observing an application one can gather an impressive insight on the application's business.</p>
+<p>In particular, I wish to relate to sequences (e.g. an <strong>AUTO_INCREMENT</strong> column on a MySQL server).</p>
+<h4>The problem: they are easily deduced</h4>
+<p>What kind of knowledge can someone gather? Here's an example.</p>
+<p>Have you every bought something online, on some <strong>2nd</strong> or <strong>3rd</strong> grade website? When checking out, did you get a page ready for printing, letting you know your transaction id is <strong>9,584</strong>?</p>
+<p>That's a funny number, isn't it? So small. Is it possible that I have just made the <strong>9,584th</strong> purchase from this online shop?</p>
+<p>Have you ever bought a second item from said 2nd or 2rd grade online shop? Did you get <em>"Your transaction is <strong>10,203</strong>"</em>? No suspicion now as for the origin of that number.</p>
+<p>Not only can I deduce this has been the 10,203rd purchase in this shop, but I can also tell the rate of purchase in this shop. If I buy a chewing gum every <strong>1st</strong> of a month, I can tell the monthly sales rate (though not amounts). I can drill down to any resolution I like, to get daily, even hourly rates of purchase.</p>
+<h4>A similar example</h4>
+<p>You are subscribed on some online service. It might be a newsletter, or a notification service of some sort. You get you daily email. It has this "<em>Can't view this mail? Click</em> <em><span style="text-decoration: underline;">here</span>"</em> message, which leads you to <strong>www.some.service.com/message?msgid=30226874&amp;crc=6833e99b89cb15e38d839de10dd36f3b</strong></p>
+<p>They're decent enough to require a crc to view the message, but you still get that this is the <strong>30226874th</strong> message they send. Wait for tomorrow's mail and get the daily number of messages.</p>
+<p>Is that a message per customer? Do you get roughly the same lap every day? There you have it: the number of customers for that service.</p>
+<h4>customer ID?</h4>
+<p>Are you assigned with a customer ID? Is it <strong>217</strong>? (maybe you deduce this from some parameter in your online account). You can pretty well guess there have been <strong>216</strong> before you. OK, sometimes applications "jump up" the sequence an unknown value, so as to create intentional gaps. Confuse the enemy. With enough sampling (a friend of yours has just signed up as a customer?) you can get the picture.</p>
+<h4>Where's the source of the problem?</h4>
+<p>If you're using sequences, you are using guessable keys to your data. This is fine as far as the DBA's concerned. <a href="http://code.openark.org/blog/mysql/reasons-to-use-auto_increment-columns-on-innodb">More than fine</a>: this could make for faster, more compact, more easily maintainable tables. But that does not mean you wish to expose those numbers to your clients.</p>
+<p>Maybe you don't mind. Fine. But if you do, you have to come up with a new way of identifying your records. Not by replacing your sequences; they are good for structural reasons.</p>
+<h4>A reasonable solution</h4>
+<p>We add a column to our table (say, our <strong>notification</strong> table). We add a "<strong>notification_code</strong>" column. We want this column to be:</p>
+<ol>
+<li>Unique</li>
+<li>Not easily guessable, not easily deducible, not exposing internal data (all three are roughly equivalent)</li>
+<li>Sparse (to avoid brute force guess attempts)</li>
+<li>Easily generated on application side.</li>
+</ol>
+<p>Many people think of some checksum (MD5, SHA) as a possible solution. Say, just take a random checksum: <strong>MD5(RAND())</strong>. It answers for <strong>2</strong>, <strong>3</strong>, <strong>4</strong>, but not for <strong>1</strong>. It does not make for a unique key. However, we can leverage it.</p>
+<p>Let's tackle the Unique issue. How do we generate a unique number, not by using a sequence? A possibility is to take time into consideration. Say I were using a <strong>TIMESTAMP</strong>. It is not unique, but is gives me a head's start, since every second (or pick your own resolution) it's going to change.</p>
+<p>A <strong>TIMESTAMP</strong> and some checksum together still don't make for a unique value, although we are far better as probability goes.</p>
+<p>Let's push this on: suppose you are certain beyond doubt, that for any time period, you do not generate more than <strong>K</strong> rows. How about taking you sequence value modulo <strong>K</strong>?</p>
+<p>Take a look at this suggestion: our <strong>notification_code</strong> is <strong>CONCAT_WS('-', NOW(), notification_id % K, MD5(RAND()))</strong>, where K is as just noted, and notification_id is the row's sequence number (or <strong>AUTO_INCREMENT</strong> value).</p>
+<p>It is not a perfect solution, but it is reasonable, discussion follows, in no particular order:</p>
+<h4>1. Unique</h4>
+<p>The value is unique since we concluded that no <strong>K</strong> rows are generated in a given <strong>TIMESTAMP</strong> (multiply <strong>K</strong> if your sequence is only generating even numbers, etc.). The combination of both is therefore unique.</p>
+<h4>4. Easily generated on application side.</h4>
+<p>Definitely easy. Can be done on application side (once auto-generated value is retrieved). Can also be done on DB side.</p>
+<h4>3. Sparse</h4>
+<p><strong>MD5</strong> or <strong>SHA</strong> are sparse enough. This is why we used a checksum in the key. Do you trust your RAND() function to be sparse enough? If not, throw in some additional input to your checksum function. It doesn't matter what you throw in in terms of the resulting value, since you never have to re-compute it. Throw in all your columns, the more the merrier.</p>
+<h4>2. Not easily guessable, not easily deducible, not exposing internal data</h4>
+<p>This is where the offered solution is not perfect, but reasonable:</p>
+<ul>
+<li>Not easily guessable: the checksum makes the entire code to be unguessable (again, throw in more input at it other than RAND() to ensure that)</li>
+<li>Not easily deducible: <strong>TIMESTAMP</strong> on modulo parts are easily deducible, but not the rest of the code: this makes the entire code be undeducible.</li>
+<li>Not exposing internal data: here we have two weaknesses, but these are not nearly as weak as those presented at the beginning of this post, discussion follows.</li>
+</ul>
+<p>The <strong>TIMESTAMP</strong> value obviously represents internal data: for a notification, it represents the time of the notification. In our example, though, the time of the notification is an exposed data anyhow! In another example, this might be the time at which I make a check out, or the time at which I registered to a service. In all these examples, the time stamp is exposed.</p>
+<p>How about the <strong>id % K</strong> part?</p>

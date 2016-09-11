@@ -1,0 +1,22 @@
+---
+layout: post
+title: Rewriting complex queries with simple foreach() calls
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Do not that you are essentially breaking down a large query into many small ones (typically one-liners). Sometimes this is actually something you want to do!</p>
+<p>multi-table update with LIMIT</p>
+<p>do something ... where x in (select ...)--&gt; foreach('select ...', 'do something where x = ${1}');</p>

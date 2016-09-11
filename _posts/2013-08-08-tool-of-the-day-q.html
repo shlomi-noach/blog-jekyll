@@ -1,0 +1,40 @@
+---
+title: 'Tool of the day: q'
+date: 2013-08-08 11:26:02.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- Linux
+- MySQL
+tags:
+- command line
+- Open Source
+- SQL
+- tools
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>If you work with command line and know your SQL, <strong>q</strong> is a great tool to use:</p>
+<p><a href="https://github.com/harelba/q"><strong>q</strong></a> allows you to query your text files or standard input with SQL. You can:</p>
+<blockquote>
+<pre>SELECT c1, COUNT(*) FROM /home/shlomi/tmp/my_file.csv GROUP BY c1</pre>
+</blockquote>
+<p>And you can:</p>
+<blockquote>
+<pre>SELECT all.c2 FROM /tmp/all_engines.txt AS all LEFT JOIN /tmp/innodb_engines.txt AS inno USING (c1, c2) WHERE inno.c3 IS NULL</pre>
+</blockquote>
+<p>And you can also combine with your favourite shell commands and tools:</p>
+<blockquote>
+<pre>grep "my_term" /tmp/my_file.txt | q "SELECT c4 FROM - JOIN /home/shlomi/static.txt USING (c1)" | xargs touch</pre>
+</blockquote>
+<p>Some of <strong>q</strong>'s functionality (and indeed, SQL functionality) can be found in command line tools. You can use <strong>grep</strong> for pseudo <strong>WHERE</strong> filtering, or <strong>cut</strong> for projecting, but you can only get so far with <strong>cat my_file.csv | sort | uniq -c | sort -n</strong>. SQL is way more powerful for working with tabulated data, and so <strong>q</strong> makes for a great addition into one's toolbox.</p>
+<p>The tool is authored by my colleague <a href="https://github.com/harelba">Harel Ben-Attia</a>, and is in daily use over at our company (it is in fact installed on all production servers).</p>
+<p>It is of course free and open source (<a href="https://github.com/harelba/q">get it on GitHub</a>, where you can also find documentation), and very easy to setup. Enjoy!</p>

@@ -1,0 +1,76 @@
+---
+title: sphinx, sphinx_snippets() & MySQL 5.5
+date: 2012-03-21 15:57:59.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Development
+- Open Source
+- Sphinx
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: flyhi.contact@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I've written a patch which completes Sphinx's integration with MySQL <strong>5.5</strong>.</p>
+<p>Up until a couple months ago, Sphinx would not compile with MySQL <strong>5.5</strong> at all. This is, thankfully, resolved as of Sphinx <strong>2.0.3</strong>.</p>
+<p>However, to my disdain, I've found out that it only partially work: the <a href="http://sphinxsearch.com/docs/manual-2.0.4.html#sphinxse-snippets">sphinx_snippets()</a> user defined function is not included within the plugin library. After some quick poking I discovered that it was not added to the build, and when added, would not compile.</p>
+<p>I rely on <strong>sphinx_snippets()</strong> quite a lot, and like it. Eventually I wrote the fix to the <strong>snippets_udf.cc</strong> which allows it to run in a MySQL <strong>5.5</strong> server.</p>
+<p>Here are the changes for the <strong>2.0.4</strong> version of Sphinx:</p>
+<ul>
+<li><a href="http://code.openark.org/blog/wp-content/uploads/2012/03/snippets_udf.cc">snippets_udf.cc</a></li>
+<li><a href="http://code.openark.org/blog/wp-content/uploads/2012/03/CMakeLists.txt">CMakeLists.txt</a></li>
+</ul>
+<p>Replace your <strong>2.0.4</strong> files with these two and get on compiling your MySQL server.</p>
+<h4>Compilation guide</h4>
+<p>For completeness, here's how to compile Percona Server <strong>5.5</strong> with Sphinx <strong>2.0.4</strong> including the above patches:<!--more--></p>
+<p>Get <a href="http://www.percona.com/downloads/Percona-Server-5.5/LATEST/">Percona Server source code</a> and <a href="http://sphinxsearch.com/downloads/release/">Sphinx Search source code</a>.</p>
+<p>I'll be using Percona Server <strong>5.5.21-25.0</strong>. I use <strong>/data/tmp/mysql</strong> as compilation path, and install MySQL on <strong>/usr/local/mysql55</strong>.</p>
+<blockquote>
+<pre>mkdir -p /data/tmp/mysql
+cd /data/tmp/mysql
+tar xzfv Percona-Server-5.5.21-rel25.0.tar.gz
+tar xzfv sphinx-2.0.4-release.tar.gz
+cd Percona-Server-5.5.21-rel25.0/
+cp -R /data/tmp/mysql/sphinx-2.0.4-release/mysqlse storage/sphinx</pre>
+</blockquote>
+<p>Overwrite with patched files included in this post:</p>
+<blockquote>
+<pre>cp /tmp/CMakeLists.txt storage/sphinx/CMakeLists.txt
+cp /tmp/snippets_udf.cc storage/sphinx/snippets_udf.cc</pre>
+</blockquote>
+<p>Build MySQL:</p>
+<blockquote>
+<pre>sh BUILD/autorun.sh
+./configure --with-plugin-sphinx --prefix=/usr/local/mysql55
+make
+sudo make install</pre>
+</blockquote>
+<p>Install the mysql55 service:</p>
+<blockquote>
+<pre>cd /usr/local/mysql55
+sudo cp support-files/mysql.server /etc/init.d/mysql55</pre>
+</blockquote>
+<p>In <strong>/etc/bash.bashrc</strong>, add:</p>
+<blockquote>
+<pre>export PATH=/usr/local/mysql55/bin:${PATH}</pre>
+</blockquote>
+<p>Start MySQL:</p>
+<blockquote>
+<pre>sudo service mysql55 start</pre>
+</blockquote>
+<p>Login to MySQL as an administrato (typically <strong>root</strong>) and install Sphinx:</p>
+<blockquote>
+<pre>mysql&gt; INSTALL PLUGIN sphinx SONAME 'ha_sphinx.so';
+mysql&gt; CREATE FUNCTION sphinx_snippets RETURNS STRING SONAME 'ha_sphinx.so';</pre>
+</blockquote>
+<h4>Notes</h4>
+<p>See also <a href="http://sphinxsearch.com/bugs/view.php?id=1090">http://sphinxsearch.com/bugs/view.php?id=1090</a> and <a href="http://sphinxsearch.com/forum/view.html?id=8982">http://sphinxsearch.com/forum/view.html?id=8982</a></p>

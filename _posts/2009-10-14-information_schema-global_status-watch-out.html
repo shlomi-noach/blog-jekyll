@@ -1,0 +1,110 @@
+---
+title: 'INFORMATION_SCHEMA.GLOBAL_STATUS: watch out'
+date: 2009-10-14 21:03:32.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- INFORMATION_SCHEMA
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: awfief@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>MySQL 5.1 boasts some new and useful <strong>INFORMATION_SCHEMA</strong> tables. Among them is the <strong>GLOBAL_STATUS </strong>table.</p>
+<p>At last, it is possible to ask questions like:</p>
+<blockquote>
+<pre>node1&gt; SELECT * FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'innodb_os_log_written';
++-----------------------+----------------+
+| VARIABLE_NAME         | VARIABLE_VALUE |
++-----------------------+----------------+
+| INNODB_OS_LOG_WRITTEN | 512            |
++-----------------------+----------------+
+1 row in set (0.00 sec)
+
+node1&gt; SELECT * FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'questions';
++---------------+----------------+
+| VARIABLE_NAME | VARIABLE_VALUE |
++---------------+----------------+
+| QUESTIONS     | 28             |
++---------------+----------------+
+1 row in set (0.00 sec)</pre>
+</blockquote>
+<h4>Watch out #1</h4>
+<p>As with all <strong>INFORMATION_SCHEMA</strong> tables, to get a single row one needs to materialize the entire table. To ask the above two questions, the table will materialize twice. This means gathering all the information -- twice. To get 20 values, we materialize the table 20 times. It not only takes time, but also increases some of the status variables themselves, like <strong>questions</strong>, <strong>select_scan</strong>, <strong>created_tmp_tables</strong>. Ironically, when we used <strong>SHOW GLOBAL STATUS</strong> and had to parse the results in our application code, we only issued the query once. But with the convenience of <strong>INFORMATION_SCHEMA</strong>, it's much easier (and makes more sense!) to query per variable.</p>
+<h4><!--more-->Watch out #2</h4>
+<p>So if we're to access a handful of status variables, and wish to only materialize the table once, what can we do? An easy solution is to create a <strong>MEMORY</strong> table which looks just like <strong>GLOBAL_STATUS</strong>, like this:</p>
+<blockquote>
+<pre>node1&gt; CREATE TABLE memory_global_status LIKE INFORMATION_SCHEMA.GLOBAL_STATUS;
+Query OK, 0 rows affected (0.00 sec)
+node1&gt; INSERT INTO memory_global_status SELECT * FROM INFORMATION_SCHEMA.GLOBAL_STATUS;
+Query OK, 291 rows affected (0.01 sec)
+Records: 291  Duplicates: 0  Warnings: 0</pre>
+</blockquote>
+<p>We can now query the <strong>memory_global_status</strong> table, having 'friezed' the status, for as many times as we wish, with no real cost.</p>
+<p>But let's take a look at:</p>
+<blockquote>
+<pre>node1&gt; SHOW TABLE STATUS LIKE 'memory_global_status'\G
+*************************** 1. row ***************************
+           Name: memory_global_status
+         Engine: MEMORY
+        Version: 10
+     Row_format: Fixed
+           Rows: 291
+ Avg_row_length: 3268
+    Data_length: 1050624
+Max_data_length: 16755036
+   Index_length: 0
+      Data_free: 0
+ Auto_increment: NULL
+    Create_time: NULL
+    Update_time: NULL
+     Check_time: NULL
+      Collation: utf8_general_ci
+       Checksum: NULL
+ Create_options:
+        Comment:
+1 row in set (0.00 sec)</pre>
+</blockquote>
+<p>Ouch! How did we get <strong>Avg_row_length: 3268</strong>, and <strong>Data_length: 1050624</strong>? That's quite more then we expected. Well, most of the values in <strong>GLOBAL_STATUS</strong> are just intgers. But some, just a few, are textual, and so the table definition is:</p>
+<blockquote>
+<pre>node1&gt; SHOW CREATE TABLE INFORMATION_SCHEMA.GLOBAL_STATUS \G
+*************************** 1. row ***************************
+       Table: GLOBAL_STATUS
+Create Table: CREATE TEMPORARY TABLE `GLOBAL_STATUS` (
+  `VARIABLE_NAME` varchar(64) NOT NULL DEFAULT '',
+  `VARIABLE_VALUE` varchar(1024) DEFAULT NULL
+) ENGINE=MEMORY DEFAULT CHARSET=utf8
+1 row in set (0.00 sec)</pre>
+</blockquote>
+<p>A <strong>MEMORY</strong> tables works with FIXED row format, which means we need to allocate 64 utf8 characters for <strong>VARIABLE_NAME</strong>, plus 1024 utf8 characters for <strong>VARIABLE_VALUE</strong>. This makes for: (1+64*3) + 2+(1024*3) = 3267 (the missing byte is to indicate the NULLable values).</p>
+<p>I'm not sure why the table definition is as such. <strong>VARIABLE_NAME</strong> can be safely declared as <strong>ascii</strong>, and, as far as I can see, so can <strong>VARIABLE_VALUE</strong>. There are a few <strong>ON</strong>/<strong>OFF</strong> values (I've expressed my opinion and concerns on these <a href="http://code.openark.org/blog/mysql/variables-ambiguities-in-names-and-values">here</a> and <a href="http://code.openark.org/blog/mysql/more-on-variables-ambiguities">here</a>; why not just use <strong>0</strong>/<strong>1</strong>?). <strong>SSL_CIPHER</strong> seems like the only variable which can get long enough to justify the 1024 characters.</p>
+<p>If you don't mind about truncating those text values, or don't mind about text values at all (we usually care about the counters), you can altogether disregard them when SELECTing from <strong>GLOBAL_STATUS</strong>. One can also add a <strong>HASH</strong> index on the <strong>VARIABLE_NAME</strong> parameter to avoid using full table scans upon reading each value.</p>
+<div id="_mcePaste" style="overflow: hidden; position: absolute; left: -10000px; top: 476px; width: 1px; height: 1px;">node1 [localhost] {msandbox} (test) &gt; SHOW TABLE STATUS LIKE 'memory_global_status'\G<br />
+*************************** 1. row ***************************<br />
+Name: memory_global_status<br />
+Engine: MEMORY<br />
+Version: 10<br />
+Row_format: Fixed<br />
+Rows: 291<br />
+Avg_row_length: 3268<br />
+Data_length: 1050624<br />
+Max_data_length: 16755036<br />
+Index_length: 0<br />
+Data_free: 0<br />
+Auto_increment: NULL<br />
+Create_time: NULL<br />
+Update_time: NULL<br />
+Check_time: NULL<br />
+Collation: utf8_general_ci<br />
+Checksum: NULL<br />
+Create_options:<br />
+Comment:<br />
+1 row in set (0.00 sec)</div>

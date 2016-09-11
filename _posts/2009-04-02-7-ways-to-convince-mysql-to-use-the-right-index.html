@@ -1,0 +1,111 @@
+---
+title: 7 ways to convince MySQL to use the right index
+date: 2009-04-02 18:06:32.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Books
+- Execution plan
+- Indexing
+- SQL
+- Syntax
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Sometimes MySQL gets it wrong. It doesn't use the right index.</p>
+<p>It happens that MySQL generates a query plan which is really bad (EXPLAIN says it's going to explore some 10,000,000 rows), when another plan (soon to show how was generated) says: "Sure, I can do that with 100 rows using a key".</p>
+<h4>A true story</h4>
+<p>A customer had issues with his database. Queries were taking 15 minutes to complete, and the db in general was not responsive. Looking at the slow query log, I found the criminal query. Allow me to bring you up to speed:</p>
+<p>A table is defined like this:</p>
+<blockquote>
+<pre>CREATE TABLE t (
+  id INT UNSIGNED AUTO_INCREMENT,
+  type INT UNSIGNED,
+  level TINYINT unsigned,
+  ...
+  PRIMARY KEY(id),
+  KEY `type` (type)
+) ENGINE=InnoDB;</pre>
+</blockquote>
+<p>The offending query was this:</p>
+<blockquote>
+<pre>SELECT id FROM data
+WHERE type=12345 AND level &gt; 3
+ORDER BY id</pre>
+</blockquote>
+<p>The facts were:</p>
+<ul>
+<li>`t` has about 10,000,000 rows.</li>
+<li>The index on `type` is selective: about 100 rows per value on average.</li>
+<li>The query took a long time to complete.</li>
+<li>EXPLAIN has shown that MySQL uses the PRIMARY KEY, hence searches 10,000,000 rows, filtered "using where".</li>
+<li>The <em>other</em> EXPLAIN has shown that by using the `type` key, only 110 rows are expected, to be filtered "using where", then sorted "using filesort"</li>
+</ul>
+<p>So MySQL acknowledged it was generating the wrong plan. The <em>other</em> plan was better by its own standards.</p>
+<h4>Solving the problem</h4>
+<p>Let's walk through 7 ways to solve the problem, starting with the more aggressive solutions, refining to achieve desired behavior through subtle changes.<!--more--></p>
+<h4>Solution #1: OPTIMIZE</h4>
+<p>If MySQL got it wrong, it may be because the table was frequently changed. This affects the statistics. If we can spare the time (table is locked during that time), we could help out by rebuilding the table.</p>
+<h4>Solution #2: ANALYZE</h4>
+<p>ANALYZE TABLE is less time consuming, in particular on InnoDB, where it is barely noticed. An ANALYZE will update the index statistics and help out in generating better query plans.</p>
+<p>But hold on, the above two solutions are fine, but in the given case, MySQL <em>already</em> acknowledges better plans are at hand. The fact was I tried to run ANALYZE a few times, to no avail.</p>
+<h4>Solution #3: USE INDEX</h4>
+<p>Since the issue was urgent, my first thought went for the ultimate weapon:</p>
+<blockquote>
+<pre>SELECT id FROM data USE INDEX(type)
+WHERE type=12345 AND level &gt; 3
+ORDER BY id</pre>
+</blockquote>
+<p>This instructs MySQL to only consider the indexes listed; in our example, I only want MySQL to consider using the `type` index. It is using this method that generated the <em>other</em> (good) EXPLAIN result. I could have gone even more ruthless and ask for FORCE INDEX.</p>
+<h4>Solution #4: IGNORE INDEX</h4>
+<p>A similar approach would be to explicitly negate the use of the PRIMARY KEY, like this:</p>
+<blockquote>
+<pre>SELECT id FROM data IGNORE INDEX(PRIMARY)
+WHERE type=12345 AND level &gt; 3
+ORDER BY id</pre>
+</blockquote>
+<h4>A moment of thinking</h4>
+<p>The above solutions are "ugly", in the sense that this is not standard SQL. It's too MySQL specific.</p>
+<p>I've asked the programmers to do a quick rewrite, and had a few moments to consider: why did MySQL insist on using the PRIMARY KEY. Was it because I've asked it for the `id` column only? I rewrote as follows:</p>
+<blockquote>
+<pre>SELECT id, type, level FROM data
+WHERE type=12345 AND level &gt; 3
+ORDER BY id</pre>
+</blockquote>
+<p>Nope. EXPLAIN got me the same bad plan. Then it must be the ORDER BY clause:</p>
+<blockquote>
+<pre>SELECT id FROM data
+WHERE type=12345 AND level &gt; 3</pre>
+</blockquote>
+<p>Sure enough, EXPLAIN now  indicates using the `type` index, only reading 110 rows. So MySQL preferred to scan 10,000,000 rows, just so that the rows are generated in the right ORDER, and so no sorting is required, when it could have read 110 rows (where each row is a mere INT) and sort them in no time.</p>
+<p>Armed with this knowledge, a few more options come at hand.</p>
+<h4>Solution #5:Move some logic to the application</h4>
+<p>At about that point I got a message that the programmers were unable to add the USE INDEX part. Why? They were using the EJB framework, which limits your SQL-like queries to something very generic. Well, you can always drop the ORDER BY part and sort on the application side. That isn't fun, but it's been done.</p>
+<h4>Solution #6: Negate use of PRIMARY KEY</h4>
+<p>Can we force MySQL to use the `type` index, retain the ORDER BY, and do it all with standard SQL? Sure. The following query does this:</p>
+<blockquote>
+<pre>SELECT id, type, level FROM data
+WHERE type=12345 AND level &gt; 3
+ORDER BY id+0</pre>
+</blockquote>
+<p>id+0 is a function on the `id` column. This makes MySQL unable to utilize the PRIMARY KEY (or any other index on `id`, had there been one).</p>
+<p>In his book "<a title="SQL Tuning by Dan Tow" href="http://www.amazon.com/SQL-Tuning-Dan-Tow/dp/0596005733">SQL Tuning</a>", Dan Tow dedicates a chapter on hints and tips like the above. He shows how to control the use or non-use of indexes, the order by which subqueries are calculated, and more.</p>
+<p>Unfortunately, the EJB specification said this was not allowed. You could not ORDER BY a fucntion. Only on normal column.</p>
+<h4>Solution #7: Make MySQL think the problem is harder than it really is</h4>
+<p>Almost out of options. Just a moment before settling for sorting on the application side, another issue can be considered: since MySQL was fooled once, can it be fooled again to make things right? Can we fool it to believe that the PRIMARY KEY would not be worthwhile to use? The following query does this:</p>
+<blockquote>
+<pre>SELECT id, type, level FROM data
+WHERE type=12345 AND level &gt; 3
+ORDER BY id, type, level</pre>
+</blockquote>
+<p>Let's reflect on this one. What is the order by which the rows are returned now? Answer: exactly as before. Since `id` is PRIMARY KEY, it is also UNIQUE, so no two `id` values are the same. Therefore, the secondary sorting column is redudant, and so is the following one. We get exactly the same result as "ORDER BY id".</p>
+<p>But MySQL didn't catch this. This query caused MySQL to say: <em>"Mmmmm. 'ORDER BY id, type, level' is not doable with the PRIMARY KEY only. Well, in this case, I had better used the `type` index"</em>. Is this a weakness of MySQL? I guess so. Maybe it will be fixed in the future. But this was the fix that made the day.</p>

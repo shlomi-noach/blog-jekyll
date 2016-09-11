@@ -1,0 +1,28 @@
+---
+title: Monitor your MySQL servers as done before, for free!
+date: 2011-12-18 08:48:10.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>With genuine respect to other <a href="http://www.webyog.com/blog/2011/12/16/monitor-your-mysql-servers-like-never-before-use-csos/">products</a>, the people making those products and the efforts involved, I would like to make an issue:</p>
+<p>Some things <a href="http://code.openark.org/blog/mysql/mycheckpoint-rev-170-improved-custom-queries-local-charting-pageswap-io-monitoring-improved-html-reports">have been done before</a>, done pretty well (if I may say so), and for free.</p>
+<p><a href="http://code.openark.org/forge/mycheckpoint">mycheckpoint</a> is a free monitoring tool for MySQL. It uses an unorthodox approach of monitoring your MySQL servers by storing the monitored data in SQL format (actually, within a MySQL server). This allows you to either use the <a href="http://mycheckpoint.googlecode.com/svn/trunk/doc/html/sample/http/mcp_sql00/sv_report_html_brief">fancy JavaScript charting</a> (by running <em>mycheckpoint</em> as <a href="http://code.openark.org/forge/mycheckpoint/documentation/http-web-server">HTTP server</a>), or <a href="http://code.openark.org/forge/mycheckpoint/documentation/querying-for-data">Do-It-Yourself diagnostics</a>.</p>
+<p>It allows for a great many more things, among which are <a href="http://code.openark.org/forge/mycheckpoint/documentation/custom-monitoring">custom queries and charts</a>: you may add your own queries, to be included in the monitoring scheme. Query your <strong>AUTO_INCREMENT</strong> values to detect growth rate, query your <strong>INFORMATION_SCHEMA</strong> tables (if you dare) to learn about your data dimensions, query for query response time to detect performance issues with your website/database, or query your data itself (e.g. <em>sales per day</em>) to get insight about your product. Here are <a href="http://mycheckpoint.googlecode.com/svn/trunk/doc/html/sample/http/mcp_sql00/sv_report_html_brief#Custom">sample charts</a> to illustrate.<!--more--></p>
+<p>Adding a custom query is as easy as producing an <strong>INSERT</strong> command. And of course you can set up <a href="http://code.openark.org/forge/mycheckpoint/documentation/alerts">alert conditions</a>. You can set them up on your normal monitored data (e.g. <em>seconds behind master</em>) or on your custom monitored data (e.g. <em>time it takes to execute cart-items query is too long</em>, <em>rate of purchases is below some threshold</em> etc.). It works the same since all monitored data, standard &amp; custom, is stored in SQL format: rows, columns, a table.</p>
+<p>This also means you can retroactively check for different thresholds; you can query your data anyway you like! mycheckpoint provides you with a good visualization tool, but, like a good command like client, leaves the data intact for you to analyze the way you like it.</p>
+<p>Of course you can get <a href="http://code.openark.org/forge/mycheckpoint/documentation/emails">emailed</a> once an alert pops up. But wait, not so fast: you can ask the alert to pop up only if the threshold is trespassed for a <em>given amount of time</em>. For example, it may be OK for OS load average to increase for a few moments, but you may wish to be alerted if this happens for over <strong>30</strong> minutes continuously.</p>
+<p>The thing is, you get all these in an uncompressed <strong>222K</strong> single python script (<strong>43K</strong> compressed), and there's no trial period. <em>mycheckpoint</em> is completely free to <a href="http://code.google.com/p/mycheckpoint/">download and use</a> under the <strong>BSD</strong> license. It is listed in <a href="http://www.infoworld.com/d/data-management/10-essential-mysql-tools-admins-168018">10 essential MySQL tools for admin</a>, and is <a href="http://code.openark.org/forge/mycheckpoint/documentation">well documented</a>.</p>
+<p>I'm not suggesting the scope of <em>mycheckpoint</em> levels with that of other products. It is lightweight; it does not have the full featured web interface as others do; there's work to be done. It only provides basic OS monitoring, and there are missing parts, like replication topology monitoring. But it is feature rich. As the author of <em>mycheckpoint</em> I take notice of using it on production for my own servers. It gets the job done.</p>
+<p>It uses some ideas based on existing tools, and a few original ones. Before you say <em>"like never before"</em>, take a look at <em>mycheckpoint</em>.</p>

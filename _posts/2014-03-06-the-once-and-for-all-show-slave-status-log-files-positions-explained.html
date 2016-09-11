@@ -1,0 +1,39 @@
+---
+title: The "once and for all" SHOW SLAVE STATUS log files & positions explained
+date: 2014-03-06 11:12:49.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Replication
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>True, GTID is upon us whether via MySQL 5.6 or Tungsten Replicator (and wasn't it in Google Patches since 2009?).</p>
+<p>But some of us are still using standard replication with MySQL 5.5, and the "what's with all these binary log files and positions" question is ever erupting. The output of <strong>SHOW SLAVE STATUS</strong> confuses people new to it. It confuses me time and again.</p>
+<p>So here's the semi visual guide to interpreting the <strong>SHOW SLAVE STATUS</strong>.</p>
+<h4>About binary logs and relay logs</h4>
+<p>A master writes binary logs. These are typically and conventionally called <strong>mysql-bin.#####</strong> or <strong>mysqld-bin.#####</strong> (replace ##### with digits).</p>
+<p>A slave connects to its master, and reads entries from the master's binary logs. The slave writes those entries into its own relay logs. These are typically and conventionally called <strong>mysql-relay.#####</strong> or <strong>mysqld-relay.#####</strong> (replace ##### with digits).</p>
+<p>There is nothing at all that connects the name or number of a slave's relay log with the master's binary log. There is nothing at all that connects the position within the relay log with the position within the master binary log. Files are flushed/rotated; have different size configuration; are re-created. However the slave does keep track on the current relay-log entry: it knows what's the matching entry on the master's binary logs. This is an important piece of information.</p>
+<p>While the slave fetches entries and writes them into the relay log (via the <strong>IO_THREAD</strong>), it also reads the relay log to replay those entries (via the <strong>SQL_THREAD</strong>).</p>
+<p>And so at each point in time we are interested in the following "coordinates":</p>
+<ul>
+<li>What are we fetching from the master? Which file are we fetching and from which position?</li>
+<li>Where are we writing this to? (This is implicitly the latest relay log file and its size)</li>
+<li>What's the position of currently executing slave query, in relay-log coordinates? As the slave lags these coordinates are farther (smaller) than the written-to position.</li>
+<li>What's the position of currently executing slave query, in master binary-log coordinates? This information really tells us how far apart we are from the master.<!--more--></li>
+</ul>
+<p>How do we interpret the above from <strong>SHOW SLAVE STATUS</strong> output? Take the following two images as guidelines. The first presents an up-to-date slave, the second presents a lagging slave.</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/03/slave_status_explained_uptodate.png"><img class="alignnone size-full wp-image-6734" alt="slave_status_explained_uptodate" src="{{ site.baseurl }}/assets/slave_status_explained_uptodate.png" width="677" height="636" /></a></p></blockquote>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/03/slave_status_explained_lagging.png"><img class="alignnone size-full wp-image-6735" alt="slave_status_explained_lagging" src="{{ site.baseurl }}/assets/slave_status_explained_lagging.png" width="677" height="636" /></a></p></blockquote>
+<p>Hopefully this "once and for all" explanation will last a couple weeks.</p>

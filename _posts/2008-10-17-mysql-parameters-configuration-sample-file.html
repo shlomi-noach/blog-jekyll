@@ -1,0 +1,192 @@
+---
+title: MySQL parameters & configuration sample file
+date: 2008-10-17 15:03:33.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Configuration
+- Installation
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>The following is a sample my.cnf configuration file. It includes some common and uncommon parameters, along with occasional comments.</p>
+<p>You can use this file, and tune as appropriate for your machine, operating system, and application needs.</p>
+<p>In particular, note the high values set for the InnoDB related parameters, below, and change them to match your system and application's requirements. You have been warned.<!--more--></p>
+<blockquote><p>[client]<br />
+<strong> #password       = [your_password]<br />
+port            = 3306</strong><br />
+# The following location is not the default location for many<br />
+# pre-packaged utilities. For example, mytop or mysqlreport<br />
+# (or any Perl or Python based client, for that matter), will<br />
+# NOT look in the /tmp path for the mysql.sock file.<br />
+# The value is set to common location by your RPM or DEB<br />
+# package on GNU/Linux, yet defaults to the following in the<br />
+# .tgz mysql-server downlaod files.<br />
+<strong> socket          = /tmp/mysql.sock</strong></p>
+<p><strong>default-character-set=utf8</strong></p>
+<p><strong>[mysqld]</strong></p>
+<p># For a new installation, best to use a strict sql_mode:</p>
+<p><strong>sql_mode=TRADITIONAL<br />
+datadir= [path to mysql data]<br />
+</strong># I prefer working case-sensitive. However, some 3rd party tools<br />
+# demand case insensitivity. If you're working with such a tool,<br />
+# uncomment the following line.<br />
+<strong>#lower_case_table_names=1</strong></p>
+<p># 5-10 minutes timeout is usually more than required for idle<br />
+# connections. If a connection can be idle for so long, then<br />
+# creating a new connection is usually very cheap. This applies<br />
+# for many common web based applications. However, depending<br />
+# on your application, you may wish to set this parameter to a<br />
+# higher value.<br />
+<strong> wait_timeout=300</strong></p>
+<p># The following is unfortunately still used on many instances. If<br />
+# you need backwards compatability, you may need to uncomment<br />
+# the following line.<br />
+<strong> #old_passwords=1</strong></p>
+<p># generic configuration options<br />
+<strong> port            = 3306</strong><br />
+# Make sure this is the same location as in the [client] section<br />
+<strong> socket          = /tmp/mysql.sock</strong></p>
+<p><strong>back_log = 50<br />
+max_connect_errors = 10</strong></p>
+<p># Resources:<br />
+# The following values are liberal. You may reduce them<br />
+# according to your needs.<br />
+# NOTE: verify that your OS's open files limit is at least as<br />
+# specified here.<br />
+# I usually set 'ulimit -n' to allow for 8192 files to mysql.<br />
+<strong>open_files_limit = 8000<br />
+</strong># The following is usually cheap, so go ahead and set a high value.<br />
+<strong>table_cache = 2048<br />
+</strong># Connections take memory, so don;t be too liberal here. A common,<br />
+# well tuned application, using proper connection pools, shouldn't<br />
+# require more than 1000 concurrent connections.<br />
+<strong>max_connections = 500</strong></p>
+<p># Memory:<br />
+# When required, the following parameters will be used to allocate<br />
+# more memory. The value specified is always the amount of memory<br />
+# allocated, regardless of the real need.<br />
+<strong>binlog_cache_size = 1M<br />
+max_heap_table_size = 64M<br />
+sort_buffer_size = 8M<br />
+join_buffer_size = 8M<br />
+</strong># The following value sets an upper limit only: MySQL will only<br />
+# allocate as much as required. Setting this parameters to a high<br />
+# value may be required if you're handling very large statement,<br />
+# such as queries reading/writing BLOBs.<br />
+<strong>max_allowed_packet = 16M</strong></p>
+<p># Even on a very busy server, a thread cache of 32 threads is<br />
+# usually enough to make for good thread recycling. I rarely go<br />
+# above this number.<br />
+<strong>thread_cache_size = 32<br />
+thread_concurrency = 8</strong></p>
+<p># Query cache:<br />
+# Make sure you really need the query cache. I've seen many<br />
+# applications where the query cache almost utterly unused<br />
+# (due to frequent invalidation). Check for your hit:insert ratio.<br />
+# A query cache type of value "2" (DEMAND) is a more programmatic<br />
+# oriented setting, where most queries are not cached, but a few,<br />
+# recognized to benefit from the query cache, are executed with<br />
+# the SQL_CACHE flag.<br />
+<strong>query_cache_type = 1<br />
+query_cache_size = 32M<br />
+query_cache_limit = 2M</strong></p>
+<p><strong>ft_min_word_len = 4<br />
+</strong># I usually go with InnoDB, which is ACID compliant and crash-safe.<br />
+<strong>default_table_type = InnoDB</strong></p>
+<p><strong>thread_stack = 192K</strong></p>
+<p><strong>transaction_isolation = REPEATABLE-READ<br />
+tmp_table_size = 64M</strong></p>
+<p># Logs<br />
+# Having log-bin enabled allows for replication and for point in time<br />
+# recovery. It's a good idea to always have binary logs at hand.<br />
+# binary logs can also be reviewed to see what kind of modifications<br />
+# are made on your database (the general query log also logs<br />
+# SELECTs and other queries, which do not appear in the binary log)<br />
+# I usually name the logs after my host name. When dealing with<br />
+# replication, having master and slave logs named after the machines<br />
+# on which they are running makes for clearer distinction between<br />
+# them.<br />
+<strong>log-bin=mymachine-bin<br />
+relay-log = mymachine-relay-bin<br />
+relay-log-index = mymachine-relay-bin.index<br />
+</strong># Since a slave can suddenly be promoted to Master's role, I always<br />
+# take care that it also has the binary logs prepared.<br />
+<strong>log_slave_updates<br />
+log-error=mymachine-mysql-error.log<br />
+log_slow_queries<br />
+long_query_time = 2<br />
+log-queries-not-using-indexes<br />
+</strong># Automatically remove binary logs. Make sure this number is not too<br />
+# high and not too low for you, depending on your backups frequency<br />
+# and maximum slave lag.<br />
+<strong>expire_logs_days=7</strong></p>
+<p># Replication related settings:<br />
+# Unique server identification number between 1 and 2^32-1.<br />
+<strong>server-id = [a unique number]<br />
+</strong># Setting the report_host allows for SHOW SLAVE HOSTS on the master<br />
+# to see which slaves are connected.<br />
+<strong>report_host=[machine's ip]<br />
+</strong># Limit the total size of the relay logs: set this value to a high enough<br />
+# value. When the slave can't keep up with the master, the relay logs<br />
+# fill up. If no limit is set, all disk space can be consumed.<br />
+# If a value too low is set, the master's binary logs cannot (shouldn't)<br />
+# be purged, and so the master gets to have a disk space problem. So<br />
+# provide a high enough value, and monitor your disk space!<br />
+<strong>relay_log_space_limit=10G</strong></p>
+<p># MyISAM:<br />
+<strong>key_buffer_size = 32M<br />
+read_buffer_size = 2M<br />
+read_rnd_buffer_size = 16M<br />
+bulk_insert_buffer_size = 64M<br />
+myisam_sort_buffer_size = 128M<br />
+myisam_max_sort_file_size = 10G<br />
+myisam_max_extra_sort_file_size = 10G<br />
+myisam_repair_threads = 1<br />
+myisam_recover = force,backup</strong></p>
+<p><strong>concurrent_insert=2<br />
+</strong></p>
+<p># INNODB:</p>
+<p><strong>innodb_file_per_table<br />
+</strong># Your machine's memory capacity dictates many of the following<br />
+# values. ***Do NOT take these values as they are. Change them***<br />
+<strong>innodb_buffer_pool_size = 10G<br />
+innodb_additional_mem_pool_size = 16M<br />
+innodb_data_file_path = ibdata1:50M:autoextend<br />
+innodb_file_io_threads = 4<br />
+</strong># Keep the following one commented, unless you need to recover<br />
+# from disaster.<br />
+<strong>#innodb_force_recovery=4<br />
+innodb_thread_concurrency = 8<br />
+</strong># Set "1" for full ACID compliance. Set "2" for IO performance gain<br />
+# (will only flush transaction log to disk once per second, instead<br />
+# of at each commit). If you have battery backed disk cache ,set<br />
+# to "1" and enjoy both worlds.<br />
+<strong>innodb_flush_log_at_trx_commit = 1<br />
+</strong># Keep the following one commented, unless you really have an<br />
+# emergency. Fast shutdown makes for slower start up time.<br />
+<strong>#innodb_fast_shutdown<br />
+innodb_log_buffer_size = 8M<br />
+</strong># The default here is 5M, which is really too low for our modern<br />
+# machines.<br />
+<strong>innodb_log_file_size = 128M<br />
+innodb_log_files_in_group = 2<br />
+innodb_max_dirty_pages_pct = 90<br />
+</strong># Consult The manual. The desired values for the following<br />
+# parameter change according to your OS type, OS version and<br />
+# hardware types. Benchmark after changing it!<br />
+<strong>#innodb_flush_method=O_DIRECT<br />
+innodb_lock_wait_timeout = 120</strong></p>
+<p><strong>[mysqldump]<br />
+quick<br />
+max_allowed_packet = 64M</strong></p>
+<p><strong>default-character-set=utf8</strong></p></blockquote>

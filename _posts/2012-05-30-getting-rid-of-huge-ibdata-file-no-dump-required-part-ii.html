@@ -1,0 +1,88 @@
+---
+title: Getting rid of huge ibdata file, no dump required, part II
+date: 2012-05-30 09:03:18.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Hack
+- InnoDB
+- MyISAM
+- Refactoring
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This post continues <a href="http://code.openark.org/blog/mysql/getting-rid-of-huge-ibdata-file-no-dump-required">Getting rid of huge ibdata file, no dump required, part I</a>, where I describe way of converting your single-tablespace InnoDB database into a file-per-table one, without the pain of exporting and importing <em>everything at once</em>.</p>
+<p>In previous part we put aside the issue of foreign keys. We address this issue now.</p>
+<h4>What if my InnoDB tables have foreign keys?</h4>
+<p>MyISAM does not support them, so you can't just <strong>ALTER</strong> an InnoDB table to MyISAM and back into InnoDB, and expect everything to work.</p>
+<p>Alas, this calls for additional steps (i.e. additional <strong>ALTER</strong> commands). However, these still fall well under the concept of <em>"do it one table at a time, then take time to recover your breath and replication lag"</em>.</p>
+<h4>Save , drop and restore your Foreign Keys setup</h4>
+<p>You can use <a href="http://code.google.com/p/common-schema/">common_schema</a>'s  <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/sql_foreign_keys.html">sql_foreign_keys</a> to get the full listing and create definition of your foreign keys. For example, assume we use the <strong>sakila</strong> database:<!--more--></p>
+<blockquote>
+<pre>SELECT create_statement FROM common_schema.sql_foreign_keys WHERE TABLE_SCHEMA='sakila' INTO OUTFILE '/somewhere/safe/create_foreign_keys.sql'</pre>
+</blockquote>
+<p>(replace <strong>TABLE_SCHEMA='sakila'</strong> with whatever you want).</p>
+<p>A sample output would be something like this (<em>note: no semicolon on end of line</em>):</p>
+<blockquote>
+<pre>ALTER TABLE `sakila`.`address` ADD CONSTRAINT `fk_address_city` FOREIGN KEY (`city_id`) REFERENCES `sakila`.`city` (`city_id`) ON DELETE RESTRICT ON UPDATE CASCADE
+ALTER TABLE `sakila`.`city` ADD CONSTRAINT `fk_city_country` FOREIGN KEY (`country_id`) REFERENCES `sakila`.`country` (`country_id`) ON DELETE RESTRICT ON UPDATE CASCADE
+ALTER TABLE `sakila`.`customer` ADD CONSTRAINT `fk_customer_address` FOREIGN KEY (`address_id`) REFERENCES `sakila`.`address` (`address_id`) ON DELETE RESTRICT ON UPDATE CASCADE
+ALTER TABLE `sakila`.`customer` ADD CONSTRAINT `fk_customer_store` FOREIGN KEY (`store_id`) REFERENCES `sakila`.`store` (`store_id`) ON DELETE RESTRICT ON UPDATE CASCADE
+ALTER TABLE `sakila`.`film` ADD CONSTRAINT `fk_film_language` FOREIGN KEY (`language_id`) REFERENCES `sakila`.`language` (`language_id`) ON DELETE RESTRICT ON UPDATE CASCADE
+ALTER TABLE `sakila`.`film` ADD CONSTRAINT `fk_film_language_original` FOREIGN KEY (`original_language_id`) REFERENCES `sakila`.`language` (`language_id`) ON DELETE RESTRICT ON UPDATE CASCADE
+...</pre>
+</blockquote>
+<p>Once the above is in a safe place, you will want to DROP all of your foreign keys. Again, using <em>common_schema</em>:</p>
+<blockquote>
+<pre>SELECT drop_statement FROM common_schema.sql_foreign_keys WHERE TABLE_SCHEMA='sakila';
++-----------------------------------------------------------------------------------+
+| drop_statement                                                                    |
++-----------------------------------------------------------------------------------+
+| ALTER TABLE `sakila`.`address` DROP FOREIGN KEY `fk_address_city`                 |
+| ALTER TABLE `sakila`.`city` DROP FOREIGN KEY `fk_city_country`                    |
+| ALTER TABLE `sakila`.`customer` DROP FOREIGN KEY `fk_customer_address`            |
+| ALTER TABLE `sakila`.`customer` DROP FOREIGN KEY `fk_customer_store`              |
+| ALTER TABLE `sakila`.`film` DROP FOREIGN KEY `fk_film_language`                   |
+| ALTER TABLE `sakila`.`film` DROP FOREIGN KEY `fk_film_language_original`          |
+| ...                                                                               |
++-----------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>You don't want to issue all these at once: do them one at a time, and wait for your slave to catch up.</p>
+<p>Once this is done, you can move on to the steps described in Part I of this post: converting tables to MyISAM, shutting down, removing InnoDB files, then converting back to InnoDB.</p>
+<p>And then, taking breath again, you must re-import the foreign keys. Use the <strong>ADD CONSTRAINT</strong> commands you have saved earlier on. Again, one at a time, wait for slave to catch up.</p>
+<p>To reiterate, for each table you would take the following steps:</p>
+<ol>
+<li>Make sure the FK definition is safely stored somewhere</li>
+<li>STOP SLAVE</li>
+<li>Drop all table's foreign keys: ALTER TABLE ... DROP FOREIGN KEY ..., DROP FOREIGN KEY ...</li>
+<li>START SLAVE</li>
+<li>Wait for slave to catch up</li>
+<li>STOP SLAVE</li>
+<li>ALTER TABLE ... ENGINE=MyISAM (*)</li>
+<li>START SLAVE</li>
+<li>Wait for slave to catch up</li>
+</ol>
+<p>(*) Altering to MyISAM drops FK constraints, so the above could actually be done in one step. I'm cautious and illustrate in two.</p>
+<p>Once all tables are altered, and InnoDB tablespace is removed, restoration is as follows: for each table,</p>
+<ol>
+<li>STOP SLAVE</li>
+<li>ALTER TABLE ... ENGINE=InnoDB [create options]</li>
+<li>START SLAVE</li>
+<li>Wait for slave to catch up</li>
+<li>STOP SLAVE</li>
+<li>ALTER TABLE ... ADD CONSTRAINT ..., ADD CONSTRAINT ...(+)</li>
+<li>START SLAVE</li>
+<li>Wait for slave to catch up</li>
+</ol>
+<p>(+) Alas, you can't convert to InnoDB and add constraints at the same time...</p>
+<h4>This is not entirely safe</h4>
+<p>A MyISAM slave to an InnoDB master with foreign keys is a tricky business. It really depends on the type of foreign keys you have and the use you make of them. See <a title="Link to Impact of foreign keys absence on replicating slaves" href="http://code.openark.org/blog/mysql/impact-of-foreign-keys-absence-on-replicating-slaves" rel="bookmark">Impact of foreign keys absence on replicating slaves</a>.</p>

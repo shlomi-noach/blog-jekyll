@@ -1,0 +1,27 @@
+---
+title: questions or queries?
+date: 2009-11-13 13:26:31.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Monitoring
+- mycheckpoint
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I've hit a recent change which took me by surprise.</p>
+<p>I was used to checking for the '<strong>questions</strong>' global status variables to see the total amount of queries the server performs. So, for example, I could run <strong>com_select</strong>/<strong>questions</strong> to learn the SELECT ratio out of all queries.</p>
+<p>Apparently, as of <strong>5.0.72</strong>-<strong>5.0.76</strong> &amp; <strong>5.1.31</strong> this has changed. A new status variable was introduced, called '<strong>queries</strong>'.</p>
+<p>The change being? <strong>questions</strong> does not any longer indicate the number of queries the server has executed: only the number of queries requested by the client (so, calling on a stored routine only counts as <strong>1</strong>, regardless of how many queries the routine executes). The new <strong>queries</strong> variable indicates the amount of server queries issued (see the <a href="http://dev.mysql.com/doc/refman/5.0/en/server-status-variables.html#statvar_Queries">5.0</a> and <a href="http://dev.mysql.com/doc/refman/5.1/en/server-status-variables.html#statvar_Queries">5.1</a> docs for details).</p>
+<p>So, as of <strong>5.0.72</strong> or <strong>5.1.31</strong>, the calculation should be <strong>com_select</strong>/<strong>com_queries</strong> (or <strong>com_select_<em>diff</em></strong>/<strong>com_queries_<em>diff</em></strong>) to learn the SELECT ratio of all queries. I learned this due to a bug report on <em>mycheckpoint</em>, which presented some 10265% SELECT ratio...</p>
+<p>My take on this is that it could have been worked out differently: instead of changing the meaning of an existing variable, <strong>questions</strong> could have remained as it was, with the introduction of, say, <strong>client_questions</strong>, which would only indicate client number of issued queries.</p>
+<p>I believe changing the meaning of status variables at such late versions (<strong>5.0.76</strong> is quite late!) invites trouble: code that used to work on already then-stable versions (e.g. <strong>5.0.51</strong>) would behave differently after upgrade. Such changes should best take place while still in BETA phase.</p>

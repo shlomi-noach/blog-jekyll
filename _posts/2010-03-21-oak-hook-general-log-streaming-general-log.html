@@ -1,0 +1,52 @@
+---
+title: 'oak-hook-general-log: streaming general log'
+date: 2010-03-21 10:45:58.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- logs
+- openark kit
+- python
+- scripts
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I'm seeking input on a new <a href="http://code.openark.org/forge/openark-kit">openark kit</a> utility I've started to implement.</p>
+<p>The tool, <strong>oak-hook-general-log</strong>, will hook up to a MySQL (&gt;= 5.1) server, and stream the general log into standard output. It looks like this:</p>
+<blockquote>
+<pre>bash$ python src/oak/oak-hook-general-log.py --socket=/tmp/mysql.sock --user=root
+2010-03-21 10:18:42     root[root] @ localhost []       79      1       Query   SELECT COUNT(*) FROM City
+2010-03-21 10:18:48     root[root] @ localhost []       79      1       Query   DELETE FROM City WHERE id=1000
+2010-03-21 10:18:54     root[root] @ localhost []       79      1       Query   SHOW PROCESSLIST
+2010-03-21 10:19:06     root[root] @ localhost []       79      1       Quit
+2010-03-21 10:19:07     root[root] @ localhost []       93      1       Connect root@localhost on
+2010-03-21 10:19:07     root[root] @ localhost []       93      1       Query   select @@version_comment limit 1
+2010-03-21 10:22:33     root[root] @ localhost []       93      1       Query   SELECT City.Name, Country.Name FROM Country JOIN City ON Country.Capit
+2010-03-21 10:22:58     root[root] @ localhost []       93      1       Quit
+</pre>
+</blockquote>
+<p>Since output is written to <strong>stdout</strong>, one can further:</p>
+<blockquote>
+<pre>bash$ python src/oak/oak-hook-general-log.py --socket=/tmp/mysql.sock --user=root | grep Connect
+bash$ python src/oak/oak-hook-general-log.py --socket=/tmp/mysql.sock --user=root | grep webuser@webhost</pre>
+</blockquote>
+<p>What the tool does is to enable table logs, and periodically rotate the <strong>mysql.general_log</strong> table, read and dump its content.</p>
+<p><!--more-->The tool:</p>
+<ul>
+<li>Stores and restores the original log state (general log enabled/disabled, log output).</li>
+<li>Disables printing of its own queries to the general log.</li>
+<li>Automatically times out (timeout configurable) so as not to enter a situation where the general log is forgotten to be turned on.</li>
+<li>Can discard pre-existing data on the <strong>mysql.general_log</strong> table.</li>
+<li>Will cleanup the <strong>mysql.slow_log</strong> table, if it wasn't originally used (turning on table logs applies to both general log and slow log).</li>
+</ul>
+<p>What would you have the tool do further? Should it provide filtering, or should we just use <strong>grep</strong>/<strong>sed</strong>/<strong>awk</strong> for that? Any internal aggregation of data?</p>
+<p>I would love to hear your thoughts. Meanwhile, <a href="http://code.google.com/p/openarkkit/source/browse/trunk/openarkkit/src/oak/oak-hook-general-log.py">view or grab the python script file</a>.</p>
