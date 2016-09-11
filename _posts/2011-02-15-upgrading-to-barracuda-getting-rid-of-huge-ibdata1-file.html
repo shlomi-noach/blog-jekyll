@@ -1,0 +1,66 @@
+---
+title: Upgrading to Barracuda & getting rid of huge ibdata1 file
+date: 2011-02-15 10:01:15.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Backup
+- Configuration
+- InnoDB
+- mysqldump
+- Replication
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: elijaholujide@yahoo.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Some of this is old stuff, but more people are now converting to InnoDB plugin, so as to enjoy table compression, performance boosts. Same holds for people converting to Percona's XtraDB. InnoDB plugin requires <strong>innodb_file_per_table</strong>. No more shared tablespace file.</p>
+<p>So your <strong>ibdata1</strong> file is some <strong>150GB</strong>, and it won't reduce. Really, it won't reduce. You set <strong>innodb_file_per_table=1</strong>, do <strong>ALTER TABLE t ENGINE=InnoDB</strong> (optionally <strong>ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8</strong>), and you get all your tables in file-per-table <strong>.ibd</strong> files.</p>
+<p>But the original <strong>ibdata1</strong> file is still there. It has to be there, don't delete it! It contains more than your old data.</p>
+<p>InnoDB tablespace files never reduce in size, it's an old-time annoyance. The only way to go round it, if you need the space, is to completely drop them and start afresh. That's one of the things so nice about file-per-table: an <strong>ALTER TABLE</strong> actually creates a new tablespace file and drops the original one.</p>
+<h4>The procedure</h4>
+<p>The procedure is somewhat painful:</p>
+<ul>
+<li>Dump everything logically (either use <em>mysqldump</em>, <a href="http://www.maatkit.org/doc/mk-parallel-dump.html">mk-parallel-dump</a>, or do it your own way)</li>
+<li>Erase your data (literally, delete everything under your <strong>datadir</strong>)</li>
+<li>Generate a new empty database</li>
+<li>Load your dumped data.<!--more--></li>
+</ul>
+<h4>Using replication</h4>
+<p>Replication makes this less painful. Set up a slave, have it follow up on the master.</p>
+<ul>
+<li>Stop your slave.</li>
+<li>Make sure to backup the replication position (e.g. write <strong>SHOW SLAVE STATUS</strong> on a safe location, or copy <strong>master.info</strong> file).</li>
+<li>Work out the dump-erase-generate-load steps on the slave.</li>
+<li>Reattach the slave to the master using saved data.</li>
+</ul>
+<p>For this to succeed you must keep enough binary logs on the master for the entire dump-load period, which could be lengthy.</p>
+<h4>Upgrading to barracuda</h4>
+<p>If you wish to upgrade your InnoDB tables to <em>Barracuda</em> format, my advice is this:</p>
+<ol>
+<li>Follow the steps above to generate a file-per-table working slave</li>
+<li>Stop the slave</li>
+<li>Configure <strong>skip_slave_start</strong></li>
+<li>Restart MySQL</li>
+<li>One by one do the <strong>ALTER TABLE</strong> into <em>Barracuda</em> format (<strong>ROW_FORMAT=COMPACT</strong> or <strong>ROW_FORMAT=COMPRESSED</strong>)</li>
+</ol>
+<p>Note that if you're about to do table compression, the <strong>ALTER</strong> statements become <em>considerably</em> slower the better the compression is.</p>
+<p>If your dataset is very large, and you can't keep so many binary logs, you may wish to break step <strong>5</strong> above into:</p>
+<ul>
+<li>ALTER a large table</li>
+<li>Restart MySQL</li>
+<li>Start slave, wait for it to catch up</li>
+<li>Restart MySQL again</li>
+</ul>
+<p>and do the same for all large tables.</p>
+<h4>Why all these restarts?</h4>
+<p>I've been upgrading to Barracuda for a long time now. I have clearly noticed that <strong>ALTER</strong> into a <strong>COMPRESSED</strong> format works considerably slower after the slave has done some "real work". This in particular relates to the last "renaming table" stage. There was a bug with earlier InnoDB plugin versions which made this stage hang. It was solved. But it still takes some time for this last, weird stage, where the new replacement table is complete, and it's actually been renamed in place of the old table, and the old table renamed into something like "#sql-12345.ibd", and all that needs to be done is have it dropped, and... Well, it takes time.</p>
+<p>My observation is it works faster on a freshly started server. Which is why I take the bother to restart MySQL before each large table conversion.</p>

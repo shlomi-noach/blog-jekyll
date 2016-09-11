@@ -1,0 +1,34 @@
+---
+title: Reasons to use AUTO_INCREMENT columns on InnoDB
+date: 2011-03-22 08:31:18.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Indexing
+- InnoDB
+- Schema
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>An InnoDB table must have a primary key (one is created if you don't do it yourself). You may have a <a href="http://en.wikipedia.org/wiki/Natural_key">natural key</a> at hand. Stop! Allow me to suggest an AUTO_INCREMENT may be better.</p>
+<p>Why should one add an AUTO_INCREMENT PRIMARY KEY on a table on which there's a natural key? Isn't an AUTO_INCREMENT a pseudo key, meaning, it doesn't have any explicit relation to the row data, other than it is a number and unique?</p>
+<p>Yes, indeed so. Nevertheless, consider:</p>
+<ul>
+<li>Natural keys are many times multi-columned.</li>
+<li>Multi column PRIMARY KEYs make for larger keys, and make for bloated secondary keys as well. You may be wasting space for storing the additional AUTO_INCREMENT column, but you may gain space back on secondary keys.</li>
+<li>Multi column PRIMARY KEYs make for more locks. See also <a href="http://code.openark.org/blog/mysql/reducing-locks-by-narrowing-primary-key">this post</a>.</li>
+<li>InnoDB INSERTs work considerably faster when worked in ascending PRIMARY KEY order. Can you ensure your natural key is in such order?</li>
+<li>Even though an AUTO_INCREMENT makes for an INSERT bottleneck (values must be given serially), it is in particular helpful to InnoDB by ensuring PRIMARY KEY values are in ascending order.</li>
+<li>AUTO_INCEMENT makes for chronological resolution. You <em>know</em> what came first, and what came next.</li>
+<li>In many datasets, more recent entries are often being accessed more, and are therefore "hotter". By using AUTO_INCREMENT, you're ensuring that recent entries are grouped together within the B+ Tree. This means less random I/O when looking for recent data.</li>
+<li>A numerical key is in particular helpful in splitting your table (and tasks on your table) into smaller chunks. I write <a href="http://code.google.com/p/openarkkit/">tools</a> which can work out with any PRIMARY KEY combination, but it's easier to work with numbers.</li>
+</ul>

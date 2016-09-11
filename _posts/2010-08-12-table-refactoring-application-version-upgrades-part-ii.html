@@ -1,0 +1,60 @@
+---
+title: Table refactoring & application version upgrades, Part II
+date: 2010-08-12 05:24:06.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- Development
+- MySQL
+tags:
+- Development
+- Indexing
+- Replication
+meta:
+  _edit_last: '2'
+  _wp_old_slug: ''
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Continuing <a href="http://code.openark.org/blog/mysql/table-refactoring-application-version-upgrades-part-i">Table refactoring &amp; application version upgrades, Part I</a>, we now discuss code &amp; database upgrades which require <strong>DROP</strong> operations. As before, we break apart the upgrade process into sequential steps, each involving either the application or the database, but not both.</p>
+<p>As I'll show, DROP operations are significantly simpler than creation operations. Interestingly, it's the same as in life.</p>
+<h4>DROP COLUMN</h4>
+<p>A column turns to be redundant, unused. Before it is dropped from the database, we must ensure no one is using it anymore. The steps are:</p>
+<ol>
+<li>App: <strong>V1</strong> -&gt; <strong>V2</strong>. Remove all references to column; make sure no queries use said column.</li>
+<li>DB: <strong>V1</strong> -&gt; <strong>V2</strong> (possibly failover from <strong>M1</strong> to <strong>M2</strong>), change is <strong>DROP COLUMN</strong>.</li>
+</ol>
+<h4>DROP INDEX</h4>
+<p>A possibly simpler case here. Why would you drop an index? Is it because you found out you never use it anymore? Then all you have to do is just drop it.</p>
+<p>Or perhaps you don't need the functionality the index supports anymore? Then first drop the functionality:</p>
+<ol>
+<li>(optional) App: <strong>V1</strong> -&gt; <strong>V2</strong>. Discard using functionality which relies on index.</li>
+<li>DB: <strong>V1</strong> -&gt; <strong>V2</strong> (possibly failover from <strong>M1</strong> to <strong>M2</strong>), change is <strong>DROP INDEX</strong>. Check out InnoDB Plugin here.<!--more--></li>
+</ol>
+<h4>DROP UNIQUE INDEX</h4>
+<p>When using Master-Slave failover for table refactoring, we're now removing a constraint from the slave. Since the master is more constrained than the slave, there is no problem here. It's mostly the same as with a normal DROP INDEX, with a minor addition:</p>
+<ol>
+<li>(optional) App: <strong>V1</strong> -&gt; <strong>V2</strong>. Discard using functionality which relies on index.</li>
+<li>DB: <strong>V1</strong> -&gt; <strong>V2</strong> (possibly failover from <strong>M1</strong> to <strong>M2</strong>), change is <strong>DROP INDEX</strong>.</li>
+<li>(optional) App: <strong>V2</strong> -&gt; <strong>V3</strong>. Enable functionality that inserts duplicates.</li>
+</ol>
+<h4>DROP FOREIGN KEY</h4>
+<p>Again, we are removing a constraint.</p>
+<ol>
+<li>DB: <strong>V1</strong> -&gt; <strong>V2</strong> (possibly failover from <strong>M1</strong> to <strong>M2</strong>), change is <strong>DROP INDEX</strong>.</li>
+<li>(optional) App: <strong>V2</strong> -&gt; <strong>V3</strong>. Enable functionality that conflicts with removed constraint. I mean, if you really know what you are doing.</li>
+</ol>
+<h4>DROP TABLE</h4>
+<p>The very simple steps are:</p>
+<ol>
+<li>App: <strong>V1</strong> -&gt; <strong>V2</strong>. Make sure no reference to table is made.</li>
+<li>DB: <strong>V1</strong> -&gt; <strong>V2</strong>. Issue a <strong>DROP TABLE</strong>.</li>
+</ol>
+<p>With <strong>ext3</strong> dropping a large table is no less than a nightmare. Not only does the action take long time, it also locks down the table cache, which very quickly leads to having dozens of queries hang. <strong>xfs</strong> is a good alternative.</p>
+<h4>Conclusion</h4>
+<p>We looked at single table operations, coupled with application upgrades. By carefully looking at the process breakdown, multiple changes can be addressed with ease and safety. Not all operations are completely safe when used with replication failover. But they are mostly safe if you have some trust in your code.</p>

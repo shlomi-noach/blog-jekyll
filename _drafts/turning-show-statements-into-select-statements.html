@@ -1,0 +1,109 @@
+---
+layout: post
+title: Turning SHOW statements into SELECT statements
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This continues my effort of reading and manipulating results of <strong>SHOW</strong> statements on server side.</p>
+<p>Recap:</p>
+<ul>
+<li>I've shown that <em>some</em> <strong>SHOW</strong> statements support the <strong>LIKE/WHERE</strong> extension, and thus can be manipulated to store results into user defined variables.</li>
+<li>We can actually make those statements to return with empty result sets even while storing the results (though we don't have to).</li>
+<li>You can embed this into a stored procedure</li>
+<li>You cannot simply embed this in a stored function, since stored functions do not allow for queries returning result sets (not even <em>empty</em> result sets).</li>
+<li>I offered no solution on how to embed this in a <strong>SELECT</strong> statement.</li>
+</ul>
+<h4>Hack: make a stored function able to call the above and return the results</h4>
+<p>If I'm able to execute a stored function which calls upon the <strong>SHOW</strong> command, then returns the user defined variable, then I'm also able to use the results from within a <strong>SELECT</strong> statement.</p>
+<p>Didn't I just say that was impossible? No. I said "you cannot <em>simply</em> embed this in a stored function". But you can <em>hackly</em> embed this in a stored function.</p>
+<p>Let's use the same example as in the previous post, and attempt to return the concatenated list of databases. We walk through the solution in several steps.</p>
+<h4>Step #1: direct call attempt</h4>
+<p>We attempt to run this code from within a stored function:</p>
+<blockquote>
+<pre>DELIMITER $$
+
+DROP FUNCTION IF EXISTS get_databases $$
+CREATE FUNCTION get_databases() RETURNS TEXT
+DETERMINISTIC
+READS SQL DATA
+
+BEGIN
+  SET @databases := '';
+  <strong>SHOW DATABASES WHERE (@databases := CONCAT(@databases, `Database`, ',')) IS NULL;</strong>
+  return @databases;
+END $$
+DELIMITER ;
+
+<strong>ERROR 1415 (0A000):</strong> Not allowed to return a result set from a function</pre>
+</blockquote>
+<p>Ouch! Can't even create the function!</p>
+<h4>Step #2: embed in a procedure, attempt to call from a function</h4>
+<p>So the code has to go in a stored procedure. Fine, let's try and invoke the procedure from within a function:</p>
+<blockquote>
+<pre>DELIMITER $$
+
+DROP procedure IF EXISTS show_databases $$
+CREATE PROCEDURE show_databases()
+DETERMINISTIC
+READS SQL DATA
+
+BEGIN
+  SET @databases := '';
+  SHOW DATABASES WHERE (@databases := CONCAT(@databases, `Database`, ',')) IS NULL;
+END $$
+
+DROP FUNCTION IF EXISTS get_databases $$
+CREATE FUNCTION get_databases() RETURNS TEXT
+DETERMINISTIC
+READS SQL DATA
+
+BEGIN
+  <strong>call show_databases();</strong>
+  return @databases;
+END $$
+DELIMITER ;</pre>
+</blockquote>
+<p>OK, definition seems to go well. How about execution?</p>
+<blockquote>
+<pre>mysql&gt; <strong>SELECT get_databases();</strong>
+<strong>ERROR 1415 (0A000):</strong> Not allowed to return a result set from a function</pre>
+</blockquote>
+<p>No go. On execution, MySQL detects that we are returning a result set from within a function, and fails.</p>
+<h4>Step #3: Use DO</h4>
+<p>The <a href="http://dev.mysql.com/doc/refman/5.1/en/do.html"><strong>DO</strong></a> command is cool. It avoids returning a result set. It comes in place of a <strong>SELECT</strong>.</p>
+<p>Using the same routines as above, we try:</p>
+<blockquote>
+<pre>mysql&gt; <strong>DO</strong> get_databases();
+Query OK, 0 rows affected, 1 warning (0.00 sec)</pre>
+</blockquote>
+<p>It works, and there's a warning:</p>
+<blockquote>
+<pre>mysql&gt; SHOW WARNINGS;
++-------+------+----------------------------------------------------+
+| Level | Code | Message                                            |
++-------+------+----------------------------------------------------+
+| Error | 1415 | Not allowed to return a result set from a function |
++-------+------+----------------------------------------------------+</pre>
+</blockquote>
+<p>Is it time to celebrate? Not really. While we've reduced the error to warning, we are almost back in square <strong>#1</strong>, since <strong>DO get_databases()</strong> is not much different than <strong>CALL show_databases()</strong>. We cannot embed this in a SELECT statement:</p>
+<blockquote>
+<pre>mysql&gt; SELECT DO get_databases();
+ERROR 1064 (42000): You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '()' at line 1
+mysql&gt; SELECT (DO get_databases());
+ERROR 1064 (42000): You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'get_databases())' at line 1</pre>
+</blockquote>
+<p>Step #4, final solution: wrap it</p>
+<p>We need to add one more layer. Consider the following additional function:</p>

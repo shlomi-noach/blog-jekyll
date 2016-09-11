@@ -1,0 +1,92 @@
+---
+title: 'SQL: good comments conventions'
+date: 2010-07-01 09:36:32.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- Development
+- MySQL
+tags:
+- Coding
+- SQL
+- Syntax
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I happened upon a customer who left me in awe and admiration. The reason: excellent comments for their SQL code.</p>
+<p>I list four major places where SQL comments are helpful. I'll use the <a href="http://dev.mysql.com/doc/sakila/en/sakila.html">sakila</a> database. It is originally scarcely commented; I'll present it now enhanced with comments, to illustrate.</p>
+<h4>Table definitions</h4>
+<p>The <strong>CREATE TABLE</strong> statement allows for a comment, intended to describe the nature of the table:</p>
+<blockquote>
+<pre>CREATE TABLE `film_text` (
+ `film_id` smallint(6) NOT NULL,
+ `title` varchar(255) NOT NULL,
+ `description` text,
+ PRIMARY KEY (`film_id`),
+ FULLTEXT KEY `idx_title_description` (`title`,`description`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 <strong>COMMENT='Reflection of `film`, used for FULLTEXT search.'</strong>
+</pre>
+</blockquote>
+<p>It's too bad the comment's max length is 60 characters, though. However, it's a very powerful field.</p>
+<h4>Column definitions</h4>
+<p>One may comment particular columns:<!--more--></p>
+<blockquote>
+<pre>CREATE TABLE `film` (
+ `film_id` smallint(5) unsigned NOT NULL AUTO_INCREMENT,
+ `title` varchar(255) NOT NULL,
+ `description` text,
+ `release_year` year(4) DEFAULT NULL,
+ `language_id` tinyint(3) unsigned NOT NULL <strong>COMMENT 'Soundtrack spoken language'</strong>,
+ `original_language_id` tinyint(3) unsigned DEFAULT NULL <strong>COMMENT 'Filmed spoken language'</strong>,
+ `rental_duration` tinyint(3) unsigned NOT NULL DEFAULT '3',
+ `rental_rate` decimal(4,2) NOT NULL DEFAULT '4.99',
+ `length` smallint(5) unsigned DEFAULT NULL,
+ `replacement_cost` decimal(5,2) NOT NULL DEFAULT '19.99',
+  ...
+) ENGINE=InnoDB AUTO_INCREMENT=1001 DEFAULT CHARSET=utf8
+</pre>
+</blockquote>
+<h4>Stored routines definitions</h4>
+<p>Here's an original <strong>sakila</strong> procedure, untouched. It is already commented:</p>
+<blockquote>
+<pre>CREATE DEFINER=`root`@`localhost` PROCEDURE `rewards_report`(
+ IN min_monthly_purchases TINYINT UNSIGNED
+ , IN min_dollar_amount_purchased DECIMAL(10,2) UNSIGNED
+ , OUT count_rewardees INT
+)
+ READS SQL DATA
+ <strong>COMMENT 'Provides a customizable report on best customers'</strong>
+BEGIN
+
+ DECLARE last_month_start DATE;
+ DECLARE last_month_end DATE;
+ ...
+</pre>
+</blockquote>
+<h4>SQL queries</h4>
+<p>Last but not least, while not part of the schema, SQL queries define the use of the schema. That is, the schema exists for the sole reason of being able to query it.</p>
+<p>Where did <em>that</em> query come from? Which piece of code issued it? Why? What's its purpose?</p>
+<p>Looking at the <strong>PROCESSLIST</strong>, the slow log, etc., it is easier when the queries are commented:</p>
+<blockquote>
+<pre>SELECT
+ <strong>/* List film details along with participating actors */</strong>
+ <strong>/* Issued by analytics module */</strong>
+ film.*,
+ COUNT(*) AS count_actors,
+ GROUP_CONCAT(CONCAT(actor.first_name, ' ', actor.last_name))
+FROM
+ film
+ JOIN film_actor USING(film_id)
+ JOIN actor USING(actor_id)
+GROUP BY film.film_id;
+</pre>
+</blockquote>
+<h4>Conclusion</h4>
+<p>Source code commenting is an important practice, and usually watched out for. SQL &amp; table definitions commenting are often scarce or non-existent. I urge DBAs to adopt a comments coding convention for SQL, and apply it whenever they can.</p>

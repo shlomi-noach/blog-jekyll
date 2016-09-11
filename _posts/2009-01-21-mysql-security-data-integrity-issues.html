@@ -1,0 +1,223 @@
+---
+title: 'MySQL security: data integrity issues'
+date: 2009-01-21 12:32:49.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Configuration
+- Security
+- sql_mode
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>MySQL's security model is not as elaborate as other popular databases. It's missing quite a lot.</p>
+<p>I wish to point out what I think are some very disturbing security holes, which may affect the database integrity.</p>
+<p>This post is not about Roles, Kerberos, IPs and such. It's about simple MySQL features, which allow common, unprivileged users, to break data integrity by using unprotected session variables.</p>
+<p>I will consider three such issues.</p>
+<p><!--more-->We will assume a database with two tables, and two users.</p>
+<blockquote>
+<pre>GRANT ALL PRIVILEGES ON *.* TO 'root'@'localhost' WITH GRANT OPTION;
+GRANT SELECT, INSERT, UPDATE, DELETE ON `w2`.* TO 'w2user'@'%';</pre>
+</blockquote>
+<p>We have one 'root' user, and one very simple 'w2user', which can't be accused of having too many privileges. The schema, with some sample data, follows.</p>
+<blockquote>
+<pre>DROP DATABASE IF EXISTS w2;
+CREATE DATABASE w2;
+USE w2;
+
+DROP TABLE IF EXISTS city;
+DROP TABLE IF EXISTS country;
+
+CREATE TABLE country (
+  country_id int(11) not null auto_increment,
+  name varchar(32) NOT NULL,
+  PRIMARY KEY  (country_id)
+)ENGINE=INNODB;
+
+CREATE TABLE city (
+  city_id int(11) NOT NULL auto_increment,
+  name varchar(32) NOT NULL,
+  country_id int(11) not null ,
+  PRIMARY KEY  (city_id),
+  INDEX country_id (country_id),
+  FOREIGN KEY (country_id) REFERENCES country(country_id)
+                      ON DELETE CASCADE
+
+)ENGINE=INNODB;
+
+INSERT INTO country (country_id, name) values (1, 'gbr');
+INSERT INTO country (country_id, name) values (2, 'usa');
+
+INSERT INTO city (name, country_id) values ('london',1);
+INSERT INTO city (name, country_id) values ('liverpool',1);
+INSERT INTO city (name, country_id) values ('birmingham',1);
+INSERT INTO city (name, country_id) values ('ny',2);
+INSERT INTO city (name, country_id) values ('boston',2);</pre>
+</blockquote>
+<p>Both tables are InnoDB, to support transactions and foreign keys.</p>
+<p>Obviously, 'root' is allowed to do anything. But what harm can our unprivileged 'w2user' do?</p>
+<h4>FOREIGN_KEY_CHECKS</h4>
+<p>The following <strong>INSERT</strong> should fail:</p>
+<blockquote>
+<pre>INSERT INTO city (name, country_id) values ('no_city',1234567);</pre>
+</blockquote>
+<p>But look at the following:</p>
+<blockquote>
+<pre>mysql&gt; SELECT CURRENT_USER();
++----------------+
+| CURRENT_USER() |
++----------------+
+| w2user@%       |
++----------------+
+1 row in set (0.00 sec)
+
+mysql&gt; SET FOREIGN_KEY_CHECKS=0;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&gt; INSERT INTO city (name, country_id) values ('no_city',1234567);
+<span style="color: #993300;">Query OK, 1 row affected (0.01 sec)
+</span>
+mysql&gt; SET FOREIGN_KEY_CHECKS=1;
+Query OK, 0 rows affected (0.00 sec)</pre>
+</blockquote>
+<p>What was that? w2user was allowed to temporarily disable foreign key checks, insert an otherwise invalid row, then re-enable checks, and no error was thrown? Wait, did the row really get inserted?</p>
+<blockquote>
+<pre>mysql&gt; SELECT * FROM city;
++---------+------------+------------+
+| city_id | name       | country_id |
++---------+------------+------------+
+|       1 | london     |          1 |
+|       2 | liverpool  |          1 |
+|       3 | birmingham |          1 |
+|       4 | ny         |          2 |
+|       5 | boston     |          2 |
+|       6 | no_city    |    <span style="color: #993300;">1234567</span> |
++---------+------------+------------+
+6 rows in set (0.01 sec)</pre>
+</blockquote>
+<p>Yes, it did.</p>
+<p>Disabling FK checks is handy when importing large data from dump, or from CSV, when it is <em>known</em> to be valid. For example, when restoring a backup created with mysqldump, FK checks can be safely disabled since dumped data must have been valid. Disabling checks helps in reducing import time.</p>
+<p>But I don't think normal users should be allowed to set the FOREIGN_KEY_CHECKS variable. This should be restricted to users with the SUPER privilege.</p>
+<h4>tx_isolation</h4>
+<p>When using InnoDB, we can choose one of four isolation levels:</p>
+<ul>
+<li>READ-UNCOMMITTED</li>
+<li>READ COMMITTED</li>
+<li>REPEATABLE-READ (default):</li>
+<li>SERIALIZABLE</li>
+</ul>
+<p>In <strong>READ-UNCOMMITTED</strong>, a transaction can read other open transactions uncommitted data. It's usually not a good idea to use this isolation level when working with transactional engines, since it undermines the very foundation of using transactions.</p>
+<p>But MySQL, and through it, InnoDB, allow a strange thing: the transaction isolation level can be modified on the run. I consider this to be peculiar and undesired. An isolation level imposes an application logic, which should not be changed. But MySQL also allows different isolation level on a per-connection basis.</p>
+<p>Every session can work on a different isolation level. This may be a good idea, when a session wishes to be stricter than the rest of the code, by using the <strong>SERIALIZABLE</strong> isolation, for example.</p>
+<p>But our w2user may decide to <em>lower</em> her session's isolation level below the global one. That is, MySQL may be configured to work at <strong>REPEATABLE-READ</strong>, but w2user is allowed to:</p>
+<blockquote>
+<pre>mysql&gt; SELECT CURRENT_USER();
++----------------+
+| CURRENT_USER() |
++----------------+
+| w2user@%       |
++----------------+
+1 row in set (0.00 sec)
+
+mysql&gt; SET tx_isolation='READ-UNCOMMITTED';
+Query OK, 0 rows affected (0.00 sec)</pre>
+</blockquote>
+<p>Our 'root' user does the following:</p>
+<blockquote>
+<pre>mysql&gt; SELECT CURRENT_USER();
++----------------+
+| CURRENT_USER() |
++----------------+
+| root@localhost |
++----------------+
+1 row in set (0.00 sec)
+
+mysql&gt; START TRANSACTION;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&gt; INSERT INTO country (name) VALUES ('nowhere');
+Query OK, 1 row affected (0.00 sec)</pre>
+</blockquote>
+<p>While the transaction is still open, w2user can:</p>
+<blockquote>
+<pre>mysql&gt; SELECT CURRENT_USER();
++----------------+
+| CURRENT_USER() |
++----------------+
+| w2user@%       |
++----------------+
+1 row in set (0.00 sec)
+
+mysql&gt; SELECT * FROM country;
++------------+---------+
+| country_id | name    |
++------------+---------+
+|          1 | gbr     |
+|          2 | usa     |
+|          3 | <span style="color: #993300;">nowhere </span>|
++------------+---------+
+3 rows in set (0.00 sec)</pre>
+</blockquote>
+<p>w2user used the <strong>READ-UNCOMMITED</strong>, hence was allowed to see the (soon to be rolled back?) 'nowhere' country. But that country was inserted by a session using the <strong>REPEATABLE-READ</strong> level.</p>
+<p>Each session confirms to its isolation level rules, and the complaint is not about that. The complaint is with the fact that there's a mess in our database.</p>
+<p>Working with the <strong>REPEATABLE-READ</strong> isolation level should guarantee me some <em>privacy</em> in my transaction. My transaction may choose to delete all rows from a table, only to fill them back again, and none (a small white lie here, since locking is also involved) is the wiser. The privacy notion is so inherent, that it's shocking to learn that any other connection can knowingly choose to ignore my privacy and see any changes I make. This is why I consider this as a security breach, and not just some isolation nuance.</p>
+<p>In my opinion, the isolation level should not be dynamic at all. It must not be changed while the database is running. Perhaps I'm missing some interesting scenario where it would be desired, but the majority of applications would not find this feature beneficial.</p>
+<h4>sql_mode</h4>
+<p>I've written about <strong>sql_mode</strong> before, and here's an example for a data integrity issue caused by weak security:</p>
+<p>In our example, <strong>sql_mode</strong> is set to '<strong>TRADITONAL</strong>', which maps to:</p>
+<blockquote>
+<pre>STRICT_TRANS_TABLES,STRICT_ALL_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,TRADITIONAL,NO_AUTO_CREATE_USER</pre>
+</blockquote>
+<p>Let's add a <strong>TIMESTAMP</strong> column to the country table:</p>
+<blockquote>
+<pre>ALTER TABLE country ADD COLUMN ts TIMESTAMP NOT NULL;</pre>
+</blockquote>
+<p>We now try to set a '0' value for the time stamps (as user root):</p>
+<blockquote>
+<pre>mysql&gt; UPDATE country SET ts=NOW();
+Query OK, 2 rows affected (0.42 sec)
+Rows matched: 2  Changed: 2  Warnings: 0
+
+mysql&gt; UPDATE country SET ts=0;
+ERROR 1292 (22007): Incorrect datetime value: '0' for column 'ts' at row 1</pre>
+</blockquote>
+<p>We got the error becuase of the <strong>NO_ZERO_DATE</strong> part of our <strong>sql_mode</strong>.</p>
+<p>But, again, look at what w2user can do:</p>
+<blockquote>
+<pre>mysql&gt; SELECT @@sql_mode;
++-------------------------------------------------------------------------------------------------------------------------------+
+| @@sql_mode                                                                                                                    |
++-------------------------------------------------------------------------------------------------------------------------------+
+| STRICT_TRANS_TABLES,STRICT_ALL_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,TRADITIONAL,NO_AUTO_CREATE_USER |
++-------------------------------------------------------------------------------------------------------------------------------+
+1 row in set (0.00 sec)
+
+mysql&gt; SET sql_mode='';
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&gt; UPDATE country SET ts=0;
+<span style="color: #993300;">Query OK, 2 rows affected (0.01 sec)
+Rows matched: 2  Changed: 2  Warnings: 0
+</span>
+mysql&gt; SELECT * FROM country;
++------------+------+---------------------+
+| country_id | name | ts                  |
++------------+------+---------------------+
+|          1 | gbr  | <span style="color: #993300;">0000-00-00 00:00:00</span> |
+|          2 | usa  | <span style="color: #993300;">0000-00-00 00:00:00</span> |
++------------+------+---------------------+
+2 rows in set (0.00 sec)</pre>
+</blockquote>
+<p>So, are '0' values allowed for timestamps in our database or not? Turns out any simple user may decide differently.</p>
+<p>See my earlier posts <a title="Do we need sql_mode?" href="http://code.openark.org/blog/mysql/do-we-need-sql_mode">here</a> and <a title="sql_mode: a suggestion" href="http://code.openark.org/blog/mysql/sql_mode-a-suggestion">here</a>. <a title="Roland Bouman's Blog" href="http://rpbouman.blogspot.com/">Roland Bouman</a> also offers <a title="MySQL's sql_mode: My Suggestions" href="http://rpbouman.blogspot.com/2009/01/mysqls-sqlmode-my-suggestions.html">suggestions</a> for fixing this issue.</p>
+<h4>Conclusion</h4>
+<p>The above three examples show how simple users can break data integrity due to very permissive MySQL logic. Even when the database is carfully tuned and secured, there's no way to prevent non privileged users from damaging its integrity.</p>

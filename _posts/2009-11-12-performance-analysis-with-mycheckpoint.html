@@ -1,0 +1,129 @@
+---
+title: Performance analysis with mycheckpoint
+date: 2009-11-12 12:47:00.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Analysis
+- InnoDB
+- Monitoring
+- mycheckpoint
+- Performance
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><a href="http://code.openark.org/forge/mycheckpoint">mycheckpoint</a> (see <a href="http://code.openark.org/blog/mysql/announcing-mycheckpoint-lightweight-sql-oriented-monitoring-for-mysql">announcement</a>) allows for both graph presentation and quick SQL access to monitored &amp; analyzed data. I'd like to show the power of combining them both.</p>
+<h4>InnoDB performance</h4>
+<p>Taking a look at one of the most important InnoDB metrics: the read hit ratio (we could get the same graph by looking at the <a href="http://code.openark.org/forge/mycheckpoint/documentation/generating-html-reports">HTML report</a>):</p>
+<blockquote>
+<pre>SELECT innodb_read_hit_percent FROM sv_report_chart_sample \G
+*************************** 1. row ***************************
+innodb_read_hit_percent: http://chart.apis.google.com/chart?cht=lc&amp;chs=400x200&amp;chts=303030,12&amp;chtt=Nov+10,+11:40++-++Nov+11,+08:55+(0+days,+21+hours)&amp;chdl=innodb_read_hit_percent&amp;chdlp=b&amp;chco=ff8c00&amp;chd=s:400664366P6674y7176677677u467773y64ux166666764366646y616666666666644444434444s6u4S331444404433341334433646777666666074736777r1777767764776666F667777617777777777777777yaRi776776mlf667676xgx776766rou67767777u37797777x76676776u6A737464y67467761777666643u66446&amp;chxt=x,y&amp;chxr=1,99.60,100.00&amp;chxl=0:||Nov+10,+15:55|Nov+10,+20:10|Nov+11,+00:25|Nov+11,+04:40|&amp;chxs=0,505050,10</pre>
+</blockquote>
+<blockquote>
+<pre /><img class="alignnone" title="innodb_read_hit_percent" src="{{ site.baseurl }}/assets/chart?cht=lc&amp;chs=400x200&amp;chts=303030,12&amp;chtt=Nov+10,+11:40++-++Nov+11,+08:55+(0+days,+21+hours)&amp;chdl=innodb_read_hit_percent&amp;chdlp=b&amp;chco=ff8c00&amp;chd=s:400664366P6674y7176677677u467773y64ux166666764366646y616666666666644444434444s6u4S331444404433341334433646777666666074736777r1777767764776666F667777617777777777777777yaRi776776mlf667676xgx776766rou67767777u37797777x76676776u6A737464y67467761777666643u66446&amp;chxt=x,y&amp;chxr=1,99.60,100.00&amp;chxl=0:||Nov+10,+15:55|Nov+10,+20:10|Nov+11,+00:25|Nov+11,+04:40|&amp;chxs=0,505050,10" alt="" width="400" height="200" />
+</blockquote>
+We see that read hit is usually high, but occasionally drops low, down to 99.7, or even 99.6. But it seems like most of the time we are above 99.95% read hit ratio. It's hard to tell about 99.98%.
+<h4>Can we know for sure?</h4>
+We can stress our eyes, yet be certain of little. It's best if we just query for the metrics! <em>mycheckpoint</em> provides with all data, accessible by simple SQL queries:<!--more-->
+<blockquote>
+<pre>SELECT SUM(innodb_read_hit_percent &gt; 99.95)/count(*)
+  FROM sv_report_sample;
++-----------------------------------------------+
+| SUM(innodb_read_hit_percent &gt; 99.95)/count(*) |
++-----------------------------------------------+
+|                                        0.7844 |
++-----------------------------------------------+</pre>
+</blockquote>
+<p>Yes, most of the time we're above 99.95% read hit ratio: but not too often!</p>
+<p>I'm more interested in seeing how much time my server's above 99.98% read hit:</p>
+<blockquote>
+<pre>SELECT SUM(innodb_read_hit_percent &gt; 99.98)/count(*)
+  FROM sv_report_sample;
++-----------------------------------------------+
+| SUM(innodb_read_hit_percent &gt; 99.98)/count(*) |
++-----------------------------------------------+
+|                                        0.3554 |
++-----------------------------------------------+</pre>
+</blockquote>
+<p>We can see the server only has 99.98% read hit percent 35% of the time. Need to work on that!</p>
+<h4>Disk activity</h4>
+<p>Lower read hit percent means higher number of disk reads; that much is obvious. The first two following graphs present this obvious connection. But the third graph tells us another fact: with increased disk I/O, we can expect more (and longer) locks.</p>
+<p>Again, this should be very intuitive, when thinking about it this way. The problem sometimes arises when we try to analyze it the other way round: "Hey! InnoDB has a lot of locks! What are we going to do about it?". Many times, people will look for answers in their <em>transactions</em>, their <em>Isolation Level</em>, their <em>LOCK IN SHARE MODE</em> clauses. But the simple answer can be: "There's a lot of I/O, so everything has to wait; therefore we increase the probability for locks; therefore there's more locks".</p>
+<p>The answer, then, is to reduce I/O. The usual stuff: slow queries; indexing; ... and, yes, perhaps transactions or tuning.</p>
+<p>The charts below make it quite clear that we have an issue of excessive reads -&gt; less read hit -&gt; increased I/O -&gt; more locks.</p>
+<blockquote>
+<pre /><img class="alignnone" title="DML" src="{{ site.baseurl }}/assets/chart?cht=lc&amp;chs=400x200&amp;chts=303030,12&amp;chtt=Oct+31,+17:00++-++Nov+11,+08:00+(10+days,+15+hours)&amp;chdl=com_select_psec|com_insert_psec|com_delete_psec|com_update_psec|com_replace_psec&amp;chdlp=b&amp;chco=ff8c00,4682b4,9acd32,dc143c,9932cc&amp;chd=s:IJJJJJKHGHGHGHHHHHIIIJJJKKKLKLLIHHHIHIHIIIJJJJJKKKLLLLMIHHHHHHHIIIIIJJKKKLLLLMMIHIIIIIIIIIIJJJJKKLLLLMMIHHHIHIHIIIJJJJJKKLKLLLLIHHHIHIHIIIIJIJJJJKKKKKKHHHHHHHHHHHHIIIIJIJJJJJKHHHHHHHHHHIIJJNKLLKKLLLMSMHHIHHHIOSae9RNPJIIJJJKHGGGHGGHHHHHJJKJLKLLLMKMJHIIIIIII,EEEEEEEFEEEEEEEFEFFFFFFFFFFFFFFEEFFEEEEEFFFFFFFFFFFGFFFGFFFFEEEEFFFFFFGGFGFFFFFGEFFFEEFFFFFFFFFFFFFFFFFGEEEEEEEEFFFGGFFFFGFFFFFGEEEFFEEFFEFFEEFFFFFFFEEFEEEEEEEEEEEEEEFFEEEEFEEGEEEEEEEEEFFFFFFFFFEFFFFHEEEEEEEFFFFFFFFFFEEEEFEHEFEEEEEEEEFFFGFGGFFFFFFIEEEEEEEF,CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDCCCCCCDDCCCCCCCCCCCCCCCDCCCCCCCCCCCCCCCCCCDCCCCECCBCBCCCCCCCCCCDCCCCCDCECCCCCCCCCCCCCCCCCCCDCCCDCCCCBBCCCCDCCDCCCCCCCCCECCCBBCCCCCCCCCCCCCCCCCCFCCBCCCCCCCCCCCCCCCCCCCCFCCCCBCCCCCCCDCCCCDCCDCCGCCCCCCCD,CBCCCBBCBBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCBCCCCCCCCCCCCCCBBBCCCCCCBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCBBBBBBCBBBBBBBBCBBCCCCCCCCCCCCCCCCCCCCC,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&amp;chxt=x,y&amp;chxr=1,0,680.42&amp;chxl=0:||Nov+2,+20:00|Nov+4,+23:00|Nov+7,+02:00|Nov+9,+05:00|&amp;chxs=0,505050,10" alt="" width="400" height="200" />
+
+<img class="alignnone" title="innodb_read_hit_percent" src="{{ site.baseurl }}/assets/chart?cht=lc&amp;chs=400x200&amp;chts=303030,12&amp;chtt=Oct+31,+17:00++-++Nov+11,+08:00+(10+days,+15+hours)&amp;chdl=innodb_read_hit_percent&amp;chdlp=b&amp;chco=ff8c00&amp;chd=s:8p879mq7z1377377777z788863778839z13773877633697786888969z1379377667275377376672813167266771288716689y759121685885785236675889869232685789w63y69997989999252696878y8698878588886933368587ffpibibaTYRfVAdXjqfdmbYneRhciXYcifb6995802z56377666576877268875913278387&amp;chxt=x,y&amp;chxr=1,99.44,99.99&amp;chxl=0:||Nov+2,+20:00|Nov+4,+23:00|Nov+7,+02:00|Nov+9,+05:00|&amp;chxs=0,505050,10" alt="" width="400" height="200" />
+
+<img class="alignnone" title="innodb_io" src="{{ site.baseurl }}/assets/chart?cht=lc&amp;chs=400x200&amp;chts=303030,12&amp;chtt=Oct+31,+17:00++-++Nov+11,+08:00+(10+days,+15+hours)&amp;chdl=innodb_buffer_pool_reads_psec|innodb_buffer_pool_pages_flushed_psec&amp;chdlp=b&amp;chco=ff8c00,4682b4&amp;chd=s:DYDDBZVEPMJEFKFGGGEOEDDDEJDECBGBONKEFJEFFFIHFCDDCECCCBECSPLECJEFGHFLDGHEDHEEEDHCMJMGFLGHFELMDCDLEFDBRDFBKIKECIDEHEDHJHFEDGCDCDFCKJKFEJFECRGHNFCCBFBECBCCLHKFBGDEDUEGBCCEEHDCDDFBJJJFEIDFwrfpthozmqqcn3g9hYjkbpqdsvhxormohorGCBHDOLNGEHEDFFGIEFDEDKFDDDGCLIJECIDE,EEEEEGEFSWUFFEGHKIHHHGGHJIHHHHGGQbTFFEFFHGGGGFFHHHGHGFFGUdYGDEGFJKIHHHLKJJJIHHHGHZQRGFGHIHIGGGHIIIGHFFFEHYPNCEFEHHIIIKKJIJHHGIFFGbSPFGJIGFGGGEFFEFEFFEEGSIUODCDFHGGFEEGGGGGGGHFFGYPNDFFGJHIJJIJIHHGFFFEHHVSLCDGIHIHGIHGGFGFFFGIJTRSMEEFFGHHIIIHJKLKHIHGHPNNMCFGE&amp;chxt=x,y&amp;chxr=1,0,151.44&amp;chxl=0:||Nov+2,+20:00|Nov+4,+23:00|Nov+7,+02:00|Nov+9,+05:00|&amp;chxs=0,505050,10" alt="" width="400" height="200" />
+
+<img class="alignnone" title="innodb_row_lock_waits_psec" src="{{ site.baseurl }}/assets/chart?cht=lc&amp;chs=400x200&amp;chts=303030,12&amp;chtt=Oct+31,+17:00++-++Nov+11,+08:00+(10+days,+15+hours)&amp;chdl=innodb_row_lock_waits_psec&amp;chdlp=b&amp;chco=ff8c00&amp;chd=s:GWFGGYSHQJKFGJHIHIHNGHGGGKHHFFGGMMJFFKHHHKMIHGIIJGGFGFHGTNOGFJIHGJGKGJHGGGGFHFJFPIKFFJHJIFLKGGFIFGGEVEJGPILGFIGHJJHIJKGGFJGLIGKGJMSGGIGIGVGGQJGHHKHIGHFGLHMHFIFIGQGGIFGJHIEEHFHGKLJHGGGIYgTVXOaXabSUadW9gVfRSeaQbfalXeYcXTiGHIKHKEJEFFFGGGIGGGGHGKGGHGLGPJHGFJEG&amp;chxt=x,y&amp;chxr=1,0,1.42&amp;chxl=0:||Nov+2,+20:00|Nov+4,+23:00|Nov+7,+02:00|Nov+9,+05:00|&amp;chxs=0,505050,10" alt="" width="400" height="200" />
+</blockquote>
+By the way, the above resulted from the fact that, due to a problematic query, all slave stopped replicating. Slaves participated in read-balancing, so when they went stale, all reads were directed at the master (the monitored node).
+<h4>You have the metrics at your disposal</h4>
+Looking at the following chart:
+<blockquote>
+<pre /><img class="alignnone" title="questions" src="{{ site.baseurl }}/assets/chart?cht=lc&amp;chs=400x200&amp;chts=303030,12&amp;chtt=Nov+11,+15:15++-++Nov+12,+12:30+(0+days,+21+hours)&amp;chdl=queries_psec|questions_psec|slow_queries_psec|com_commit_psec|com_set_option_psec&amp;chdlp=b&amp;chco=ff8c00,4682b4,9acd32,dc143c,9932cc&amp;chd=s:pqpviksvvz0vuxxxjpw0mwpkkso1vhuvn0nnrtx2uisrnvoknmusomqvlyymsvpuweqslwumkomutcromzrinukvwcuzotujjto1shrtszqlu849mXenejkaZlZhcYbgciaZZegecUWhZkaYWebfaXVaecdZUZgdbSbccbcTXYeaaTYZfZeVjbnZhRdegcfYorkdmVadqenfcknkoadeuhrjcbptpkhkqkrqfjprrtmllmnqdwsusojoo0qtpwp4,abfjVQebgjaWeedkWRgcelWUcdclYUhddnaVidendUieflaUhcfkdRfefmgSjianfPkcdmfUegamfRmcfmgTgegmhQghgmgWeiepfShfhqjcqzwzfVYdbfbUXbXcYSYaYdVWUZabWTTbXeYUVZYdVTUYabYWUYbbXSWaYaYSSXZZVTVZaXZURZaWbQWZaaYWUWbaZSUadadVUcbbbTWYeabXUUcebUYbabdVUYbbdTWaaccWTddaeTWbdbgXXdci,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA,MLOPJHNMNPLKNNNQJHOMNQJJMMMQLIPMNSLJPNNRNJPNNRKJPMNQNHONNRNIPPLROHQNMRNJOOMRNHRMNRNJONOROHOPOROKNPNTOIPOOTOMQUSUNJKNLOLJKMKMKIKLKMJJILLMKIIMKNJJJLKNIJJKKMKJIKLMKHJLKLKIIKKLJIJLKKKJHLLKLHJLKLKJIKLLKIJLMLMKJMMMMIJKMLLKIJMNLJKMLMMJJKLMNIKLLMMKIMMLNIKMMMOKKNMP&amp;chxt=x,y&amp;chxr=1,0,916.47&amp;chxl=0:||Nov+11,+19:30|Nov+11,+23:45|Nov+12,+04:00|Nov+12,+08:15|&amp;chxs=0,505050,10" alt="" width="400" height="200" />
+</blockquote>
+It appears that there's no slow queries. But this may be misleading: perhaps there's just a little, that don't show due to the chart's large scale?
+
+One could argue that this is the chart's fault. Perhaps there should be a distinct chart for "slow queries percent". Perhaps I'll add one. But we can't have special charts for everything. It's would be too tiresome to look at hundreds of charts.
+
+Anyway, my point is: let's verify just how many slow queries we have:
+<blockquote>
+<pre>SELECT slow_queries_psec FROM sv_hour ORDER BY id DESC;
++-------------------+
+| slow_queries_psec |
++-------------------+
+|              3.05 |
+|              3.83 |
+|              4.39 |
+|              4.03 |
+|              3.86 |
+|              3.56 |
+|              3.73 |
+|              3.79 |
+|              3.58 |
+|              3.55 |
+...
++-------------------+</pre>
+</blockquote>
+<p>So, between 3 and 4 slow queries per second. It doesn't look too good in this light. Checking on the percentage of slow queries (of total questions):</p>
+<blockquote>
+<pre>SELECT ROUND(100*slow_queries_diff/questions_diff, 1) AS slow_queries_percent
+  FROM sv_hour ORDER BY id DESC LIMIT 10;</pre>
+</blockquote>
+<p>Or, since the above calculation is pre-defined in the reports tables:</p>
+<blockquote>
+<pre>SELECT slow_queries_percent FROM sv_report_hour_recent;
++----------------------+
+| slow_queries_percent |
++----------------------+
+|                  0.8 |
+|                  1.0 |
+|                  1.2 |
+|                  1.2 |
+|                  1.1 |
+|                  1.0 |
+|                  1.1 |
+|                  1.1 |
+|                  1.0 |
+...
++----------------------+</pre>
+</blockquote>
+<h4>Accessible data</h4>
+<p>This is what I've been trying to achieve with <em>mycheckpoint</em>. As a DBA, consultant and SQL geek I find that direct SQL access works best for me. It's like loving command line interface over GUI tools. Direct SQL gives you so much more control and information.</p>
+<p>Charting is important, since it's easy to watch and get first impressions, or find extreme changes. But beware of relying on charts all the time. Scale issues, misleading human interpretation, technology limitations - all these make charts inaccurate.</p>
+<p><a href="http://code.openark.org/forge/mycheckpoint">mycheckpoint</a> allows for both methods, and, I believe, intuitively so.</p>
+<p>&lt;/propaganda&gt;</p>

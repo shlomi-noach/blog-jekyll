@@ -1,0 +1,145 @@
+---
+title: On SHOW BINLOG/RELAYLOG EVENTS
+date: 2015-08-04 11:38:13.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Replication
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Some notes after working with <a href="https://dev.mysql.com/doc/refman/5.6/en/show-binlog-events.html">SHOW BINLOG EVENTS</a> and <a href="https://dev.mysql.com/doc/refman/5.6/en/show-relaylog-events.html">SHOW RELAYLOG EVENTS</a> statements; there are a few gotchas and some interesting facts. My reflections also follow.</p>
+<p>I'm calling these commands from <a href="https://github.com/outbrain/orchestrator">orchestrator</a> when working with <a href="https://speakerdeck.com/shlominoach/pseudo-gtid-and-easy-mysql-replication-topology-management">Pseudo-GTID</a> (which I do <em>alot</em>). I prefer to work with agent-free design, where a single, remote service can do everything: examine replication status, scan binary logs for information, and recover broken topologies via gluing together servers that were not previously directly associated.</p>
+<p>Alas, documentation is short on these commands, and some stuff I learned the hard way.</p>
+<p>Basically, <strong>SHOW BINLOG/RELAYLOG EVENTS</strong> commands are a poor man's replacement to <strong>mysqlbinlog</strong>, only you can issue them on MySQL protocol, and you do not have to have the binary/relay log files locally on your host.</p>
+<h3>Fun fact</h3>
+<p>The binary logs are called so because they are compressed. You are familiar with the binlog position you see on <strong>SHOW MASTER STATUS</strong> or <strong>SHOW SLAVE STATUS</strong>. You are familiar with the binlog position as you see it when you execute <strong>"mysqlbinlog mybinlog.001234"</strong>. The position of a new entry equals to the file size of the binary log at that time. If:</p>
+<blockquote>
+<pre>$ ls -l master/data/mysql-bin.015901
+-rw-rw---- 1 user user 401408 Jul 18 02:44 master/data/mysql-bin.015901</pre>
+</blockquote>
+<p>Then the next entry will be at position <strong>401408</strong>, as this is the file size in bytes.</p>
+<p>And so when MySQL writes an entry to the binary log, it (of course) knows the entry's position in the binary log, but then also immediately knows the position of the next entry.</p>
+<p>We'll revisit this fact later.</p>
+<h3>Output of SHOW BINLOG/RELAYLOG EVENTS</h3>
+<p>The output of both statement depends on the <strong>binlog_format</strong>. In Statement Based Replication it may look like:<!--more--></p>
+<blockquote>
+<pre>$gt; SHOW BINLOG EVENTS IN 'mysql-bin.015903' LIMIT 40,20;
++------------------+------+------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------+
+| Log_name         | Pos  | Event_type | Server_id | End_log_pos | Info                                                                                                                |
++------------------+------+------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------+
+| mysql-bin.015903 | 3650 | Gtid       |         1 |        3698 | SET @@SESSION.GTID_NEXT= '230ea8ea-81e3-11e4-972a-e25ec4bd140a:790000'                                              |
+| mysql-bin.015903 | 3698 | Query      |         1 |        3785 | BEGIN                                                                                                               |
+| mysql-bin.015903 | 3785 | User var   |         1 |        3832 | @`id`=7                                                                                                             |
+| mysql-bin.015903 | 3832 | Query      |         1 |        3969 | use `test`; replace into test.t (id, i, t) values (@id, @id, now())                                                 |
+| mysql-bin.015903 | 3969 | Xid        |         1 |        4000 | COMMIT /* xid=967 */                                                                                                |
+| mysql-bin.015903 | 4000 | Gtid       |         1 |        4048 | SET @@SESSION.GTID_NEXT= '230ea8ea-81e3-11e4-972a-e25ec4bd140a:790001'                                              |
+| mysql-bin.015903 | 4048 | Query      |         1 |        4135 | BEGIN                                                                                                               |
+| mysql-bin.015903 | 4135 | User var   |         1 |        4182 | @`id`=9                                                                                                             |
+| mysql-bin.015903 | 4182 | Query      |         1 |        4319 | use `test`; replace into test.t (id, i, t) values (@id, @id, now())                                                 |
+| mysql-bin.015903 | 4319 | Xid        |         1 |        4350 | COMMIT /* xid=969 */                                                                                                |
+| mysql-bin.015903 | 4350 | Gtid       |         1 |        4398 | SET @@SESSION.GTID_NEXT= '230ea8ea-81e3-11e4-972a-e25ec4bd140a:790002'                                              |
+| mysql-bin.015903 | 4398 | Query      |         1 |        4576 | use `meta`; drop view if exists `meta`.`_pseudo_gtid_hint__asc(55B50F9C:00000000000000D4:C96BF9F7)` |
+| mysql-bin.015903 | 4576 | Gtid       |         1 |        4624 | SET @@SESSION.GTID_NEXT= '230ea8ea-81e3-11e4-972a-e25ec4bd140a:790003'                                              |
+| mysql-bin.015903 | 4624 | Query      |         1 |        4711 | BEGIN                                                                                                               |
+| mysql-bin.015903 | 4711 | User var   |         1 |        4758 | @`id`=6                                                                                                             |
+| mysql-bin.015903 | 4758 | Query      |         1 |        4895 | use `test`; replace into test.t (id, i, t) values (@id, @id, now())                                                 |
+| mysql-bin.015903 | 4895 | Xid        |         1 |        4926 | COMMIT /* xid=971 */                                                                                                |
+| mysql-bin.015903 | 4926 | Gtid       |         1 |        4974 | SET @@SESSION.GTID_NEXT= '230ea8ea-81e3-11e4-972a-e25ec4bd140a:790004'                                              |
+| mysql-bin.015903 | 4974 | Query      |         1 |        5077 | BEGIN                                                                                                               |
+| mysql-bin.015903 | 5077 | User var   |         1 |        5133 | @`hostname`=_utf8 0x736E6F6163682D616D7339 COLLATE utf8_general_ci                                                  |
++------------------+------+------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------+
+</pre>
+</blockquote>
+<p>The first thing to note is that there's far less data in this output as compared to <strong>mysqlbinlog</strong>'s. For example, you can't see the TIMESTAMP at which the queries were issued. You can't see additional metadata like RAND() seed. Thus far it is documented.</p>
+<p>You do know the binlog file name, position, end-position (which is the position of the next entry), originating <strong>server_id</strong>.</p>
+<p>However with Row Based Replication things are even less informative:</p>
+<blockquote>
+<pre>$gt; SHOW BINLOG EVENTS IN 'mysql-bin.015902' LIMIT 20,20;
++------------------+------+-------------+-----------+-------------+------------------------------------------------------------------------+
+| Log_name         | Pos  | Event_type  | Server_id | End_log_pos | Info                                                                   |
++------------------+------+-------------+-----------+-------------+------------------------------------------------------------------------+
+| mysql-bin.015902 | 1365 | Query       |         1 |        1453 | BEGIN                                                                  |
+| mysql-bin.015902 | 1453 | Table_map   |         1 |        1535 | table_id: 71 (meta.pseudo_gtid_status)                                 |
+| mysql-bin.015902 | 1535 | Update_rows |         1 |        1829 | table_id: 71 flags: STMT_END_F                                         |
+| mysql-bin.015902 | 1829 | Xid         |         1 |        1860 | COMMIT /* xid=26 */                                                    |
+| mysql-bin.015902 | 1860 | Gtid        |         1 |        1908 | SET @@SESSION.GTID_NEXT= '230ea8ea-81e3-11e4-972a-e25ec4bd140a:789767' |
+| mysql-bin.015902 | 1908 | Query       |         1 |        1988 | BEGIN                                                                  |
+| mysql-bin.015902 | 1988 | Table_map   |         1 |        2035 | table_id: 70 (test.t)                                                  |
+| mysql-bin.015902 | 2035 | Update_rows |         1 |        2129 | table_id: 70 flags: STMT_END_F                                         |
+| mysql-bin.015902 | 2129 | Xid         |         1 |        2160 | COMMIT /* xid=29 */                                                    |
+| mysql-bin.015902 | 2160 | Gtid        |         1 |        2208 | SET @@SESSION.GTID_NEXT= '230ea8ea-81e3-11e4-972a-e25ec4bd140a:789768' |
+| mysql-bin.015902 | 2208 | Query       |         1 |        2288 | BEGIN                                                                  |
+| mysql-bin.015902 | 2288 | Table_map   |         1 |        2335 | table_id: 70 (test.t)                                                  |
+| mysql-bin.015902 | 2335 | Update_rows |         1 |        2429 | table_id: 70 flags: STMT_END_F                                         |
+| mysql-bin.015902 | 2429 | Xid         |         1 |        2460 | COMMIT /* xid=32 */                                                    |
+| mysql-bin.015902 | 2460 | Gtid        |         1 |        2508 | SET @@SESSION.GTID_NEXT= '230ea8ea-81e3-11e4-972a-e25ec4bd140a:789769' |
+| mysql-bin.015902 | 2508 | Query       |         1 |        2588 | BEGIN                                                                  |
+| mysql-bin.015902 | 2588 | Table_map   |         1 |        2635 | table_id: 70 (test.t)                                                  |
+| mysql-bin.015902 | 2635 | Update_rows |         1 |        2729 | table_id: 70 flags: STMT_END_F                                         |
+| mysql-bin.015902 | 2729 | Xid         |         1 |        2760 | COMMIT /* xid=34 */                                                    |
+| mysql-bin.015902 | 2760 | Gtid        |         1 |        2808 | SET @@SESSION.GTID_NEXT= '230ea8ea-81e3-11e4-972a-e25ec4bd140a:789770' |
++------------------+------+-------------+-----------+-------------+------------------------------------------------------------------------+
+</pre>
+</blockquote>
+<p>What's this? We don't get the statement anymore. I mean, sure, this is RBR, but there's no more info! All we knows is there was an <strong>Update_rows</strong> on test.t; that also only after we've crossed two different entries, one mapping a test.t to <strong>70</strong>, the other telling us an <strong>UPDATE</strong> operation was made on <strong>70</strong>.</p>
+<p>This is the reason <a href="http://code.openark.org/blog/mysql/pseudo-gtid-row-based-replication">why Pseudo GTID injection is made via DDL</a>.</p>
+<p>With RBR we also get some excessive information. The <strong>table_id</strong> mentioned above is true for this server; but on a slave the table would have a different id. The SHOW output would look different. Likewise, the commit number as in <strong>"COMMIT /* xid=32 */"</strong> changes from server to server. There are also other entries which may look different; character encoding changes shape. Really weird stuff.</p>
+<p>The output of <strong>SHOW RELAYLOG EVENTS</strong> is very similar, except for the following:</p>
+<ol>
+<li>Obviously we're parsing and outputting relay logs</li>
+<li><strong>Pos</strong> column relates to the position in the relay log where the entry starts (makes sense)</li>
+<li><strong>End_log_pos</strong> column relates to the next binlog position <em>of the master's binary log</em> that correlates to this query. Read that again. There is no telling what the end-log-pos is for the relay log entry. We'll revisit that shortly.</li>
+</ol>
+<h3>Locking issues</h3>
+<p>Unfortunately, issuing a <strong>SHOW BINLOG EVENTS</strong> <a href="https://bugs.mysql.com/bug.php?id=76618">completely locks down the binary logs</a> on the server.</p>
+<p>Yes. This means you cannot write to the binary logs while issuing the <strong>SHOW</strong> statement. And that means you cannot write, everything piles up and your server is under complete lock down.</p>
+<p>Before you throw your hands up in the air and move on to read something that can cheer you up, note that things are not completely bad. We are able at <strong>Booking.com</strong> to scan <strong>24</strong> hours worth of binary logs (i.e. dozens of hundreds of binary logs) on business-critical MySQL masters without making an impact. How?</p>
+<h3>SHOW...LIMIT offset, row_count vs SHOW...FROM pos LIMIT row_count</h3>
+<p>Of course the solution is to do many small steps instead of few giant steps. Reading all of a binary log's entries is suicidal to your application &amp; database. The <strong>SHOW BINLOG/RELAYLOG EVENTS</strong> statements support a <strong>LIMIT</strong> clause.</p>
+<p>As per previous example, you may:</p>
+<blockquote>
+<pre>SHOW BINLOG EVENTS IN 'mysql-bin.015903' LIMIT 40,20;</pre>
+</blockquote>
+<p>This skips <strong>40</strong> entries (<strong>offset</strong>), then reads <strong>20</strong> <strong>(row_count</strong>).</p>
+<p>However much like non-indexed table scan, to skip the first <strong>40</strong> entries you must nonetheless iterate them. Since we don't know exactly where in the binlog the <strong>41st</strong> entry begins, we need to unpack the binary log from start and find it out the full-scan way.</p>
+<p>Don't iterate a binary log's entries via <strong>LIMIT 0,1000</strong>; <strong>LIMIT 1000,1000</strong>; <strong>LIMIT 2000,1000</strong>; ... This is O(n²)</p>
+<p>In contrast, you may:</p>
+<blockquote>
+<pre>SHOW BINLOG EVENTS IN 'mysql-bin.015903' <strong>FROM</strong> 3650 LIMIT 20;</pre>
+</blockquote>
+<p>Remember that an entry's position is the binlog file size at the time before the entry was written? To execute the above MySQL <em>merely <strong>seeks</strong></em> the binlog file 3650 bytes ahead. No scan required.</p>
+<p>You must provide with a valid position value. If I just guess my way:</p>
+<blockquote>
+<pre>&gt; SHOW BINLOG EVENTS IN 'mysql-bin.015903' FROM 3651 LIMIT 20;
+ERROR 1220 (HY000): Error when executing command SHOW BINLOG EVENTS: Wrong offset or I/O error</pre>
+</blockquote>
+<p>And so you must have prior knowledge about positions. This is fine if you're scanning a binary log: you simply read the <strong>End_log_pos</strong> of the last entry you've just read and memorize it. Thus, to scan a binary log, you can:</p>
+<blockquote>
+<pre>&gt; SHOW BINLOG EVENTS IN 'mysql-bin.015903' LIMIT 20;
+
+&gt; SHOW BINLOG EVENTS IN 'mysql-bin.015903' FROM 1499 LIMIT 20;
+
+&gt; SHOW BINLOG EVENTS IN 'mysql-bin.015903' FROM 3651 LIMIT 20;</pre>
+</blockquote>
+<p>But it's more difficult to do this for relay logs: remember that the <strong>End_log_pos</strong> in <strong>SHOW RELAYLOG EVENTS</strong> relates to the next position in the <em>master's binary log</em>. So you need to resort to an off-by-one or something. However the good news is that reading relay logs <em>does not</em> block writes on your server.</p>
+<h3>Locking thoughts</h3>
+<p>As per my comments in the bug report, I don't see why <strong>SHOW BINLOG EVENTS</strong> should always lock writes:</p>
+<ul>
+<li>If we're scanning an old binary log (not the one being written to) then obviously we should not be blocking writes.</li>
+<li>If we're scanning the current binlog, but are known to end with a statement that is already written (i.e. not trying to scan past the current writing position) then we should not be blocking writes.</li>
+<li>OK to block writes when trying to read past current position.</li>
+<li>OK to block on a <strong>FLUSH MASTER LOGS</strong>, <strong>PURGE MASTER LOGS</strong></li>
+</ul>
+<h3>Why is the output so limited?</h3>
+<p>I'm actually unsure why the output of these commands is so limited as compared to the <strong>mysqlbinlog</strong> output. A replicating slave talks to the master over MySQL protocol; the slave <em>does get</em> all the data right. It <em>does get</em> event metadata (timestamp, random seed, session variable). It <em>does get</em> complete statement/row data. What I'm saying is that this functionality is already built in; it could be very easily added to the <strong>SHOW</strong> commands.</p>

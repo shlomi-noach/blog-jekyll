@@ -1,0 +1,127 @@
+---
+title: 'Orchestrator 1.2.1 BETA: Pseudo GTID support, reconnect slaves even after
+  master failure'
+date: 2014-10-27 11:51:51.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Open Source
+- orchestrator
+- Pseudo GTID
+- Replication
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><em>orchestrator</em> <a href="https://github.com/outbrain/orchestrator/releases/tag/v1.2.1-beta">1.2.1 BETA is released</a>. This version supports <a href="http://code.openark.org/blog/mysql/refactoring-replication-topology-with-pseudo-gtid">Pseudo GTID</a>, and provides one with powerful refactoring of one's replication topologies, even across failed instances.</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/10/orchestrator-pseudo-gtid-dead-relay-master-begin-drag.png"><img class="alignnone size-large wp-image-7101" src="{{ site.baseurl }}/assets/orchestrator-pseudo-gtid-dead-relay-master-begin-drag-1024x292.png" alt="orchestrator-pseudo-gtid-dead-relay-master-begin-drag" width="1024" height="292" /></a></p>
+<p>Depicted: moving a slave up the topology even though its local master is inaccessible</p></blockquote>
+<h4>Enabling Pseudo-GTID</h4>
+<p>You will need to:</p>
+<ol>
+<li>Inject a periodic unique entry onto your binary logs</li>
+<li>Configure <em>orchestrator</em> to recognize said entry.</li>
+</ol>
+<h4>Pseudo GTID injection example</h4>
+<p>We will use the <a href="http://dev.mysql.com/doc/refman/5.5/en/events.html">event scheduler</a> (must be enabled) to inject an entry every <strong>10</strong> seconds, recognized both in statement-based and row-based replication.</p>
+<blockquote>
+<pre>create database if not exists meta;
+
+drop event if exists meta.create_pseudo_gtid_view_event;
+
+delimiter ;;
+create event if not exists
+  meta.create_pseudo_gtid_view_event
+  on schedule every 10 second starts current_timestamp
+  on completion preserve
+  enable
+  do
+    begin
+      set @pseudo_gtid := uuid();
+      set @_create_statement := concat('create or replace view meta.pseudo_gtid_view as select 
+</blockquote>
+<p>Make sure to enable <em>event_scheduler</em> in your <strong>my.cnf</strong> config file.</p>
+<p>An entry in the binary logs would look like this:<!--more--></p>
+<blockquote>
+<pre>mysql [localhost] {msandbox} (meta) &gt; show binlog events in 'mysql-bin.000002' LIMIT 2,1;
++------------------+-----+------------+-----------+-------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Log_name         | Pos | Event_type | Server_id | End_log_pos | Info                                                                                                                                                                                                               |
++------------------+-----+------------+-----------+-------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| mysql-bin.000002 | 388 | Query      |         1 |         669 | use `meta`; CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`msandbox`@`localhost` SQL SECURITY DEFINER VIEW `pseudo_gtid_view` AS select '2f6ad653-5db3-11e4-b91d-3c970ea31ea8' as pseudo_gtid_unique_val from dual |
++------------------+-----+------------+-----------+-------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>The above entry will be unique, and orchestrator will be able to find it in the binary log if configured with:</p>
+<blockquote>
+<pre>{
+    ...
+    "PseudoGTIDPattern": "CREATE OR REPLACE .*? VIEW `pseudo_gtid_view` AS select"
+}</pre>
+</blockquote>
+<p>The value of <strong>"PseudoGTIDPattern"</strong> is a regular expression which must match the Pseudo GTID entries in the binary log, and <em>nothing but those entries</em>.</p>
+<h4>Pre-release</h4>
+<p>This is BETA quality; though I have high confidence in its safety: the process of matching the binary log entries makes for a self-validating mechanism. The process will abort on any mismatch or uncertainty.</p>
+<p>Still there can be use cases I haven't encountered yet. You input is appreciated!</p>
+', @pseudo_gtid, '
+</blockquote>
+<p>Make sure to enable <em>event_scheduler</em> in your <strong>my.cnf</strong> config file.</p>
+<p>An entry in the binary logs would look like this:<!--more--></p>
+<blockquote>
+<pre>mysql [localhost] {msandbox} (meta) &gt; show binlog events in 'mysql-bin.000002' LIMIT 2,1;
++------------------+-----+------------+-----------+-------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Log_name         | Pos | Event_type | Server_id | End_log_pos | Info                                                                                                                                                                                                               |
++------------------+-----+------------+-----------+-------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| mysql-bin.000002 | 388 | Query      |         1 |         669 | use `meta`; CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`msandbox`@`localhost` SQL SECURITY DEFINER VIEW `pseudo_gtid_view` AS select '2f6ad653-5db3-11e4-b91d-3c970ea31ea8' as pseudo_gtid_unique_val from dual |
++------------------+-----+------------+-----------+-------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>The above entry will be unique, and orchestrator will be able to find it in the binary log if configured with:</p>
+<blockquote>
+<pre>{
+    ...
+    "PseudoGTIDPattern": "CREATE OR REPLACE .*? VIEW `pseudo_gtid_view` AS select"
+}</pre>
+</blockquote>
+<p>The value of <strong>"PseudoGTIDPattern"</strong> is a regular expression which must match the Pseudo GTID entries in the binary log, and <em>nothing but those entries</em>.</p>
+<h4>Pre-release</h4>
+<p>This is BETA quality; though I have high confidence in its safety: the process of matching the binary log entries makes for a self-validating mechanism. The process will abort on any mismatch or uncertainty.</p>
+<p>Still there can be use cases I haven't encountered yet. You input is appreciated!</p>
+ as pseudo_gtid_unique_val from dual');
+      PREPARE st FROM @_create_statement;
+      EXECUTE st;
+      DEALLOCATE PREPARE st;
+    end
+;;
+
+delimiter ;
+
+set global event_scheduler := 1;</pre>
+</blockquote>
+<p>Make sure to enable <em>event_scheduler</em> in your <strong>my.cnf</strong> config file.</p>
+<p>An entry in the binary logs would look like this:<!--more--></p>
+<blockquote>
+<pre>mysql [localhost] {msandbox} (meta) &gt; show binlog events in 'mysql-bin.000002' LIMIT 2,1;
++------------------+-----+------------+-----------+-------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Log_name         | Pos | Event_type | Server_id | End_log_pos | Info                                                                                                                                                                                                               |
++------------------+-----+------------+-----------+-------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| mysql-bin.000002 | 388 | Query      |         1 |         669 | use `meta`; CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`msandbox`@`localhost` SQL SECURITY DEFINER VIEW `pseudo_gtid_view` AS select '2f6ad653-5db3-11e4-b91d-3c970ea31ea8' as pseudo_gtid_unique_val from dual |
++------------------+-----+------------+-----------+-------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>The above entry will be unique, and orchestrator will be able to find it in the binary log if configured with:</p>
+<blockquote>
+<pre>{
+    ...
+    "PseudoGTIDPattern": "CREATE OR REPLACE .*? VIEW `pseudo_gtid_view` AS select"
+}</pre>
+</blockquote>
+<p>The value of <strong>"PseudoGTIDPattern"</strong> is a regular expression which must match the Pseudo GTID entries in the binary log, and <em>nothing but those entries</em>.</p>
+<h4>Pre-release</h4>
+<p>This is BETA quality; though I have high confidence in its safety: the process of matching the binary log entries makes for a self-validating mechanism. The process will abort on any mismatch or uncertainty.</p>
+<p>Still there can be use cases I haven't encountered yet. You input is appreciated!</p>

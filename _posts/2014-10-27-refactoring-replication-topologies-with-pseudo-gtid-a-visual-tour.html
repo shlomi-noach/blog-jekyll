@@ -1,0 +1,55 @@
+---
+title: 'Refactoring replication topologies with Pseudo GTID: a visual tour'
+date: 2014-10-27 11:55:39.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- orchestrator
+- Pseudo GTID
+- Replication
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><em>Orchestrator</em> <a href="https://github.com/outbrain/orchestrator/releases/tag/v1.2.1-beta">1.2.1-beta</a> supports Pseudo GTID (<a href="http://code.openark.org/blog/mysql/orchestrator-1-2-1-beta-pseudo-gtid-support-reconnect-slaves-even-after-master-failure">read announcement</a>): a means to refactor the replication topology and connect slaves even without direct relationship; even across failed servers. This post illustrates two such scenarios and shows the visual way of mathcing/re-synching slaves.</p>
+<p>Of course, orchestrator is not just a GUI tool; anything done with drag-and-drop is also done via web API (in fact, the drag-and-drop invoke the web API) as well as via command line. I'm mentioning this as this is the grounds for failover automation planned for the future.</p>
+<h4>Scenario 1: the master unexpectedly dies</h4>
+<p>The master crashes and cannot be contacted. All slaves are stopped as effect, but each in a different position. Some managed to salvage relay logs just before the master dies, some didn't. In our scenario, all three slaves are at least caught up with the relay log (that is, whatever they managed to pull through the network, they already managed to execute). So they're otherwise sitting idle waiting for something to happen. Well, something's about to happen.</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/10/orchestrator-pseudo-gtid-dead-master.png"><img class="alignnone size-large wp-image-7090" src="{{ site.baseurl }}/assets/orchestrator-pseudo-gtid-dead-master-1024x323.png" alt="orchestrator-pseudo-gtid-dead-master" width="1024" height="323" /></a></p></blockquote>
+<p>Note the green "Safe mode" button to the right. This means operation is through calculation of binary log files &amp; positions with relation to one's master. But the master is now dead, so let's switch to adventurous mode; in this mode we can drag and drop slaves onto instances normally forbidden. At this stage the web interface allows us to drop a slave onto its sibling or any of its ancestors (including its very own parent, which is a means of reconnecting a slave with its parent). Anyhow:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/10/orchestrator-pseudo-gtid-dead-master-pseudo-gtid-mode.png"><img class="alignnone size-large wp-image-7091" src="{{ site.baseurl }}/assets/orchestrator-pseudo-gtid-dead-master-pseudo-gtid-mode-1024x296.png" alt="orchestrator-pseudo-gtid-dead-master-pseudo-gtid-mode" width="1024" height="296" /></a></p></blockquote>
+<p>We notice that orchestrator is already kind enough to say which slave is best candidate to be the new master (<strong>127.0.0.1:22990</strong>): this is the slave (or one of the slaves) with most up-to-date data. So we choose to take another server and make it a slave of <strong>127.0.0.1:22990</strong>:<!--more--></p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/10/orchestrator-pseudo-gtid-dead-master-begin-drag.png"><img class="alignnone size-full wp-image-7093" src="{{ site.baseurl }}/assets/orchestrator-pseudo-gtid-dead-master-begin-drag.png" alt="orchestrator-pseudo-gtid-dead-master-begin-drag" width="770" height="349" /></a></p></blockquote>
+<p>And drop:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/10/orchestrator-pseudo-gtid-dead-master-drop.png"><img class="alignnone size-full wp-image-7094" src="{{ site.baseurl }}/assets/orchestrator-pseudo-gtid-dead-master-drop.png" alt="orchestrator-pseudo-gtid-dead-master-drop" width="799" height="366" /></a></p></blockquote>
+<p>There we have it: although their shared master is inaccessible, and the two slave's binary log file names &amp; position mean nothing to each other, we are able to correctly match the two and make one child of the other:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/10/orchestrator-pseudo-gtid-dead-master-refactored-1.png"><img class="alignnone size-large wp-image-7095" src="{{ site.baseurl }}/assets/orchestrator-pseudo-gtid-dead-master-refactored-1-1024x269.png" alt="orchestrator-pseudo-gtid-dead-master-refactored-1" width="1024" height="269" /></a></p></blockquote>
+<p>Likewise, we do the same with <strong>127.0.0.1:22988</strong>:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/10/orchestrator-pseudo-gtid-dead-master-begin-drag-2.png"><img class="alignnone size-large wp-image-7096" src="{{ site.baseurl }}/assets/orchestrator-pseudo-gtid-dead-master-begin-drag-2-1024x279.png" alt="orchestrator-pseudo-gtid-dead-master-begin-drag-2" width="1024" height="279" /></a></p></blockquote>
+<p>And end up with our (almost) final topology:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/10/orchestrator-pseudo-gtid-dead-master-refactored-2.png"><img class="alignnone size-large wp-image-7097" src="{{ site.baseurl }}/assets/orchestrator-pseudo-gtid-dead-master-refactored-2-1024x255.png" alt="orchestrator-pseudo-gtid-dead-master-refactored-2" width="1024" height="255" /></a></p></blockquote>
+<p>Notice how the two slaves <strong>22988</strong>, <strong>22989</strong> are happily replicating from <strong>22990</strong>. As far as they're concerned, there is no problem in the topology any more. Now it's your decision: do you decommission the old master? You will need to <strong>RESET SLAVE</strong> on <strong>22990</strong> (can do via <em>orchestrator</em>), turn off <strong>22990</strong>'s <strong>read_only</strong> (can do via <em>orchestrator</em>) and change DNS entries (or what have you).</p>
+<h4>Scenario 2: a local master ("relay-master") unexpectedly dies</h4>
+<p>In this scenario we have a <a href="http://code.openark.org/blog/mysql/using-deep-nested-replication-topologies">deep nested topology</a>, and a local master died. What of its slaves?</p>
+<blockquote><p> <a href="http://code.openark.org/blog/wp-content/uploads/2014/10/orchestrator-pseudo-gtid-dead-relay-master.png"><img class="alignnone size-large wp-image-7100" src="{{ site.baseurl }}/assets/orchestrator-pseudo-gtid-dead-relay-master-1024x237.png" alt="orchestrator-pseudo-gtid-dead-relay-master" width="1024" height="237" /></a></p></blockquote>
+<p>We choose one of the children and drag it over onto the master, which is up and healthy:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/10/orchestrator-pseudo-gtid-dead-relay-master-begin-drag.png"><img class="alignnone size-large wp-image-7101" src="{{ site.baseurl }}/assets/orchestrator-pseudo-gtid-dead-relay-master-begin-drag-1024x292.png" alt="orchestrator-pseudo-gtid-dead-relay-master-begin-drag" width="1024" height="292" /></a></p></blockquote>
+<p>As you can see we are allowed (green instances are allowed drop places) to drop <strong>22989</strong> on its sibling and on its grandparent, the latter bypassing a broken connection. There <em>is no</em> connection between the two!</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/10/orchestrator-pseudo-gtid-dead-relay-master-drop.png"><img class="alignnone size-large wp-image-7102" src="{{ site.baseurl }}/assets/orchestrator-pseudo-gtid-dead-relay-master-drop-1024x282.png" alt="orchestrator-pseudo-gtid-dead-relay-master-drop" width="1024" height="282" /></a></p></blockquote>
+<p>And we get a new topology:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/10/orchestrator-pseudo-gtid-dead-relay-master-refactored-1.png"><img class="alignnone size-large wp-image-7103" src="{{ site.baseurl }}/assets/orchestrator-pseudo-gtid-dead-relay-master-refactored-1-1024x264.png" alt="orchestrator-pseudo-gtid-dead-relay-master-refactored-1" width="1024" height="264" /></a></p></blockquote>
+<p><strong>22989</strong> is now lagging, but on the right path! Let's do the same for <strong>22988</strong>:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/10/orchestrator-pseudo-gtid-dead-relay-master-begin-drag-2.png"><img class="alignnone size-large wp-image-7104" src="{{ site.baseurl }}/assets/orchestrator-pseudo-gtid-dead-relay-master-begin-drag-2-1024x276.png" alt="orchestrator-pseudo-gtid-dead-relay-master-begin-drag-2" width="1024" height="276" /></a></p></blockquote>
+<p>And finally:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/10/orchestrator-pseudo-gtid-dead-relay-master-refactored-2.png"><img class="alignnone size-full wp-image-7105" src="{{ site.baseurl }}/assets/orchestrator-pseudo-gtid-dead-relay-master-refactored-2.png" alt="orchestrator-pseudo-gtid-dead-relay-master-refactored-2" width="809" height="357" /></a></p></blockquote>
+<p>Great success! <strong>22989</strong> already caught up, <strong>22988</strong> on the way, victory is ours!</p>
+<p>The real fun, of course, is to execute with <strong>--debug</strong> and review the DEBUG messages as orchestrator seeks, finds, matches and follows up on Pseudo GTID entries in the binary logs. We each have our pleasures.</p>

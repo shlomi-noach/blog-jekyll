@@ -1,0 +1,68 @@
+---
+title: Getting rid of huge ibdata file, no dump required
+date: 2012-05-22 07:33:05.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Hack
+- InnoDB
+- MyISAM
+- Refactoring
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>You <a href="http://code.openark.org/blog/mysql/upgrading-to-barracuda-getting-rid-of-huge-ibdata1-file">have</a> been <a href="http://ronaldbradford.com/blog/leveraging-the-innodb-plugin-2011-02-11/">told</a> (guilty as charged), that the only way to get rid of the huge InnoDB tablespace file (commonly named <strong>ibdata1</strong>), when moving to <strong>innodb_file_per_table</strong>, is to do a logical dump of your data, completely erase everything, then import the dump.</p>
+<p>To quickly reiterate, you can only delete the <strong>ibdata1</strong> file when no InnoDB tables exist. Delete this file with an existing InnoDB table, even a table in its own tablespace, and nothing ever works anymore.</p>
+<h4>The problem with the dump-based solution</h4>
+<p>The impact of doing a logical dump is often overwhelming. Well, the dump may be tolerable, but the restore is much longer. The real pain is that you can't do this one table at a time: you have to destroy everything before dropping the <strong>ibdata1</strong> file; you then have to import everything.</p>
+<p>Perhaps the most common scenario is that we do the changes on a slave, so as not to completely shut down our database. This is nice; no one is aware of the shutdown process. However, Huston, we have a problem: we need to make sure we can keep up the binary logs on the master for the duration of the <em>entire process</em>.<!--more--></p>
+<h4>A semi-solution for binary logs</h4>
+<p>You may get by by keeping the <strong>SQL_IO_THREAD</strong> running on the slave while dump is taken (SQL thread is better turned off). If you're careful, you could do the same after restarting the database: you should still be able to acquire relay logs. With row based replication becoming more common, the problem of binary logs disk space returns: the logs (rather, log entries) are just so much larger!</p>
+<p>Either way, the process can takes long days, at the end of which your slave is up, but lags for long days behind.</p>
+<h4>Wishful thought: do it one table at a time</h4>
+<p>If we could do it one table at a time, and assuming our dataset is fairly split among several tables (i.e. not all of our <strong>500GB</strong> of data is in one huge table), life would be easier: we could work on a single table, resume replication, let the slave catch up, then do the same for the next table.</p>
+<p>How? Didn't we just say one can only drop the <strong>ibdata1</strong> file when no InnoDB tables exist?</p>
+<h4>Solution: do it one table at a time</h4>
+<p>I'm going to illustrate what seems like a longer procedure. I will later show why it is not, in fact, longer.</p>
+<p>The idea is to first convert all your tables to MyISAM (Yay! A use for MyISAM!). That is, convert your tables one table at a time, using normal <strong>ALTER TABLE t ENGINE=MyISAM</strong>.</p>
+<p>Please let go of the foreign keys issue right now. I will address it later, there's a lot to be addressed.</p>
+<p>So, on a slave:</p>
+<ol>
+<li><strong>STOP SLAVE</strong></li>
+<li>One <strong>ALTER TABLE ... ENGINE=MyISAM<br />
+</strong></li>
+<li><strong>START SLAVE</strong> again</li>
+<li>Wait for slave catch up</li>
+<li>GOTO <strong>1</strong></li>
+</ol>
+<p>What do we end up with? A MyISAM only database. What do we do with it? Why, convert it back to InnoDB, of course!</p>
+<p>But, before that, we:</p>
+<ol>
+<li>Shut MySQL down</li>
+<li>Delete <strong>ibdata1</strong> file, <strong>ib_logfile[01]</strong> (i.e. delete all InnoDB files)</li>
+<li>Start MySQL</li>
+</ol>
+<p>A new <strong>ibdata1</strong> file, and new transaction log files will be created. Note: the new ibdata1 file is <em>small</em>. Mission almost accomplished.</p>
+<p>We then:</p>
+<ol>
+<li><strong>STOP SLAVE</strong></li>
+<li>Do one <strong>ALTER TABLE ... ENGINE=InnoDB [ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8 ...]<br />
+</strong></li>
+<li><strong>START SLAVE</strong> again</li>
+<li>Wait for slave catch up</li>
+<li>GOTO <strong>1</strong></li>
+</ol>
+<p>What do we end up with? An InnoDB only database, with true file per table, and a small <strong>ibdata1</strong> file. Space recovered!</p>
+<h4>The advantage of this method</h4>
+<p>The thing is, we resume replication after each table alteration. This means breaking the lag period into many smaller periods. While the <em>total</em> runtime does not reduce, we do reduce the maximum lag time. And this makes for easier recovery: no need to store multitudes of binary logs!</p>
+<h4>So what about the foreign keys?</h4>
+<p>Phew. Continued next post.</p>

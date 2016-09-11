@@ -1,0 +1,42 @@
+---
+layout: post
+title: The funny thing about monitoring
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags:
+- Monitoring
+- Performance
+meta:
+  _edit_last: '2'
+  _oembed_1b74535e9b49c019a403ff7e2da4c4b6: '{{unknown}}'
+  _oembed_a3b8f0346eef1e0911fdfe101794d653: '{{unknown}}'
+  _oembed_1e2d15617cc91b7cb8d1ee52c82dd372: '{{unknown}}'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Take a look at the following chart:</p>
+<blockquote>
+<pre>http://chart.apis.google.com/chart?cht=lc&amp;chs=370x180&amp;chts=303030,12&amp;chtt=Latest+24+hours:+Sep+2,+20:00++-++Sep+3,+20:00&amp;chf=c,s,ffffff&amp;chdl=created_tmp_tables_psec|created_tmp_disk_tables_psec&amp;chdlp=b&amp;chco=ff8c00,4682b4&amp;chd=s:wuyuxywuwo2wp1ovyvxuyvwwvytf0truqsqtsxrsuuvtvsuttuuquvwj3toutrvuswq0vpzpvvuvvqzzsswuuxstwvwvusuwq0unttvuuwytwwupo9iw7htypvvwtuxqyqwxvtrsuuxvsyw04,deeafdcfdVkeWlWcgbcdebfdccbNkbXfZbaZagXacabbbbbbacaZdbcUiaVbbabaacVgbWhWccbbdWefZXebaeaadccdbZceWicVbbbcccdccdbWUqOeoOafWccdacdYgXdgccZYbcdccdcdk&amp;chxt=x,y&amp;chxr=1,0,24.190000&amp;chxl=0:|20:00||+||00:00||+||04:00||+||08:00||+||12:00||+||16:00||+||20:00|&amp;chxs=0,505050,10,0,lt&amp;chg=4.17,25,1,2,0.00,0&amp;chxp=0,0.00,4.17,8.34,12.51,16.68,20.85,25.02,29.19,33.36,37.53,41.70,45.87,50.04,54.21,58.38,62.55,66.72,70.89,75.06,79.23,83.40,87.57,91.74,95.91,100.08
+http://chart.apis.google.com/chart?cht=lc&amp;chs=370x180&amp;chts=303030,12&amp;chtt=Latest+10+days:+Aug+24,+21:00++-++Sep+3,+20:00&amp;chf=c,s,ffffff&amp;chdl=created_tmp_tables_psec|created_tmp_disk_tables_psec&amp;chdlp=b&amp;chco=ff8c00,4682b4&amp;chd=s:AAAAAAAABBBDCBAAAAAAAAAAAAAAAAAABBBCCBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABABBBBBBAAAAAAAAAAAAAAAAAABBDCCBAAAAAAAAABBBAAAAAABBBBBBBAAAAAAAAAAAAAAAAAABBDBBAAAAGAAAAAAAAAAAAAABBBJBAoyspvxx010z0xwyyxxyyy0zzxz0xyzy19,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAASdYUbeefggegdcdedcdddeeedffcdfdfn&amp;chxt=x,y&amp;chxr=1,0,22.13&amp;chxl=0:|25th|26th|27th|28th|29th|30th|31st|1st|2nd|3rd|&amp;chxs=0,505050,10,0,lt&amp;chg=10.04,25,1,2,1.26,0&amp;chxp=0,1.26,11.30,21.34,31.38,41.42,51.46,61.50,71.54,81.58,91.62
+http://chart.apis.google.com/chart?cht=lc&amp;chs=370x180&amp;chts=303030,12&amp;chtt=Latest+24+hours:+Sep+2,+20:00++-++Sep+3,+20:00&amp;chf=c,s,ffffff&amp;chdl=created_tmp_tables_psec|created_tmp_disk_tables_psec&amp;chdlp=b&amp;chco=ff8c00,4682b4&amp;chd=s:KOJOOKNLIIJJIMJIOLKLJIJJLWLIIIIKJIKLJNMJLKJMLJLIJMMJKLJKLJLLJMMJLLJLLJKLJSLJJLJKLJJLJLMJILGJLJIKJJLJIJJIKJIJLJLJIIJIKJKK9JJJIJJILJIJJJNJIJJILJIKN,AAAAAAAAAAAAAAAAAABAAAABAAAAAAAAAAAAAAAABAAAAAAAAAAAAABAABAAAAABAAAAAABABABAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAABAABAAAAABAAAAAAAAAAAAAAB&amp;chxt=x,y&amp;chxr=1,0,27.865000&amp;chxl=0:|20:00||+||00:00||+||04:00||+||08:00||+||12:00||+||16:00||+||20:00|&amp;chxs=0,505050,10,0,lt&amp;chg=4.17,25,1,2,0.00,0&amp;chxp=0,0.00,4.17,8.34,12.51,16.68,20.85,25.02,29.19,33.36,37.53,41.70,45.87,50.04,54.21,58.38,62.55,66.72,70.89,75.06,79.23,83.40,87.57,91.74,95.91,100.08
+http://chart.apis.google.com/chart?cht=lc&amp;chs=370x180&amp;chts=303030,12&amp;chtt=Latest+10+days:+Aug+24,+21:00++-++Sep+3,+20:00&amp;chf=c,s,ffffff&amp;chdl=created_tmp_tables_psec|created_tmp_disk_tables_psec&amp;chdlp=b&amp;chco=ff8c00,4682b4&amp;chd=s:BABAAAAACCDHGBBBBBBBBBAAABBBAAAACDDHGCBBBBBBBAAAAAAABBABBAAABBBAAABBABFAAAAAAAAAAAAABAABABAAABBBABBAAABBEDDEDCBBBBBBBBBAABBAAAAACDHEFCBBBBBBBBBCDCBBAAAACCDEDDCBBBBBBBBBABBAAAAAABEIECAADBQBBBAAAAAAAAAABDCDbCBVnt0oefkpikhnhljljlknijfhfhg9fhgt,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAABABAAAAAAAAAAAAAAAAACAABCBDHBBBBBBCBBCCCCCCCCBBBBBBCCBBC&amp;chxt=x,y&amp;chxr=1,0,7.99&amp;chxl=0:|25th|26th|27th|28th|29th|30th|31st|1st|2nd|3rd|&amp;chxs=0,505050,10,0,lt&amp;chg=10.04,25,1,2,1.26,0&amp;chxp=0,1.26,11.30,21.34,31.38,41.42,51.46,61.50,71.54,81.58,91.62
+</pre>
+</blockquote>
+<blockquote>
+<pre /><img title="Temporary tables per second" src="{{ site.baseurl }}/assets/chart?cht=lc&amp;chs=370x180&amp;chts=303030,12&amp;chtt=Latest+24+hours:+Sep+2,+15:50++-++Sep+3,+15:50&amp;chf=c,s,ffffff&amp;chdl=created_tmp_tables_psec|created_tmp_disk_tables_psec&amp;chdlp=b&amp;chco=ff8c00,4682b4&amp;chd=s:nlqukwwmxwkzwjvxozwtyxrvxwuyuxywuwo2wp1ovyvxuyvwwvytf0truqsqtsxrsuuvtvsuttuuquvwj3toutrvuswq0vpzpvvuvvqzzsswuuxstwvwvusuwq0unttvuuwytwwupo9iw7hty,TUabUddUgcTidThdYibZgdYfddeeafdcfdVkeWlWcgbcdebfdccbNkbXfZbaZagXacabbbbbbacaZdbcUiaVbbabaacVgbWhWccbbdWefZXebaeaadccdbZceWicVbbbcccdccdbWUqOeoOaf&amp;chxt=x,y&amp;chxr=1,0,24.190000&amp;chxl=0:|16:00||+||20:00||+||00:00||+||04:00||+||08:00||+||12:00||+||&amp;chxs=0,505050,10,0,lt&amp;chg=4.17,25,1,2,0.69,0&amp;chxp=0,0.69,4.86,9.03,13.20,17.37,21.54,25.71,29.88,34.05,38.22,42.39,46.56,50.73,54.90,59.07,63.24,67.41,71.58,75.75,79.92,84.09,88.26,92.43,96.60" alt="Temporary tables per second chart" width="370" height="180" />
+</p></blockquote>
+<p>Wow! <strong>15</strong> to <strong>20</strong> temporary tables per second, and <strong>10</strong> disk temporary tables per second!</p>
+<p>And, this seems to be pretty constant. Evenly distributed throughout the day. So this is consistent, right?</p>
+<p>Now look what happens a few minutes later:</p>
+<blockquote>
+<pre /><img class="alignnone" title="Temporary tables per second" src="{{ site.baseurl }}/assets/chart?cht=lc&amp;chs=370x180&amp;chts=303030,12&amp;chtt=Latest+24+hours:+Sep+2,+19:50++-++Sep+3,+19:50&amp;chf=c,s,ffffff&amp;chdl=created_tmp_tables_psec|created_tmp_disk_tables_psec&amp;chdlp=b&amp;chco=ff8c00,4682b4&amp;chd=s:JKOJOOKNLIIJJIMJIOLKLJIJJLWLIIIIKJIKLJNMJLKJMLJLIJMMJKLJKLJLLJMMJLLJLLJKLJSLJJLJKLJJLJLMJILGJLJIKJJLJIJJIKJIJLJLJIIJIKJKK9JJJIJJILJIJJJNJIJJILJIK,AAAAAAAAAAAAAAAAAAABAAAABAAAAAAAAAAAAAAAABAAAAAAAAAAAAABAABAAAAABAAAAAABABABAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAABAABAAAAABAAAAAAAAAAAAAA&amp;chxt=x,y&amp;chxr=1,0,27.865000&amp;chxl=0:|20:00||+||00:00||+||04:00||+||08:00||+||12:00||+||16:00||+||&amp;chxs=0,505050,10,0,lt&amp;chg=4.17,25,1,2,0.69,0&amp;chxp=0,0.69,4.86,9.03,13.20,17.37,21.54,25.71,29.88,34.05,38.22,42.39,46.56,50.73,54.90,59.07,63.24,67.41,71.58,75.75,79.92,84.09,88.26,92.43,96.60" alt="Temporary tables chart" width="370" height="180" /></p>
+</blockquote>
+<p>123</p>

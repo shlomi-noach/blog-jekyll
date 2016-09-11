@@ -1,0 +1,35 @@
+---
+layout: post
+title: Migrating slave to TokuDB, a use case for QueryScript
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags:
+- common_schema
+- InnoDB
+- QueryScript
+- TokuDB
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I'm migrating a slave to TokuDB. That is, converting all InnoDB tables to TokuDB engine.</p>
+<p>My reasonings are:</p>
+<ul>
+<li>Want to try the aggressive compression, save space on disk</li>
+<li>Test TokuDB on slave, see if it is stable</li>
+<li>See if slave lag is reduced on bulk operations (not sure I have good metrics at the moment, just impressions).</li>
+<li>Curious</li>
+</ul>
+<p>I have a <strong>~1TB</strong> worth of InnoDB data. Right now in <strong>COMPRESSED</strong> format, <strong>BLOCK_SIZE=8</strong>, which reduces data size by <strong>~50%</strong> on disk. This makes for some <strong>480GB</strong> of innodb files. Some tables are known to be fragmented. I'm estimating at about <strong>50GB</strong> are wasted InnoDB tablespace. So if I optimize my InnoDB tables, I should reduce to <strong>~430GB</strong> on disk.</p>
+<p>So some tables are very large (larges is <strong>150GB</strong> compressed). I won't be converting my entire database all at once or my slave will lose position with master. So, one table at a time, and each <strong>ALTER</strong> is followed by a recovery time, waiting for slave to catch up.</p>
+<p>Scripting this with <em>common_schema</em>'s <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script.html">QueryScript</a> is actually a breeze. We need to convert any InnoDB table to TokuDB. starting with the smaller tables and ending with the larger tables. After each ALTER we wait for slave to catch up. Hurray: got the <strong><a title="slave_status" href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/slave_status.html">slave_status</a></strong> view to help out with <strong>Seconds_behind_master</strong>.</p>
+<p>Here goes:</p>

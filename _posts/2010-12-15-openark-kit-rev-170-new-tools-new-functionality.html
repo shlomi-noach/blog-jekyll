@@ -1,0 +1,72 @@
+---
+title: 'openark-kit (rev. 170): new tools, new functionality'
+date: 2010-12-15 08:31:24.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- Development
+- MySQL
+tags:
+- Analysis
+- Open Source
+- openark kit
+- python
+- Replication
+- scripts
+meta:
+  _edit_last: '2'
+  _wp_old_slug: ''
+  _sg_subscribe-to-comments: lenz@grimmer.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I'm pleased to announce a new release of the <a href="http://code.openark.org/forge/openark-kit">openark kit</a>. There's a lot of new functionality inside; following is a brief overview.</p>
+<p>The <em>openark kit</em> is a set of utilities for MySQL. They  solve everyday maintenance tasks, which may be complicated or time  consuming to work by hand.</p>
+<p>It's been a while since the last announced release. Most of my attention was on <a href="http://code.openark.org/forge/mycheckpoint">mycheckpoint</a>, building new features, writing documentation etc. However my own use of <em>openark kit</em> has only increased in the past few months, and there's new useful solutions to common problems that have been developed.</p>
+<p>I've used and improved many tools over this time, but doing the final cut, along with proper documentation, took some time. Anyway, here are the highlights:</p>
+<h4>New tool: oak-hook-general-log</h4>
+<p><em>oak-hook-general-log</em> hooks up a MySQL server and dumps the general log based on filtering rules, applying to query role or execution plan. It is possible to only dump connect/disconnect entries, queries which make a full table scan, or use temporary tables, or scan more than X number of rows, or...</p>
+<p>I'll write more on this tool shortly.</p>
+<h4>New tool: oak-prepare-shutdown</h4>
+<p>This tool makes for an orderly and faster shutdown by safely stopping replication, and flushing InnoDB pages to disk prior to shutting down (keeping server available for connections even while attempting to flush dirty pages to disk). A typical use case would be:</p>
+<blockquote>
+<pre>oak-prepare-shutdown --user=root --ask-pass --socket=/tmp/mysql.sock &amp;&amp; /etc/init.d/mysql stop</pre>
+</blockquote>
+<h4>New tool: oak-repeat query</h4>
+<p><em>oak-repeat-query</em> repeats executing a given query until some condition holds. The condition can be:</p>
+<ul>
+<li>Number of given iterations has been reached</li>
+<li>Given time has elapsed</li>
+<li>No rows have been affected by query</li>
+</ul>
+<p>The tool comes in handy for cleanup jobs, warming up caches, etc.<!--more--></p>
+<h4>New tool: oak-get-slave-lag</h4>
+<p>This simple tool just returns the number of seconds a slave is behind master. But it also returns with an appropriate exit code, based on a given threshold: <strong>0</strong> when lag is good, <strong>1</strong> (error exit code) when lag is too great or slave fails to replicate.</p>
+<p>This tool has been used by 3rd party applications, such as a load balancer, to determine whether a slave should be accessed.</p>
+<h4>Updated tool: oak-chunk-update</h4>
+<p>This extremely useful utility breaks down very long queries into smaller chunks. These could be queries which should affect a huge amount of rows, or queries which cannot utilize an index.</p>
+<p>Updates to the tool include limiting the range of rows the tool scans, by specifying start and stop position (either by providing constant values or by SELECT query). Also added is auto-termination when no rows are found to be affected. Last, it is possible to override INFORMATION_SCHEMA lookup by explicitly specifying chunking key.</p>
+<p>This tool works great for your daily/weekly/monthly batch jobs; in creating DWH tables; populating new columns; purging old entries; clearing data based on non-indexed values; generating summary tables; and more.</p>
+<h4>Frozen tool: oak-apply-ri</h4>
+<p>I haven't been using this tool for a while. The main work down by this tool can be done with <em>oak-chunk-update</em>. There are some additional safety checks <em>oak-apply-ri</em> provides; I'm thinking over if they justify the tool's existence.</p>
+<h4>Frozen tool: oak-online-alter-table</h4>
+<p>With the appearance of Facebook’s <a href="http://www.facebook.com/note.php?note_id=430801045932">Online Schema Change</a> (OSC) tool, which derives from <em>oak-online-alter-table</em>, I'm not sure I will continue developing the tool. I intend to wait for general feedback on OSC before making a decision.</p>
+<h4>Documentation</h4>
+<p><a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/introduction.html">Documentation</a> is now part of <em>openark kit</em>'s SVN repository.</p>
+<h4>Download</h4>
+<p>The <em>openark kit</em> project is currently hosted by Google Code.  Downloads are available at the Google Code <a href="http://code.google.com/p/openarkkit/">openark kit project page</a>.</p>
+<p>Downloads are available in the following packaging formats:</p>
+<ul>
+<li><strong>.deb</strong> package, to be installed on <em>debian</em>, <em>ubuntu</em> and otherwise debian based distributions.</li>
+<li><strong>.rpm</strong> package, architecture free (<em>noarch</em>), for RPM supporting Linux distributions such as <em>RedHat</em>, <em>Fedora</em>, <em>CentOS</em> etc.</li>
+<li><strong>.tar.gz</strong> using python's distutils installer.</li>
+<li><strong>source</strong>, directly retrieved from SVN or from above python package.</li>
+<li>Some distribution specific <a href="http://software.opensuse.org/search?baseproject=ALL&amp;p=1&amp;q=openark-kit">RPM packages</a>, courtesy Lenz Grimmer.</li>
+</ul>
+<h4>Feedback</h4>
+<p>Your feedback is welcome! I may not always respond promptly; and I confess that some bugs were left open for more than I would have liked them to. I hope to make for good quality of code, and bug reporting is one major factor you can control.</p>

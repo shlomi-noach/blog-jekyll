@@ -1,0 +1,79 @@
+---
+title: 'Solving the non-atomic table swap, Take III: making it atomic'
+date: 2016-07-07 14:54:25.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Open Source
+- operations
+meta:
+  _wpas_done_all: '1'
+  _sg_subscribe-to-comments: mysql@rjweb.org
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>With the unintended impression of becoming live blogging, we now follow up on <a title="Link to Solving the non-atomic table swap, Take II" href="http://code.openark.org/blog/mysql/solving-the-non-atomic-table-swap-take-ii" rel="bookmark">Solving the non-atomic table swap, Take II</a> and <a title="Link to Solving the Facebook-OSC non-atomic table swap problem" href="http://code.openark.org/blog/mysql/solving-the-facebook-osc-non-atomic-table-swap-problem" rel="bookmark">Solving the Facebook-OSC non-atomic table swap problem</a> with a safe, blocking, <em>atomic</em> solution</p>
+<h3>Why yet another iteration?</h3>
+<p>The solution presented in <a title="Link to Solving the non-atomic table swap, Take II" href="http://code.openark.org/blog/mysql/solving-the-non-atomic-table-swap-take-ii" rel="bookmark">Solving the non-atomic table swap, Take II</a> was good, in that it was safe. No data corruption. Optimistic: if no connection is killed throughout the process, then completely blocking.</p>
+<p>Two outstanding issues remained:</p>
+<ul>
+<li>If something did go wrong, the solution reverted to a table-outage</li>
+<li>On replicas, the table swap is non atomic, non blocking. There's table-outage scenario on replica.</li>
+</ul>
+<p>As it turns out, there's a simpler solution which overcomes both the above. As with math and physics, the simpler solution is often the preferred one. But it took those previous iterations to gather a few ideas together. So, anyway:</p>
+<h3>Safe, locking, atomic, asynchronous table swap</h3>
+<p>Do read the aforementioned previous posts; the quick-quick recap is: we want to be able to <strong>LOCK</strong> a table <strong>tbl</strong>, then do some stuff, then swap it out and put some <strong>ghost</strong> table in its place. MySQL does not allow us to <strong>rename tbl to tbl_old, ghost to tbl</strong> if we have locks on <strong>tbl</strong> in that session.</p>
+<p>The solution we offer is now based on two connections only (as opposed to three, in the <em>optimistic</em> approach). "Our" connections will be C10, C20. The "normal" app connections are C1..C9, C11..C19, C21..C29.</p>
+<ul>
+<li>Connections C1..C9 operate on <strong>tbl</strong> with normal DML: <strong>INSERT, UPDATE, DELETE</strong></li>
+<li>Connection C10: <strong>CREATE TABLE tbl_old (id int primary key) COMMENT='magic-be-here'</strong></li>
+<li>Connection C10: <strong>LOCK TABLES tbl WRITE, tbl_old WRITE</strong></li>
+<li>Connections C11..C19, newly incoming, issue queries on <strong>tbl</strong> but are blocked due to the <strong>LOCK</strong></li>
+<li>Connection C20: <strong>RENAME TABLE tbl TO tbl_old, ghost TO tbl</strong><br />
+This is blocked due to the <strong>LOCK</strong>, <em>but</em> gets prioritized on top connections C11..C19 and on top C1..C9 or any other connection that attempts DML on <strong>tbl</strong></li>
+<li>Connections C21..C29, newly incoming, issue queries on <strong>tbl</strong> but are blocked due to the <strong>LOCK</strong> and due to the <strong>RENAME</strong>, waiting in queue</li>
+<li>Connection C10: checks that C20's <strong>RENAME</strong> is applied (looks for the blocked <strong>RENAME</strong> in processlist)</li>
+<li>Connection 10: <strong>DROP TABLE tbl_old</strong><br />
+Nothing happens yet; <strong>tbl</strong> is still locked. All other connections still blocked.</li>
+<li>Connection 10: <strong>UNLOCK TABLES<br />
+BAM!</strong> The <strong>RENAME</strong> is first to execute, <strong>ghost</strong> table is swapped in place of <strong>tbl</strong>, then C1..C9, C11..C19, C21..C29 all get to operate on the new and shiny <strong>tbl</strong></li>
+</ul>
+<p>Some notes<!--more--></p>
+<ul>
+<li>We create <strong>tbl_old</strong> as a blocker for a premature swap</li>
+<li>It is allowed for a connection to <strong>DROP</strong> a table it has under a <strong>WRITE LOCK</strong></li>
+<li>A blocked <strong>RENAME</strong> is always prioritized over a blocked <strong>INSERT/UPDATE/DELETE</strong>, no matter who came first</li>
+</ul>
+<h3>What happens on failures?</h3>
+<p>Much fun. Just works; no rollback required.</p>
+<ul>
+<li>If C10 errors on the <strong>CREATE</strong> we do not proceed.</li>
+<li>If C10 errors on the <strong>LOCK</strong> statement, we do not proceed. The table is not locked. App continues to operate as normal.</li>
+<li>If C10 dies just as C20 is about to issue the <strong>RENAME</strong>:
+<ul>
+<li>The lock is released, the queries C1..C9, C11..C19 immediately operate on <strong>tbl</strong>.</li>
+<li>C20's <strong>RENAME</strong> immediately fails because <strong>tbl_old</strong> exists.<br />
+The entire operation is failed, but nothing terrible happens; some queries were blocked for some time is all. We will need to retry everything</li>
+</ul>
+</li>
+<li>If C10 dies while C20 is blocked on <strong>RENAME</strong>: Mostly similar to the above. Lock released, then C20 fails the <strong>RENAME</strong> (because <strong>tbl_old</strong> exists), then all queries resume normal operation</li>
+<li>If C20 dies before C10 drops the table, we catch the error and let C10 proceed as planned: <strong>DROP, UNLOCK</strong>. Nothing terrible happens, some queries were blocked for some time. We will need to retry</li>
+<li>If C20 dies just after C10 <strong>DROP</strong>s the table but before the unlock, same as above.</li>
+<li>If both C10 and C20 die, no problem: <strong>LOCK</strong> is cleared; <strong>RENAME</strong> lock is cleared. C1..C9, C11..C19, C21..C29 are free to operate on <strong>tbl</strong>.</li>
+</ul>
+<p>No matter what happens, at the end of operation we look for the <strong>ghost</strong> table. Is it still there? Then we know the operation failed, "atomically". Is it not there? Then it has been renamed to <strong>tbl</strong>, and the operation worked atomically.</p>
+<p>A side note on failure is the matter of cleaning up the magic <strong>tbl_old</strong>. Here this is a matter of taste. Maybe just let it live and avoid recreating it, or you can drop it if you like.</p>
+<h3>Impact on app</h3>
+<p>App connections are guaranteed to be blocked, either until <strong>ghost</strong> is swapped in, or until operation fails. In the former, they proceed to operate on the new table. In the latter, they proceed to operate on the original table.</p>
+<h3>Impact on replication</h3>
+<p>Replication only sees the <strong>RENAME</strong>. There is no <strong>LOCK</strong> in the binary logs. Thus, replication sees an atomic two-table swap. There is no table-outage.</p>
+<h3>Conclusion</h3>
+<p>This solution satisfies all we wanted to achieve. We're unlikely to give this another iteration. Well, if some yet-more-elegant solution comes along I'll be tempted, for the beauty of it, but the solution offered in this post is simple-enough, safe, atomic, replication friendly, and should make everyone happy.</p>

@@ -1,0 +1,116 @@
+---
+title: Generating numbers out of seemingly thin air
+date: 2009-09-01 08:40:24.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- SQL
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: ralf@strcmp.de
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>In some of my previous posts I've used a <strong>numbers</strong> table, like one holding values <strong>1, 2, 3, ..., 255</strong>. Such table can be used for string walking, joining with other tables, performing iterations.</p>
+<p>The existence of number tables has always been a little pain. Yes, they're very, <em>very</em> simple, but they <em>need to be there</em>. So if you just need to script some SQL query, you may find that you need to create such tables. Ummm... this means you need to have privileges (at least <strong>CREATE TEMPORARY</strong> and <strong>INSERT</strong>, if not <strong>CREATE</strong>).</p>
+<p>The other day, Baron Schwartz posted <a href="http://www.xaprb.com/blog/2009/08/09/how-to-round-to-the-nearest-whole-multiple-or-fraction-in-sql/">How to round to the nearest whole multiple or fraction in SQL</a>. In an offhand way, he generated some random numbers using the <strong>mysql.help_topic</strong> table. I then realized that post solved something I've been looking for: using a sure-to-exist table on any MySQL installation.</p>
+<p><!--more-->What does the table consist of? It consists, among other columns, an incrementing <strong>help_topic_id</strong> column:</p>
+<blockquote>
+<pre>SELECT help_topic_id FROM mysql.help_topic LIMIT 10;
++---------------+
+| help_topic_id |
++---------------+
+|             0 |
+|             1 |
+|             2 |
+|             3 |
+|             4 |
+|             5 |
+|             6 |
+|             7 |
+|             8 |
+|             9 |
++---------------+</pre>
+</blockquote>
+<h4>Still feels unsafe?</h4>
+<p>The above result provides with sequential integers. But can we guarantee this? Will the numbers never have skipped values? We don't have to rely on these values. We can force them to our liking:</p>
+<blockquote>
+<pre>SELECT @counter := @counter+1 AS value
+FROM mysql.help_topic, (SELECT @counter := 0) AS sel1
+LIMIT 10;
++-------+
+| value |
++-------+
+|     1 |
+|     2 |
+|     3 |
+|     4 |
+|     5 |
+|     6 |
+|     7 |
+|     8 |
+|     9 |
+|    10 |
++-------+</pre>
+</blockquote>
+<p>All we actually need is the existence of rows within this table. We don't care which columns, what their names are, and of which data types they are. Said table currently has 484 rows. One can use <strong>CROSS JOIN</strong> to achieve more than that:</p>
+<blockquote>
+<pre>SELECT @counter := @counter+1 AS value
+FROM mysql.help_topic t1, mysql.help_topic t2, (SELECT @counter := 0) AS sel1
+LIMIT 20000;
++-------+
+| value |
++-------+
+|     1 |
+|     2 |
+|     3 |
+|     4 |
+|     5 |
+...
+| 19992 |
+| 19993 |
+| 19994 |
+| 19995 |
+| 19996 |
+| 19997 |
+| 19998 |
+| 19999 |
+| 20000 |
++-------+</pre>
+</blockquote>
+<h4>Number generation</h4>
+<p>We are now in full control of generated numbers. We don't have to generate sequential numbers. We can generate odd numbers only; multiples of 10, of PI... Following I'll be generating the Fibonacci series:</p>
+<blockquote>
+<pre>SELECT @c3 := @c1 + @c2 AS value, @c1 := @c2, @c2 := @c3
+FROM mysql.help_topic, (SELECT @c1 := 1, @c2 := 0) sel1
+LIMIT 15;
++-------+------------+------------+
+| value | @c1 := @c2 | @c2 := @c3 |
++-------+------------+------------+
+|     1 |          0 |          1 |
+|     1 |          1 |          1 |
+|     2 |          1 |          2 |
+|     3 |          2 |          3 |
+|     5 |          3 |          5 |
+|     8 |          5 |          8 |
+|    13 |          8 |         13 |
+|    21 |         13 |         21 |
+|    34 |         21 |         34 |
+|    55 |         34 |         55 |
+|    89 |         55 |         89 |
+|   144 |         89 |        144 |
+|   233 |        144 |        233 |
+|   377 |        233 |        377 |
+|   610 |        377 |        610 |
++-------+------------+------------+</pre>
+</blockquote>
+<h4>Conclusion</h4>
+<p>Using 5.0 and above, you can also use the various <strong>INFORMATION_SCHEMA</strong> tables (e.g. <strong>INFORMATION_SCHEMA.COLLATIONS</strong>). Some of these may be slow to load, though.</p>
+<p>When you can (and need), have a prepared numbers table. When unable to create one, you can generate such numbers using tables which are certain to exist (at least until the next major version).</p>

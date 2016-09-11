@@ -1,0 +1,28 @@
+---
+layout: post
+title: Minifying dataset on test DB
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>How do you reduce the dataset on your build/tests machine without failing the tests?</p>
+<p>The case should be that any unit test creates its own data, tests it, and hopefully purges it. Even better, you may have a schema+data generation script which you invoke prior to starting your build.</p>
+<p>Unfortunately this is not always the reality. Some tests neglect to purge data. Sometimes developers bulk import data which is only sparsely used. And there are those reference tables which are a fundemental part of your dataset. And otherwise historic events lead to a sad truth: your "sample" dataset is bloated with plenty GB, when all you really need to pass the tests is a few MB of data.</p>
+<p>If only we could identify which data is required and which isn't.</p>
+<p>The aggressive approach</p>
+<p>In this approach you just purge the entire dataset, and fix any unit test which is failing. That is, your are hopefully first able to identify those "must have" reference-tables. Otherwise you take the approach of "if the test fails on no data, then it is broken and we must fix it".</p>
+<p>This is a great approach -- if you can handle the volumes. What if you happen to get hundreds or thousands of tests failing? Yes, those tests must be fixed, and they were born in sin; but reality is it will take you long time to review and fix them all.</p>
+<p>The workaround approach</p>
+<p>In this approach you identify those portions of data that are not really being used. If the tests do not actually access some data -- then it can be safely dropped without afffecting the test result.</p>

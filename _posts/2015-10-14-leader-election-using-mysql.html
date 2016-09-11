@@ -1,0 +1,133 @@
+---
+title: Leader election using MySQL
+date: 2015-10-14 07:52:21.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- SQL
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+  _syntaxhighlighter_encoded: '1'
+  _sg_subscribe-to-comments: xudifsd@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Being a stateful, centralized datastore, MySQL can serve in negotiating leadership: a mechanism to elect a single service out of multiple services; moreover, a mechanism to promote a new leader should the existing leader cease to function.</p>
+<h3>What of Zookeeper?</h3>
+<p>Zookeeper makes for an excellent leader election mechanism. This is one of the most recognized uses for Zookeeper. It has HA via multiple nodes &amp; quorum,  ephemeral nodes, all you need. To achieve similar benefits with MySQL you'd need to use Galera or NDB Cluster; so why not use Zk?</p>
+<p>The use case at hand is <strong><a href="https://github.com/outbrain/orchestrator">orchestrator</a></strong>, a multi-node, mostly stateless service that happens to use MySQL as backend datastore. Ir relies on MySQL to exist in backend. It already <em>expects it to be there</em>. If the MySQL server is down, so is the service, effectively. In such case it doesn't hurt adding another dependency on MySQL; this does not reduce HA. You need to take care of MySQL HA anyhow so there's no additional cost. In fact, going to Zookeeper makes the additional cost as you introduce a new component to the system that can be avoided.</p>
+<h3>Terms of the solution</h3>
+<p>Our proposed solution offers:</p>
+<ul>
+<li>Single leader election out of multiple nodes</li>
+<li>Leader actively reaffirms its leadership periodically</li>
+<li>Timeout based re-election: decision to re-elect new leader based on the fact current leader has not reaffirmed its leadership over X seconds</li>
+<li>A way to forcibly assume leadership for a specific node</li>
+<li>A way to forcibly call for re-elections by demoting existing leader</li>
+<li>A node/service can easily tell whether it's the leader or not</li>
+<li>Anyone can tell who the leader is</li>
+</ul>
+<h3>SQL solution</h3>
+<p>The solution is composed of a single table and a set of queries which implement the above offers. We assume a service can uniquely identify itself; this is easy to achieve:</p>
+<ul>
+<li>If services are running from different hosts (as should be the case, this is service HA), use hostname for ID
+<ul>
+<li>But what if the service restarts? Are you good with calling this "the same service" or is this now a new service running on the same host?</li>
+</ul>
+</li>
+<li>In such case use combination of hostname &amp; OS process ID
+<ul>
+<li>Or generate a random token upon startup</li>
+<li>Or use startup timestamp</li>
+</ul>
+</li>
+</ul>
+<p>Whichever solution you pick, make sure it is human readable, such that it is easy to tell <em>which service is the leader</em>. This helps operations. We note this as <strong>service_id</strong></p>
+<h4>Table</h4>
+<p>The following table will have a single row; the <strong>service_id</strong> in that row is the active leader.</p>
+<blockquote><p>
+[code lang="sql"]<br />
+CREATE TABLE service_election (<br />
+  anchor tinyint(3) unsigned NOT NULL,<br />
+  service_id varchar(128) NOT NULL,<br />
+  last_seen_active timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,<br />
+  PRIMARY KEY (anchor)<br />
+) ENGINE=InnoDB<br />
+[/code]
+</p></blockquote>
+<h4>Attempt election</h4>
+<p><!--more--></p>
+<p>All services issue the following, periodically. Say every service issues this once per second:</p>
+<blockquote><p>
+[code lang="sql"]insert ignore into service_election (<br />
+	anchor, service_id, last_seen_active<br />
+) values (<br />
+	1, 'my_service_number_7', now()<br />
+) on duplicate key update<br />
+	service_id = if(last_seen_active &amp;lt; now() - interval 20 second, values(service_id), service_id),<br />
+	last_seen_active = if(service_id = values(service_id), values(last_seen_active), last_seen_active)<br />
+;<br />
+[/code]
+</p></blockquote>
+<p><em>Replace <strong>'my_service_number_7'</strong> with specific <strong>service_id</strong> per service.</em></p>
+<p>The above is the most complex query in our solution; breakdown:</p>
+<ul>
+<li>Assume timeout is set for <strong>20</strong> seconds</li>
+<li>The first ever service (<strong>my_service_number_7</strong>) succeeds in registering (inserting its own <strong>service_id</strong> into the table)</li>
+<li>The next time this service issues the query, it finds that it is already the owner, hence updates <strong>last_seen_active</strong>.
+<ul>
+<li>And while it is alive and keeps on polling, it remains the leader.</li>
+</ul>
+</li>
+<li>Immediately following, another service (<strong>my_service_number_12</strong>) does not update anything: since <strong>last_seen_active &lt; now() - interval 20 second</strong> is <strong>false</strong>, <strong>service_id</strong> is unchanged, nor is <strong>last_seen_active</strong>.</li>
+<li>Assuming said service (<strong>my_service_number_7</strong>) has died and hasn't injected anything in the last <strong>20</strong> seconds, a different service will inject its own <strong>service_id</strong> as well as update <strong>last_seen_active</strong>. It will become the leader.</li>
+</ul>
+<h4>Forcibly assume leadership</h4>
+<p>Make a certain service the leader:</p>
+<blockquote><p>
+[code lang="sql"]replace into service_election (<br />
+        anchor, service_id, last_seen_active<br />
+    ) values (<br />
+        1, 'my_service_number_12', now()<br />
+    )<br />
+[/code]
+</p></blockquote>
+<p>The next time <strong>my_service_number_12</strong> attempts to register its own leadership, it finds out it's <em>already</em> the leader and updates <strong>last_seen_active</strong>.</p>
+<h4>Force re-elections</h4>
+<p>The next service to attempt election will succeed after this:</p>
+<blockquote><p>
+[code lang="sql"]delete from service_election;[/code]
+</p></blockquote>
+<h4>Am I the leader?</h4>
+<p>A service can query as follows:</p>
+<blockquote><p>
+[code lang="sql"]select count(*) as is_leader from service_election where anchor=1 and service_id='my_service_number_7';[/code]
+</p></blockquote>
+<h4>Who is the leader?</h4>
+<p>This is of course very simple:</p>
+<blockquote><p>
+[code lang="sql"]select max(service_id) as leader from service_election where anchor=1;[/code]
+</p></blockquote>
+<h3>What of GET_LOCK()?</h3>
+<p><a href="https://dev.mysql.com/doc/refman/5.6/en/miscellaneous-functions.html#function_get-lock">GET_LOCK()</a> allows one to acquire a helper-lock of arbitrary name; this lock is reserved as long as the connection that acquired it lives. No other connection can acquire lock of same name.</p>
+<blockquote><p>
+[code lang="sql"]SELECT GET_LOCK(&quot;my_service_leadership&quot;, 0)[/code]<br />
+Returns <strong>1</strong> on success, <strong>0</strong> on failure to obtain lock.</p></blockquote>
+<p>This supposedly makes a much simpler leader election mechanism. However I don't like it for the following reasons:</p>
+<ul>
+<li>You must allocate a dedicated connection that lives for the duration of your service
+<ul>
+<li>This doesn't play too well with ORMs or typical connection pools</li>
+</ul>
+</li>
+<li>There is no visibility (&lt; MySQL 5.7) into <em>who</em> is holding the lock. You only know that it's being held.</li>
+<li>If your service hangs (but does not die), the lock is still being held. There is no "keepalive" requirement on the lock's side.</li>
+</ul>

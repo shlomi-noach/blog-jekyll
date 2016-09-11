@@ -1,0 +1,84 @@
+---
+title: 'MySQL security: inconsistencies'
+date: 2011-06-22 08:39:01.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- INFORMATION_SCHEMA
+- Security
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Doing some work with MySQL security, I've noticed a few inconsistencies. They're mostly not-too-terrible for daily work, except they get in my way right now.</p>
+<h4>The ALL PRIVILEGES inconsistency</h4>
+<p>The preferred way of assigning account privileges in MySQL is by way of using <a href="http://dev.mysql.com/doc/refman/5.1/en/grant.html">GRANT</a>.</p>
+<p>With <strong>GRANT</strong>, one assigns one or more privileges to an account, such as <strong>SELECT</strong>, <strong>UPDATE</strong>, <strong>ALTER</strong>, <strong>SUPER</strong> ,etc. Sometimes it makes sense for an account to have complete control over a domain. For example, the <strong>root</strong> account is typically assigned with all privileges. Or, some user may require all possible privileges on a certain schema.</p>
+<p>Instead of listing the entire set of privileges, the <strong>ALL PRIVILEGES</strong> meta-privilege can be used. There is a fine issue to notice here; typically this is not a problem, but I see it as a flaw. Assume the following account:</p>
+<blockquote>
+<pre>root@mysql-5.1.51&gt; GRANT <strong>ALL PRIVILEGES</strong> ON world.* TO 'world_user'@'localhost';
+
+root@mysql-5.1.51&gt; SHOW GRANTS FOR 'world_user'@'localhost';
++---------------------------------------------------------------+
+| Grants for world_user@localhost                               |
++---------------------------------------------------------------+
+| GRANT USAGE ON *.* TO 'world_user'@'localhost'                |
+| GRANT <strong>ALL PRIVILEGES</strong> ON `world`.* TO 'world_user'@'localhost' |
++---------------------------------------------------------------</pre>
+</blockquote>
+<p>This makes sense. We granted <strong>ALL PRIVILEGES</strong> and we see that the account is granted with <strong>ALL PRIVILEGES</strong>.</p>
+<p>Now notice the following:<!--more--></p>
+<blockquote>
+<pre>root@mysql-5.1.51&gt; GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SELECT, SHOW VIEW, TRIGGER, UPDATE ON `world`.* TO 'other_user'@'localhost';
+
+root@mysql-5.1.51&gt; SHOW GRANTS FOR 'other_user'@'localhost';
++---------------------------------------------------------------+
+| Grants for other_user@localhost                               |
++---------------------------------------------------------------+
+| GRANT USAGE ON *.* TO 'other_user'@'localhost'                |
+| GRANT <strong>ALL PRIVILEGES</strong> ON `world`.* TO 'other_user'@'localhost' |
++---------------------------------------------------------------+</pre>
+</blockquote>
+<p>I didn't <em>ask</em> for <strong>ALL PRIVILEGES</strong>. I explicitly listed what I thought should be an account's privileges. It just so happens that these make for the entire set of privileges available on the schema domain.</p>
+<p>You might think this is a nice feature, an ease out MySQL provides with. I do not see it this way.</p>
+<p>My preferred way of upgrading MySQL version involves exporting and importing of the GRANTs. That is, I do not dump and load the <strong>mysql</strong> system tables, but rather export all the <strong>SHOW GRANTS FOR ...</strong> (e.g. with mk-show-grants), then execute these on the new version. This process was extremely useful on upgrades from <strong>5.0</strong> to <strong>5.1</strong>, where some <strong>mysql</strong> system tables were modified.</p>
+<p>Now, consider the case where some new MySQL version introduced a new set of privileges. My <strong>'other_user'@'localhost'</strong> was not created with that set of privileges, nor did I intend it to have them. However, when exporting with <strong>SHOW GRANTS</strong>, the account is said to have <strong>ALL PRIVILEGES</strong>. When executed on the new version, the account will have privileges which I <em>never assigned it</em>.</p>
+<p>Typically, this is not an issue. I mean, how many times do I assign an account with the entire set of privileges, yet do not intend it to have all privileges? Nevertheless, this makes for an inconsistency. It is unclear, by way of definition, which privileges are assigned to a user, without knowing the context of the version and the set of privileges per version. It makes for an inconsistency when moving between versions. And right now I'm working on some code which doesn't like these inconsistencies.</p>
+<h4>The WITH GRANT OPTION inconsistency</h4>
+<p>An account can be granted with the <strong>WITH GRANT OPTION</strong> privilege, which means the account's user can assign her privileges to other accounts. The inconsistency I found is that the <strong>GRANT</strong> mechanism is fuzzy with regard to <strong>GRANT OPTION</strong>, and falsely presents us with the wrong impression.</p>
+<p>Let's begin with the bottom line: the <strong>WITH GRANT OPTION</strong> can only be set globally for an account-domain combination. Consider:</p>
+<blockquote>
+<pre>root@mysql-5.1.51&gt; GRANT INSERT, DELETE, UPDATE ON world.City TO 'gromit'@'localhost';
+Query OK, 0 rows affected (0.00 sec)
+
+root@mysql-5.1.51&gt; GRANT SELECT ON world.City TO 'gromit'@'localhost' WITH GRANT OPTION;
+Query OK, 0 rows affected (0.00 sec)
+
+root@mysql-5.1.51&gt; SHOW GRANTS FOR 'gromit'@'localhost';
++--------------------------------------------------------------------------------------------------+
+| Grants for gromit@localhost                                                                      |
++--------------------------------------------------------------------------------------------------+
+| GRANT USAGE ON *.* TO 'gromit'@'localhost'                                                       |
+| GRANT <strong>SELECT, INSERT, UPDATE, DELETE</strong> ON `world`.`City` TO 'gromit'@'localhost' <strong>WITH GRANT OPTION</strong> |
++--------------------------------------------------------------------------------------------------+
+</pre>
+</blockquote>
+<p>The syntax of first two queries leads us to believe that we're only providing the <strong>WITH GRANT OPTION</strong> for the <strong>SELECT</strong> privilege. But that is not so: the <strong>WITH GRANT OPTION</strong> is assigned for all privileges on <strong>world.City</strong> to <strong>'gromit'@'localhost'</strong>.</p>
+<p>The syntax would be more correct if we were to write something like:</p>
+<blockquote>
+<pre>GRANT <strong>GRANT_OPTION</strong> ON world.* TO 'gromit'@'localhost';</pre>
+</blockquote>
+<p>That would make it clear that this privilege does not depend on other privileges set on the specified domain.</p>
+<h4>The USAGE inconsistency</h4>
+<p>You can <strong>GRANT</strong> the <strong>USAGE</strong> privilege, but you may never <strong>REVOKE</strong> it. To revoke <strong>USAGE</strong> means to <strong>DROP USER</strong>.</p>
+<h4>The missing ROUTINES_PRIVILEGES inconsistency</h4>
+<p><strong>INFORMATION_SCHEMA</strong> provides with four privileges tables: <strong>USER_PRIVILEGES</strong>, <strong>SCHEMA_PRIVILEGES</strong>, <strong>TABLE_PRIVILEGES</strong>, <strong>COLUMN_PRIVILEGES</strong>, which map well to <strong>mysql</strong>'s <strong>user</strong>, <strong>db</strong>, <strong>tables_priv</strong> and <strong>columns_priv</strong> tables, respectively.</p>
+<p>Ahem, which <strong>INFORMATION_SCHEMA</strong> table maps to <strong>mysql.procs_priv</strong>?</p>

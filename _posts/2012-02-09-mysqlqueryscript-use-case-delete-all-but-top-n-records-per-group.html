@@ -1,0 +1,66 @@
+---
+title: 'MySQL/QueryScript use case: DELETE all but top N records per group'
+date: 2012-02-09 10:33:08.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- QueryScript
+- scripts
+- SQL
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Some administrative tasks can be simplified by using <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script.html">common_schema/QueryScript</a>. I'm collecting a bunch of these for documentation. Here's one for example:</p>
+<p>The DBA/developer has the task of retaining only top <strong>3</strong> most populated countries per continent. That is, she has to <strong>DELETE 4th, 5th, 6th</strong>, ... most populated counties in each continent.</p>
+<p>Is it possible to work out with a single query? Yes. But the query is not pretty. In fact, it is quite complicated, and either involves unintuitive subqueries, or <a href="http://code.openark.org/blog/mysql/sql-selecting-top-n-records-per-group">unintuitive hacks</a>. A normal DBA would not want to write, neither maintain this kind of query, unless top-notch-geek, which is fine.</p>
+<p>Since this is a one time job, we just need to get it done. And <em>common_schema</em>/QueryScript provide with the intuitive solution: if we read our demand aloud, we realize we want to <strong>delete</strong> <strong>4th, 5th, 6th</strong>, ... populated countries <strong>for each</strong> continent.</p>
+<p>I present a solution made available by QueryScript, and discuss the ways in which the code overcomes limitations, or simplifies complexity:</p>
+<blockquote>
+<pre>var $num_countries_to_delete;
+foreach($continent, $num_countries: SELECT continent, COUNT(*) FROM world.Country GROUP BY continent)
+{
+  if ($num_countries &gt; 3)
+  {
+    set $num_countries_to_delete := $num_countries - 3;
+    DELETE FROM world.Country WHERE Continent = $continent ORDER BY Population ASC LIMIT :$num_countries_to_delete;
+  }
+}</pre>
+</blockquote>
+<h4>Discussion</h4>
+<p>The first thing that should be apparent from the above is that this is a <em>programmatic</em> solution. Queries are declarative, which is why complex ones sometimes look incomprehensible. The above is more straightforward.<!--more--></p>
+<p>The next thing to realize, which is a disclosure issue of some sorts, is that the above code is fine for a one time, or maintenance execution; but you wouldn't want to be normally issuing this type of code against your database <strong>10,000</strong> times a second.</p>
+<p>Now let's break down the code to fragments:</p>
+<h4>Discussion: variables</h4>
+<p>The <strong>$num_countries_to_delete</strong> is a script variable. It is local. It is reset to <strong>NULL</strong> upon declaration and destroyed when its visibility ends. But the <em>real power</em> comes later, when it is <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_variables.html#expansion">expanded</a>. This is discussed last.</p>
+<h4>Discussion: iteration</h4>
+<p>How would you iterate the continents using a stored routine? I personally think the syntax for server side cursors is overwhelmingly verbose. Declare a cursor, declare a continue handler, declare variables to grab values, open the cursor, start a loop, iteratively fetch the cursor (assign row values onto variables), oh, check up on the continue handler (<em>programmatically</em> exit the loop if it fails), close the cursor.</p>
+<p>The <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_foreach.html">foreach()</a> loop statement was developed to simplify all the above. Hey: just name your query, and the list of variables which should be assigned to, and do your thing in the following statement.</p>
+<h4>Discussion: conditional branching</h4>
+<p>The standard SQL <strong>CASE</strong> statement, and the additional <strong>IF()</strong> statement are fine, and I use them a lot. But they are fine for <strong>SELECT</strong> queries, and only allow you to <em>get</em> data. At best, you may invoke a function based on some condition, which can actually modify data.</p>
+<p>With QueryScript it's as with your normal programming language: you can <strong>DELETE</strong> if some condition holds true, <strong>INSERT</strong> or <strong>SELECT</strong> or <strong>ALTER</strong> or whatever if false.</p>
+<p>In the above code there isn't too much news. The same can be done with stored routines. However the <strong>if</strong> statement can also accept a query as a condition. One can ask: <strong>if (DELETE FROM ... WHERE...)</strong>. The condition holds true only is the operation was successful (rows actually DELETEd, or INSERTed, or UPDATEed). This makes for a very tight integration between script and SQL.</p>
+<h4>Discussion: variables and variable expansion</h4>
+<p>Script variables behave just as normal MySQL user defined variables (in fact, current internal implementation of script variables is <em>by</em> user defined variables). Which means the <strong>set</strong> statement works for them just as normal.</p>
+<p>And here is where things become not-normal:</p>
+<p>Say we want to delete all but the 3 most populated countries in Europe. Wouldn't we like to issue a <strong>DELETE FROM Country WHERE Continent = 'Europe' ORDER BY Population DESC LIMIT 3, 999999999</strong>? (The 9999999999 to resemble "infinite", in poor man's solution)</p>
+<p>But MySQL's <strong>DELETE</strong> does not accept both limit &amp; offset in the <strong>LIMIT</strong> clause. Just the limit part. Which is why we're working the other way round: we find out the number of records we wish to purge and delete bottom up. But wait, here's another problem:</p>
+<p>In MySQL, the <strong>LIMIT</strong> clause <em>must accept a constant</em>. You can just <strong>DELETE FROM .... LIMIT @x</strong>. This makes for a syntax error. Bummer!</p>
+<p>If we don't know ahead the number of records we wish to purge, how can we work both dynamically and correctly?</p>
+<p>Enter variable <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_variables.html#expansion">expansion</a>. In the statement:</p>
+<blockquote>
+<pre>DELETE FROM world.Country WHERE Continent = $continent ORDER BY Population ASC LIMIT :$num_countries_to_delete;</pre>
+</blockquote>
+<p>The <strong>$num_countries_to_delete</strong> variable is expanded, via "<strong>:</strong>". The <strong>:$num_countries_to_delete</strong> token is replaced in-place with the value contained by <strong>$num_countries_to_delete</strong>. MySQL never gets a variable in the <strong>LIMIT</strong> clause: by the time the query reaches MySQL, theres a <em>constant</em> in place, and none is the wiser. But as far as <em>we're</em> concerned, we get a dynamic way of producing values to the <strong>LIMIT</strong> clause.</p>
+<p><strong>LIMIT</strong> is not the only clause which expects constants. How about <strong>KILL</strong>? How about DDLs, such as <strong>CREATE TABLE</strong>? With variable expansion you can dynamically inject values onto such clauses, statements and commands, and get your self a dynamic script.</p>
+<h4>Conclusion</h4>
+<p>This small code sample exposes much of QueryScript's power. Throughout the months of development, I happened to use QueryScript code over and over on production, to realize how it can sometimes simplify very complex tasks into a mere 2-liner code. A code that any of my fellow programmers can understand, as well, without having to be SQL experts. And such which is executed within the server; no need for external languages, connectors, dependencies, packages etc.</p>

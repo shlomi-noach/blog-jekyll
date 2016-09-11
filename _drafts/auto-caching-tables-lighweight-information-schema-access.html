@@ -1,0 +1,84 @@
+---
+layout: post
+title: 'Auto caching tables: lighweight INFORMATION_SCHEMA access'
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags:
+- Hack
+- INFORMATION_SCHEMA
+- MyISAM
+- SQL
+- Stored routines
+- Views
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>In my previous post I presented auto-caching tables.</p>
+<p>My main drive for hacking this was to solve the issue of <strong>INFORMATION_SCHEMA</strong>: the fear of bringing a server down because of some necessary query over I_S.</p>
+<p>As a matter in fact, there are two problems with heavyweight <strong>INFORMATION_SCHEMA</strong> tables (such as <strong>TABLES</strong>, <strong>COLUMNS</strong>, <strong>TABLE_CONSTRAINTS</strong>, ...):</p>
+<ol>
+<li>General queries over those tables make for many locks, open simultaneously many file descriptors, risking a lockdown or even a crash of your server.</li>
+<li>The fact that they don't really change that often.</li>
+</ol>
+<p>Why should two reads, three minutes apart, on <strong>INFORMATION_SCHEMA.COLUMNS</strong> make for two heavyweight operations?</p>
+<p>Thankfully, that much is solved by using the notion of auto caching tables. We can cache the results of the first query over <strong>INFORMATION_SCHEMA.COLUMNS</strong> to have an immediate, cached result on our second access.</p>
+<p>But this still leaves us with a problem: once in a while we <em>will have to</em> actually query <strong>INFORMATION_SCHEMA</strong>, since the cache is invalidated. Then what? Do we wait for the crash?</p>
+<h4>Lightweight INFORMATION_SCHEMA access</h4>
+<p>So the good news is that there is a way around this problem,<strong></strong> too. We <em>can</em> query <strong>INFORMATION_SCHEMA</strong> in such way that it does not make for a crash risk. This is now implemented in <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>'s auto-caching tables. And here's how it works:</p>
+<p>There are <a href="http://dev.mysql.com/doc/refman/5.1/en/information-schema-optimization.html"><strong>INFORMATION_SCHEMA</strong> optimizations</a>. If you use, for example, the <strong>TABLES</strong> table and you query using a given constant <strong>TABLE_SCHEMA</strong>, as in:</p>
+<blockquote>
+<pre>SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='sakila';</pre>
+</blockquote>
+<p>You're using an optimization which avoids even looking at databases which are not <strong>'sakila'</strong>. If you further use the <strong>TABLE_NAME</strong>, as in:</p>
+<blockquote>
+<pre>SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='sakila' AND TABLE_NAME='actor';</pre>
+</blockquote>
+<p>You're using another optimization: MySQL will not even scan the <strong>sakila</strong> directory, but will directly open the <strong>actor</strong> table.</p>
+<p>If you only look for <strong>TABLE_NAME</strong>, the table won't even be opened. If only <strong>TABLE_TYPE</strong> is accessed, only the <strong>.frm</strong> file is opened (not table data).</p>
+<p>The auto-caching solution involves executing a stored function which checks for invalidation and re-populates the table. Since this is a stored routine, we don't actually have to populate the cache table with a simple <strong>INSERT INTO ... SELECT</strong>. We could make it more <em>complicated</em>, but worthwhile.</p>
+<h4>Iterating the schemata and tables one by one</h4>
+<p>This is the solution (illustrated against the <strong>TABLES</strong> table):</p>
+<ul>
+<li>Check up on all database names (simple file scan). A simplified example would be:
+<ul>
+<li>SELECT <strong>GROUP_CONCAT(schema_name)</strong> FROM INFORMATION_SCHEMA.SCHEMATA <strong>INTO @schemata_names</strong>;</li>
+<li>We parse the text and investigate each schema.</li>
+</ul>
+</li>
+<li>Then, one by one, check up on table names (names only!) per schema (simple file scan).
+<ul>
+<li>So far we have not opened a single file.</li>
+<li>We avoid using cursors. This is for several reasons; one being that we don't want to "collect" locks. Other reasons are due to problems (bugs in my opinion) resulting from cursor caching issues in routines. Instead of using cursors, we concatenate our options and parse them textually.</li>
+</ul>
+</li>
+<li>Now, for each row, we <strong>INSERT INTO our_cache_table SELECT * FROM INFORMATION_SCHEMA WHERE TABLE_SCHEMA='a_constant' AND TABLE_NAME='a_constant_as_well'</strong>.</li>
+</ul>
+<p>This makes the entire process <em>longer</em> than it could have been, working this one table at a time. But it's also <em>safer</em>: each time we only take locks for one table; releasing; acquire another; and so forth.</p>
+<h4>Autocache tables for INFORMATION_SCHEMA in common_schema</h4>
+<p>So, what does this mean?</p>
+<p>It means you can auto-cache data from <strong>INFORMATION_SCHEMA</strong>, and not have to worry about it. You can define the invalidation method (e.g. <strong>10</strong> minutes cache). When invalidation <em>does</em> occur, you don't have to worry about it. Sure, you'll wait for the data, but you don't need to expect a crash.</p>
+<p><em>common_schema</em> comes with pre-defined autocahe tables for those heavyweight <strong>INFORMATION_SCHEMA</strong>. These are:</p>
+<ul>
+<li>COLUMNS</li>
+<li>KEY_COLUMN_USAGE</li>
+<li>PARTITIONS</li>
+<li>REFERENTIAL_CONSTRAINTS</li>
+<li>STATISTICS</li>
+<li>TABLES</li>
+<li>TABLE_CONSTRAINTS</li>
+<li>TRIGGERS</li>
+</ul>
+<p>The names should be familiar; these are the same names as in <strong>INFORMATION_SCHEMA</strong>. Just point your queries to <em>common_schema</em> instead, and have everything else go as before. You will get long response time at first. But then, when data is cached, expect a great use of your metadata, like we all expect to. Oh, and your database doesn't crash while doing it.</p>
+<h4>Known Issues</h4>
+<p>Taking <strong>STATISTICS</strong> as an example, <strong>1</strong>st <strong>SELECT COUNT(*) FROM STATISTICS</strong> returns with <strong>0</strong>, because of <strong>MyISAM</strong> optimization. The next one returns with correct results, which are already cached. As a workaround, you may invoke <strong>SELECT SUM(1) FROM STATISTICS</strong>, which returns correct values at all times, including the first invocation.</p>
+<p>The <strong>VIEWS</strong> tables poses for a slight problem: apparently autocache can't work on <strong>VIEWS</strong>, since it itself relies on views, and that makes for a weird infinite loop in MySQL. I'm not sure why, and have tried to overcome this, to date without success.</p>

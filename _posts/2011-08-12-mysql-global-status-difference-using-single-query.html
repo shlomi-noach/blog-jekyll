@@ -1,0 +1,131 @@
+---
+title: MySQL Global status difference using single query
+date: 2011-08-12 18:31:12.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Analysis
+- common_schema
+- INFORMATION_SCHEMA
+- SQL
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: wlhauck@aol.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Have just read <a href="http://karlssonondatabases.blogspot.com/2011/08/mysql-global-status-difference-using_12.html">MySQL Global status difference using MySQL procedures / functions</a>, by Andres Karlsson. Have commented, but realized I did not provide with a direct answer. In the comment, I suggested checking out <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/global_status_diff.html">a solution based on views</a>, found in <a href="http://code.google.com/p/common-schema/" rel="nofollow">common_schema</a>. But the solution in <em>common_schema</em> is split into two views, due to the fact views cannot handle derived tables subqueries.</p>
+<p>Well, here's a single query to do that: it checks <strong>GLOBAL_STATUS</strong> twice, <strong>10</strong> seconds apart in the following sample. It uses <strong>SLEEP()</strong> to actually wait between the two reads. Yes, you can do that with a query.</p>
+<p>The following query shows all <strong>GLOBAL_STATUS</strong> values that have changed during the sample period.</p>
+<p><strong>[UPDATE]</strong> query updated to work with MySQL <strong>5.6</strong> optimizer<!--more--></p>
+<blockquote>
+<pre>SELECT STRAIGHT_JOIN
+   LOWER(gs0.VARIABLE_NAME) AS variable_name,
+   gs0.VARIABLE_VALUE AS variable_value_0,
+   gs1.VARIABLE_VALUE AS variable_value_1,
+   (gs1.VARIABLE_VALUE - gs0.VARIABLE_VALUE) AS variable_value_diff,
+   (gs1.VARIABLE_VALUE - gs0.VARIABLE_VALUE) / 10 AS variable_value_psec,
+   (gs1.VARIABLE_VALUE - gs0.VARIABLE_VALUE) * 60 / 10 AS
+variable_value_pminute
+FROM
+   (
+     SELECT
+       VARIABLE_NAME,
+       VARIABLE_VALUE
+     FROM
+       INFORMATION_SCHEMA.GLOBAL_STATUS
+     UNION ALL
+     SELECT
+       '',
+       SLEEP(10)
+     FROM DUAL
+   ) AS gs0
+   JOIN (
+     SELECT 
+       VARIABLE_NAME,
+       VARIABLE_VALUE
+     FROM 
+       INFORMATION_SCHEMA.GLOBAL_STATUS
+   ) gs1 USING (VARIABLE_NAME)
+WHERE
+   gs1.VARIABLE_VALUE != gs0.VARIABLE_VALUE
+;
++-----------------------------------+------------------+------------------+---------------------+---------------------+------------------------+
+| variable_name                     | variable_value_0 | variable_value_1 | variable_value_diff | variable_value_psec | variable_value_pminute |
++-----------------------------------+------------------+------------------+---------------------+---------------------+------------------------+
+| aborted_clients                   | 2210669          | 2210686          |                  17 |                 1.7 |                    102 |
+| bytes_received                    | 53259933210      | 53260211104      |              277894 |             27789.4 |                1667364 |
+| bytes_sent                        | 351130988015     | 351132884956     |             1896941 |            189694.1 |               11381646 |
+| com_change_db                     | 3760546          | 3760584          |                  38 |                 3.8 |                    228 |
+| com_delete                        | 6774784          | 6774801          |                  17 |                 1.7 |                    102 |
+| com_insert                        | 52743750         | 52744012         |                 262 |                26.2 |                   1572 |
+| com_insert_select                 | 13362650         | 13362740         |                  90 |                   9 |                    540 |
+| com_select                        | 51722818         | 51723107         |                 289 |                28.9 |                   1734 |
+| com_set_option                    | 108564134        | 108564754        |                 620 |                  62 |                   3720 |
+| com_show_collations               | 3760530          | 3760568          |                  38 |                 3.8 |                    228 |
+| com_show_processlist              | 366078           | 366082           |                   4 |                 0.4 |                     24 |
+| com_show_status                   | 366047           | 366051           |                   4 |                 0.4 |                     24 |
+| com_show_variables                | 3760535          | 3760573          |                  38 |                 3.8 |                    228 |
+| com_update                        | 6271283          | 6271324          |                  41 |                 4.1 |                    246 |
+| connections                       | 3781382          | 3781420          |                  38 |                 3.8 |                    228 |
+| created_tmp_disk_tables           | 983223           | 983224           |                   1 |                 0.1 |                      6 |
+| created_tmp_tables                | 9134044          | 9134126          |                  82 |                 8.2 |                    492 |
+| handler_commit                    | 125798040        | 125798688        |                 648 |                64.8 |                   3888 |
+| handler_delete                    | 6849562          | 6849578          |                  16 |                 1.6 |                     96 |
+| handler_read_first                | 5332451          | 5332498          |                  47 |                 4.7 |                    282 |
+| handler_read_key                  | 373910509        | 373912469        |                1960 |                 196 |                  11760 |
+| handler_read_next                 | 850122025        | 850170403        |               48378 |              4837.8 |                 290268 |
+| handler_read_rnd                  | 255104660        | 255105932        |                1272 |               127.2 |                   7632 |
+| handler_read_rnd_next             | 992505444        | 992549948        |               44504 |              4450.4 |                 267024 |
+| handler_update                    | 27930283         | 27930465         |                 182 |                18.2 |                   1092 |
+| handler_write                     | 2051582925       | 2051602416       |               19491 |              1949.1 |                 116946 |
+| innodb_buffer_pool_pages_data     | 77232            | 77243            |                  11 |                 1.1 |                     66 |
+| innodb_buffer_pool_pages_dirty    | 626              | 645              |                  19 |                 1.9 |                    114 |
+| innodb_buffer_pool_pages_flushed  | 38429812         | 38430032         |                 220 |                  22 |                   1320 |
+| innodb_buffer_pool_pages_misc     | 4294922063       | 4294922052       |                 -11 |                -1.1 |                    -66 |
+| innodb_buffer_pool_read_requests  | 1933796064       | 1933871603       |               75539 |              7553.9 |                 453234 |
+| innodb_buffer_pool_reads          | 11360212         | 11360214         |                   2 |                 0.2 |                     12 |
+| innodb_buffer_pool_write_requests | 1074109722       | 1074115394       |                5672 |               567.2 |                  34032 |
+| innodb_data_fsyncs                | 5583880          | 5583905          |                  25 |                 2.5 |                    150 |
+| innodb_data_read                  | 3339489280       | 3339501568       |               12288 |              1228.8 |                  73728 |
+| innodb_data_reads                 | 11796492         | 11796494         |                   2 |                 0.2 |                     12 |
+| innodb_data_writes                | 105587582        | 105588145        |                 563 |                56.3 |                   3378 |
+| innodb_data_written               | 3721600000       | 3727315968       |             5715968 |            571596.8 |               34295808 |
+| innodb_dblwr_pages_written        | 38429812         | 38430032         |                 220 |                  22 |                   1320 |
+| innodb_dblwr_writes               | 596503           | 596506           |                   3 |                 0.3 |                     18 |
+| innodb_log_write_requests         | 380978894        | 380981368        |                2474 |               247.4 |                  14844 |
+| innodb_log_writes                 | 74407604         | 74407990         |                 386 |                38.6 |                   2316 |
+| innodb_os_log_fsyncs              | 2310799          | 2310807          |                   8 |                 0.8 |                     48 |
+| innodb_os_log_written             | 2905292800       | 2906502656       |             1209856 |            120985.6 |                7259136 |
+| innodb_pages_created              | 1341584          | 1341593          |                   9 |                 0.9 |                     54 |
+| innodb_pages_read                 | 13117652         | 13117654         |                   2 |                 0.2 |                     12 |
+| innodb_pages_written              | 38429812         | 38430032         |                 220 |                  22 |                   1320 |
+| innodb_rows_deleted               | 6849552          | 6849568          |                  16 |                 1.6 |                     96 |
+| innodb_rows_inserted              | 43787980         | 43788207         |                 227 |                22.7 |                   1362 |
+| innodb_rows_read                  | 4289845136       | 4289919560       |               74424 |              7442.4 |                 446544 |
+| innodb_rows_updated               | 24119627         | 24119809         |                 182 |                18.2 |                   1092 |
+| key_read_requests                 | 41262330         | 41262338         |                   8 |                 0.8 |                     48 |
+| open_files                        | 7                | 5                |                  -2 |                -0.2 |                    -12 |
+| opened_files                      | 4212920          | 4212924          |                   4 |                 0.4 |                     24 |
+| questions                         | 253158874        | 253160331        |                1457 |               145.7 |                   8742 |
+| select_full_join                  | 546              | 547              |                   1 |                 0.1 |                      6 |
+| select_range                      | 721945           | 721947           |                   2 |                 0.2 |                     12 |
+| select_scan                       | 12828865         | 12828989         |                 124 |                12.4 |                    744 |
+| sort_range                        | 170971           | 170973           |                   2 |                 0.2 |                     12 |
+| sort_rows                         | 255175383        | 255176655        |                1272 |               127.2 |                   7632 |
+| sort_scan                         | 534078           | 534080           |                   2 |                 0.2 |                     12 |
+| table_locks_immediate             | 142673687        | 142674454        |                 767 |                76.7 |                   4602 |
+| threads_cached                    | 7                | 8                |                   1 |                 0.1 |                      6 |
+| threads_connected                 | 5                | 10               |                   5 |                 0.5 |                     30 |
+| threads_created                   | 840486           | 840509           |                  23 |                 2.3 |                    138 |
++-----------------------------------+------------------+------------------+---------------------+---------------------+------------------------+</pre>
+</blockquote>
+<p>Some values don't make sense to do difference on (e.g. <strong>threads_connected</strong>), since they present with momentary status and are not incrementing as others (e.g. <strong>threads_created</strong>).</p>
+<p>Happy SQLing!</p>

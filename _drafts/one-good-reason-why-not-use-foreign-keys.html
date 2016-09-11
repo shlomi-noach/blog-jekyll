@@ -1,0 +1,25 @@
+---
+layout: post
+title: One good reason why not use Foreign Keys
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags:
+- foreign keys
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>It's an ancient debate: should you let your database enforce integrity via Foreign Keys or should you let your application logic do so?</p>
+<p>There are arguments to both sides, and I won't repeat them. I ultimately settled on the one reason that convinces me against using Foreign Keys: refactoring/sharding.</p>
+<p>We have this one huge table; it wasn't supposed to be so huge when it was first designed, but history makes its own path. This table is cross connected to multiple other tables via foreign keys. The table has no justification to exist as it is in our database today. It must either be sharded, extracted to a different database, or be completely reimplemented using other technologies.</p>
+<p>But it's so tightly coupled! Database-wise I don't mind, we can work this out. The problem is with the application code which lazily assumes the database will take care of coupling constraints; expects an error to be raised by the database when a failure occurs. Changing such code written over years is a much more difficult task. We will have to invest a lot more resources to work this out as compared to what we would have to had we not used foreign keys in the first place.</p>
+<p>In our time of rapid growth I see this as becoming more and more of an issue.</p>

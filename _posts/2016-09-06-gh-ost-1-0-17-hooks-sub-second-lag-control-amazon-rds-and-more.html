@@ -1,0 +1,61 @@
+---
+title: 'gh-ost 1.0.17: Hooks, Sub-second lag control, Amazon RDS and more'
+date: 2016-09-06 11:44:14.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- gh-ost
+- New Features
+- Open Source
+meta:
+  _edit_last: '2'
+  _wpcom_is_markdown: '1'
+  _oembed_3868aa5e0d1aa644ded2ca0a0ec6792f: '{{unknown}}'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><a href="https://github.com/github/gh-ost">gh-ost</a> version <a href="https://github.com/github/gh-ost/releases/tag/v1.0.17">1.0.17</a> is now released, with various additions and fixes. Here are some notes of interest:</p>
+<h3>Hooks</h3>
+<p><code>gh-ost</code> now supports <a href="https://github.com/github/gh-ost/blob/master/doc/hooks.md">hooks</a>. These are your own executables that <code>gh-ost</code> will invoke at particular points of interest (validation pass, about to cut-over, success, failure, status, etc.)</p>
+<p><code>gh-ost</code> will set various environment variables for your executables to pick up, passing along such information as migrated/<em>ghost</em> table name, elapsed time, processed rows, migrated host etc.</p>
+<h3>Sub-second lag control</h3>
+<p>At GitHub we're very strict about replication lag. We keep it well under <code>1</code> second at most times. <code>gh-ost</code> can now identify <a href="https://github.com/github/gh-ost/blob/master/doc/subsecond-lag.md">sub-second lag on replicas</a> (well, you need to supply with the right query). Our current production migrations are set by default with <code>--max-lag-millis=500</code> or less, and our most intensive migrations keep replication lag well below <code>1sec</code> or even below <code>500ms</code></p>
+<h3>No SUPER</h3>
+<p>The <code>SUPER</code> privilege is required to <code>set global binlog_format='ROW'</code> and for <code>STOP SLAVE; START SLAVE;</code></p>
+<p>If you <em>know</em> your replica has RBR, you can pass <code>--assume-rbr</code> and skips those steps.</p>
+<h3>RDS</h3>
+<p>Hooks + No Super = RDS, as seems to be the case. For <code>--test-on-replica</code> you will need to supply your own <code>gh-ost-on-stop-replication</code> hook, to stop your RDS replica at cut-over phase. See <a href="https://github.com/github/gh-ost/issues/163#issuecomment-244694616">this tracking issue</a><!--more--></p>
+<h3>master-master</h3>
+<p>While active-active are still not supported, you now have greater control over master-master topologies by being able to explicitly pick your master (as <code>gh-ost</code> arbitrarily picks one of the co-masters). Do so by passing <code>--assume-master-host</code>. See <a href="https://github.com/github/gh-ost/blob/master/doc/cheatsheet.md">cheatsheet</a>.</p>
+<h3>tungsten replicator</h3>
+<p>Similarly, <code>gh-ost</code> cannot crawl your <code>tungsten</code> topology, and you are able to specify <code>--tungsten --assume-master-host=the.master.com</code>. See <a href="https://github.com/github/gh-ost/blob/master/doc/cheatsheet.md">cheatsheet</a>.</p>
+<h3>Concurrent-rowcount</h3>
+<p><code>--exact-rowcount</code> is awesomeness, keeping quite accurate estimate of progress. With <code>--concurrent-rowcount</code> we begin migration with a rough estimate, and execute <code>select count(*) from your_table</code> in parallel, updating our estimate later on throughout the migration</p>
+<h3>Stricter, safer</h3>
+<p><code>gh-ost</code> works in <code>STRICT_ALL_TABLES</code> mode, meaning it would fail rather than set the wrong value to a column.</p>
+<p>In addition to unit-testing and production continuous test, a set of <a href="https://github.com/github/gh-ost/blob/master/doc/local-tests.md">local tests</a> is growing, hopefully to run as CI tests later on.</p>
+<h3>Fixed problems</h3>
+<p>Fixed <code>time_zone</code> related bug, high <code>unsigned</code> values bug; added strict check for triggers, relaxed config file parsing, and more. Thank you to community contributors for PRs, from <code>ipv6</code> to typos!</p>
+<h3>Known issues</h3>
+<p>Issues coming and going at all times -- thank you for reporting Issues!</p>
+<p>We have a confirmed <a href="https://github.com/github/gh-ost/issues/226">bug with non-UTF charsets</a> at this time. Some other minor issues and feature requests are open -- we'll take them as we go along.</p>
+<h3>Feedback requests</h3>
+<p>We are not testing <code>gh-ost</code> on RDS ourselves. We appreciate community feedback on <a href="https://github.com/github/gh-ost/issues/163">this tracking issue</a>.</p>
+<p>We are not testing <code>gh-ost</code> on Galera/XtraDB cluster ourselves. We appreciate community feedback on <a href="https://github.com/github/gh-ost/issues/224">this tracking issue</a>.</p>
+<p>We value submitted Issues and questions.</p>
+<h3>Speaking</h3>
+<p>We will be presenting <code>gh-ost</code> in the next month:</p>
+<ul>
+<li>I will be <a href="http://githubuniverse.com/program/sessions/#gh-ost">presenting gh-ost at GitHub Universe</a>, Sep. 14th</li>
+<li>Tom Krouper will be <a href="https://datalayer.com/">presenting gh-ost at DataLayer</a>, Seattle, Sep 28th</li>
+<li>Tom Krouper and myself will be <a href="https://www.percona.com/live/plam16/sessions/introducing-gh-ost-triggerless-painless-trusted-online-schema-migrations">presenting gh-ost at PerconaLive</a>, Amsterdam, Oct 5th</li>
+</ul>
+<p>Hope to see you there, and thank you again to all contributors!</p>

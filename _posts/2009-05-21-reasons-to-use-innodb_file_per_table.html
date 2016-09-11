@@ -1,0 +1,59 @@
+---
+title: Reasons to use innodb_file_per_table
+date: 2009-05-21 05:40:42.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Configuration
+- InnoDB
+- mysqldump
+- Performance
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>When working with InnoDB, you have two ways for managing the tablespace storage:</p>
+<ol>
+<li>Throw everything in one big file (optionally split).</li>
+<li>Have one file per table.</li>
+</ol>
+<p>I will discuss the advantages and disadvantages of the two options, and will strive to convince that <strong>innodb_file_per_table</strong> is preferable.</p>
+<h4>A single tablespace</h4>
+<p>Having everything in one big file means all tables and indexes, from <em>all schemes</em>, are 'mixed' together in that file.</p>
+<p>This allows for the following nice property: free space can be shared between different tables and different schemes. Thus, if I purge many rows from my <strong>log</strong> table, the now unused space can be occupied by new rows of any other table.</p>
+<p>This same nice property also translates to a not so nice one: data can be greatly fragmented across the tablespace.</p>
+<p>An annoying property of InnoDB's tablespaces is that they never shrink. So after purging those rows from the <strong>log</strong> table, the tablespace file (usually <strong>ibdata1</strong>) still keeps the same storage. It does not release storage to the file system.</p>
+<p>I've seen more than once how certain tables are left unwatched, growing until disk space reaches 90% and SMS notifications start beeping all around.<!--more--></p>
+<p>There's little to do in this case. Well, one can always purge the rows. Sure, the space would be reused by InnoDB. But having a file which consumes some 80-90% of disk space is a performance catastrophe. It means the disk needle needs to move large distances. Overall disk performance runs very low.</p>
+<p>The best way to solve this is to setup a new slave (after purging of the rows), and dump the data into that slave.</p>
+<h4>InnoDB Hot Backup</h4>
+<p>The funny thing is, the <strong>ibbackup</strong> utility will copy the tablespace file as it is. If it was 120GB, of which only 30GB are used, you still get a 120GB backed up and restored.</p>
+<h4>mysqldump, mk-parallel-dump</h4>
+<p>mysqldump would be your best choice if you only had the original machine to work with. Assuming you're only using InnoDB, a dump with <strong>--single-transaction</strong> will do the job. Or you can utilize <a title="Maatkit: mk-parallel-dump" href="http://www.maatkit.org/">mk-parallel-dump</a> to speed things up (depending on your dump method and accessibility needs, mind the locking).</p>
+<h4>innodb_file_per_table</h4>
+<p>With this parameter set, a <strong>.ibd</strong> file is created per table. What we get is this:</p>
+<ul>
+<li>Tablespace is not shared among different tables, and certainly not among different schemes.</li>
+<li>Each file is considered a tablespace of its own.</li>
+<li>Again, tablespace never reduces in size.</li>
+<li>It is possible to regain space per tablespace.</li>
+</ul>
+<p>Wait. The last two seem conflicting, don't they? Let's explain.</p>
+<p>In our <strong>log</strong> table example, we purge many rows (up to 90GB of data is removed). The <strong>.ibd</strong> file does not shrink. But we <em>can</em> do:</p>
+<blockquote><p>ALTER TABLE log ENGINE=InnoDB</p></blockquote>
+<p>What will happen is that a new, temporary file is created, into which the table is rebuilt. Only existing data is added to the new table. Once comlete, the original table is removed, and the new table renamed as the original table.</p>
+<p>Sure, this takes a long time, during which the table is completely locked: no writes and no reads allowed. But still - it allows us to regain disk space.</p>
+<p>With the new InnoDB plugin, disk space is also regained when execuing a <strong>TRUNCATE TABLE log</strong> statement.</p>
+<p>Fragmentation is not as bad as in a single tablespace: the data is limited within the boundaries of a smaller file.</p>
+<h4>Monitoring</h4>
+<p>One other nice thing about <strong>innodb_file_per_table</strong> is that it is possible to monitor table size on the file system level. You don't need access to MySQL, to use SHOW TABLE STATUS or to query the INFORMATION_SCHEMA. You can just look up the top 10 largest files under your MySQL data directory (and subdirectories), and monitor their size. You can see which table grows fastest.</p>
+<h4>Backup</h4>
+<p>Last, it is not yet possible to backup single InnoDB tables by copying the <strong>.ibd</strong> files. But hopefully work will be done in this direction.</p>

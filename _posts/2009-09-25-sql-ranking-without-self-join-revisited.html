@@ -1,0 +1,105 @@
+---
+title: 'SQL: ranking without self join, revisited'
+date: 2009-09-25 04:02:08.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- SQL
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: kleyber.ribeiro@grupoferraz.com.br
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This post follows <a title="Link to SQL: Ranking without self join" rel="bookmark" href="http://code.openark.org/blog/mysql/sql-ranking-without-self-join">SQL: Ranking without self join</a> and <a title="Link to On user variables evaluation order" rel="bookmark" href="http://code.openark.org/blog/mysql/on-user-variables-evaluation-order">On user variables evaluation order</a>. I wish to share some insights with regard to user variables evaluation, as well as provide <em>yet another</em> ranking solution, which attempts to overcome the uncertainty factor with user variables.</p>
+<p>There will be hand waving in this post (albeit empirical hand waving). Stop here if you don't like hand waving. Continue if you feel curious or wish to contradict my assumptions.</p>
+<h4>Recap</h4>
+<p>The order of evaluation of user variables is undefined. The documentation has some contradicting example (bug <a href="http://bugs.mysql.com/bug.php?id=47514">47514</a>), but states that variables should not be read and assigned in different parts of the same statement (just <em>what is</em> a different part? Bug <a href="http://bugs.mysql.com/bug.php?id=47516">47516</a>).</p>
+<h4>Looking for a solution</h4>
+<p>There doesn't seem to be a problem with reading and assigning variables in the very same part of the statement. For example, <strong>SELECT @a := @a+1</strong>... is exactly such a case.</p>
+<p><!--more-->So I was looking for means to setup all the variables in one single "part" of the statement, which is to say, a single column. I've found several solutions, here's one:</p>
+<h4>COALESCE()</h4>
+<p>The <strong>COALESCE()</strong> function accepts any number of parameters (&gt;=1), and returns the first non-NULL parameter. Tests show that it iterates the parameters and <em>stops iterating</em> at the first non-NULL parameter. So, parameter #3 is not even evaluated if parameter #2 is proven to be non-NULL.</p>
+<p>This makes for a very interesting property: there is a known order of evaluation of parameters in this function.</p>
+<p>So, for example:</p>
+<blockquote>
+<pre>SET @a := 0, @b := 0;
+SELECT COALESCE(@a := @a+1, @b := @a+3);
++----------------------------------+
+| COALESCE(@a := @a+1, @b := @a+3) |
++----------------------------------+
+|                                1 |
++----------------------------------+
+
+SELECT @a, @b;
++------+------+
+| @a   | @b   |
++------+------+
+| 1    | 0    |
++------+------+</pre>
+</blockquote>
+<p>We know that <strong>@a+1</strong> is first evaluated, and only if it turns to be NULL, <strong>@a+3</strong> is evaluated (which isn't the case here).</p>
+<p><em>PS: <strong>CASE</strong> statements also work this way, but <strong>COALESCE()</strong> is more compact, so I'll use it instead.</em></p>
+<p>We still can't be sure that the <em>assignment</em> takes place at that time. For example, is it possible that <strong>@a+1</strong> is first evaluated, then (assuming it's NULL) <strong>@a+3</strong> is evaluated, and only then <strong>@a</strong> and <strong>@b</strong> get the assignment?</p>
+<p>I find this extremely unlikely. That would mean, code-wise, creating a temporary map which caches every internal, intermediate result, until column value is finally evaluated, only then to be iterated and mapped to the variables. To give an extreme example, look at:</p>
+<blockquote>
+<pre>SELECT @a := (@b := 3 + (@c := @c + 2*(@d := SIN(id)))) FROM world.City</pre>
+</blockquote>
+<p>Would <strong>SIN(id)</strong>, <strong>2*SIN(id)</strong>, <strong>@c + 2*SIN(id)</strong>, <strong>3 + (@c + 2*SIN(id))</strong> all be cached even while the result is being evaluated? Not only is this unlikely, user variables common usage indicates the opposite. I think it's safe to say that <strong>@d</strong> is first assigned, then <strong>@c</strong>, then <strong>@b</strong>, and <strong>@a</strong> being the last.</p>
+<h4>ORDER BY</h4>
+<p>Yet another issue is: if q query has an <strong>ORDER BY</strong>, how can I be certain that user variables are iterated <em>after</em> ordering takes place, and not <em>during</em> sort merge passes?</p>
+<p>Apart from:</p>
+<ul>
+<li> Promising I'll try and read the source code</li>
+<li>Wait for qualified answers from the programmers</li>
+<li>Empirically testing this is not the case</li>
+</ul>
+<p>Let me have one last hand waving: if that were the case, we wouldn't be using user variables anytime, anywhere; everything would be too fragile.</p>
+<h4>Ranking without self join</h4>
+<p><a href="http://rpbouman.blogspot.com/">Roland Bouman</a> presented <a href="http://rpbouman.blogspot.com/2009/09/mysql-another-ranking-trick.html">another ranking trick</a>. A very cool one! Why not settle with that solution?</p>
+<p>The thing which bothers me with it is the memory required to create the concatenated score values. We need to build an in-memory string representation of all scores. So the memory requirements for his algorithm are O(n), whereas I strive to use an O(1) amount of memory. The problem with O(n) is that it may not work well (or not at all) for very large datasets. Even for tables indexed by the score column, that amount of memory must be allocated. Then parsed; and then parsed again; and again; and each time the parsing should take longer, since each time we're looking at a later token.</p>
+<p>So I wish to present yet another solution, which relies on the <strong>COALESCE()</strong> properties discussed above. I'll force all <strong>COALESCE()</strong> parameters but last one to be NULL, thereby forcing <strong>COALESCE()</strong> to keep iterating and evaluate all parameters, in an expected order. Again, I'll be using a simple score table (download <a href="../wp-content/uploads/2009/09/score.sql">score.sql</a>):</p>
+<blockquote>
+<pre>SELECT
+  score_id, student_name, score,
+  @rank := COALESCE(
+    NULL + (@prev := @curr),
+    NULL + (@curr := score),
+    IF(@prev = @curr, @rank, @rank+1)
+  ) AS rank
+FROM
+ score,
+ (SELECT @curr := null, @prev := null, @rank := 0) sel1
+ORDER BY score DESC
+;
++----------+--------------+-------+------+
+| score_id | student_name | score | rank |
++----------+--------------+-------+------+
+|        2 | Gromit       |    97 |    1 |
+|        1 | Wallace      |    95 |    2 |
+|        4 | McGraw       |    92 |    3 |
+|        5 | Preston      |    92 |    3 |
+|        3 | Shaun        |    85 |    4 |
++----------+--------------+-------+------+</pre>
+</blockquote>
+<p>I've tried the above with several variations, with <strong>GROUP BY</strong> on <em>score_id</em>; on <em>score_id, other columns</em>; with <strong>GROUP BY</strong> mixed with <strong>ORDER BY</strong>; to always reach the same result set.</p>
+<div id="_mcePaste" style="overflow: hidden; position: absolute; left: -10000px; top: 0px; width: 1px; height: 1px;">SET @a := 0, @b := 0;<br />
+SELECT COALESCE(@a := @a+1, @b := @b+1);<br />
++----------------------------------+<br />
+| COALESCE(@a := @a+1, @b := @b+1) |<br />
++----------------------------------+<br />
+|                                1 |<br />
++----------------------------------+</p>
+<p>SELECT @a, @b;<br />
++------+------+<br />
+| @a   | @b   |<br />
++------+------+<br />
+| 1    | 0    |<br />
++------+------+</p></div>

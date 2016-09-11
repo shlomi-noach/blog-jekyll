@@ -1,0 +1,241 @@
+---
+title: Triggers Use Case Compilation, Part II
+date: 2009-01-15 10:01:39.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Triggers
+meta:
+  _edit_last: '2'
+  _oembed_55835302a9154b1a33fa9bef669291f7: '<iframe src="http://www.slideshare.net/slideshow/embed_code/28163348"
+    width="427" height="356" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"
+    style="border:1px solid #CCC; border-width:1px 1px 0; margin-bottom:5px; max-width:
+    100%;" allowfullscreen> </iframe> <div style="margin-bottom:5px"> <strong> <a
+    href="https://www.slideshare.net/shlominoach/commonschema-22" title="common_schema
+    2.2 DBA&#x27;s framework for MySQL" target="_blank">common_schema 2.2 DBA&#x27;s
+    framework for MySQL</a> </strong> from <strong><a href="http://www.slideshare.net/shlominoach"
+    target="_blank">Shlomi Noach</a></strong> </div>'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>In <a title="Triggers Use Case Compilation, Part I" href="http://code.openark.org/blog/mysql/triggers-use-case-compilation-part-i">Triggers Use Case Compilation, Part I</a>, I've demonstrated some triggers use scenarios.</p>
+<p>We continue our examples of triggers usage.</p>
+<h4>Counters and aggregations bookkeeping</h4>
+<p>Consider the City table: each city belongs to a certain country. Some questions we may be interested in are:</p>
+<ul>
+<li>How many cities are there per country?</li>
+<li>What's the sum of cities population per country?</li>
+<li>What's the population of the largest city per country?</li>
+</ul>
+<p>Answering any of these questions is an easy SQL excercise. But aggregation is required, and full table scan (or full index scan, if we're lucky) is essentially part of any execution plan. What if we can't pay the price for these queries? What if we need immediate, or near immediate response?</p>
+<p><!--more-->One solution is to use counter tables, or summary tables. For example, to answer the first questions, we create the following table:</p>
+<blockquote>
+<pre>CREATE TABLE  CityCount (
+  `CountryCode` char(3) NOT NULL,
+  `NumCities` int(11) NOT NULL,
+  PRIMARY KEY  (`CountryCode`)
+);</pre>
+</blockquote>
+<p>By following all INSERTs and DELETEs on the <strong>City</strong> table, we can manage the <strong>CityCount</strong> table's data.</p>
+<blockquote>
+<pre>DELIMITER $$
+
+DROP TRIGGER IF EXISTS City_ai $$
+CREATE TRIGGER City_ai AFTER INSERT ON City
+FOR EACH ROW
+BEGIN
+  INSERT INTO CityCount (CountryCode, NumCities)
+    VALUES (NEW.CountryCode, 1)
+    ON DUPLICATE KEY
+    UPDATE NumCities = NumCities+1;
+END $$
+
+DROP TRIGGER IF EXISTS City_au $$
+CREATE TRIGGER City_au AFTER UPDATE ON City
+FOR EACH ROW
+BEGIN
+  IF (OLD.CountryCode != NEW.CountryCode) THEN
+    UPDATE CityCount SET NumCities = NumCities-1
+      WHERE CountryCode = OLD.CountryCode;
+    INSERT INTO CityCount (CountryCode, NumCities)
+      VALUES (NEW.CountryCode, 1)
+      ON DUPLICATE KEY
+      UPDATE NumCities = NumCities+1;
+  END IF;
+END $$
+
+DROP TRIGGER IF EXISTS City_ad $$
+CREATE TRIGGER City_ad AFTER DELETE ON City
+FOR EACH ROW
+BEGIN
+  UPDATE CityCount SET NumCities = NumCities-1
+    WHERE CountryCode = OLD.CountryCode;
+END $$
+
+DELIMITER ;</pre>
+</blockquote>
+<p>To illustrate the impact of triggers, let's do a 'massive' data load here:</p>
+<blockquote>
+<pre>mysql&gt; CREATE TABLE City_2 LIKE City;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&gt; INSERT INTO City_2 SELECT * FROM City;
+<span style="color: #008000;">Query OK, 3998 rows affected (0.23 sec)</span>
+Records: 3998  Duplicates: 0  Warnings: 0
+
+mysql&gt; TRUNCATE TABLE City;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&gt; INSERT INTO City SELECT * FROM City_2;
+<span style="color: #993300;">Query OK, 3998 rows affected (3.58 sec)</span>
+Records: 3998  Duplicates: 0  Warnings: 0
+
+mysql&gt; SELECT * FROM CityCount LIMIT 10;
++-------------+-----------+
+| CountryCode | NumCities |
++-------------+-----------+
+| AFG         |         4 |
+| NLD         |        28 |
+| ANT         |         1 |
+| ALB         |         1 |
+| DZA         |        18 |
+| ASM         |         2 |
+| AND         |         1 |
+| AGO         |         5 |
+| AIA         |         2 |
+| ATG         |         1 |
++-------------+-----------+
+10 rows in set (0.01 sec)</pre>
+</blockquote>
+<p>The results seem satisfactory. We can now query <strong>CityCount</strong> directly, no need for complex queries on <strong>City</strong>. But look at the times: INSERTing data into <strong>City_2</strong> took 0.23 seconds. INSERTing the same data into <strong>City</strong> took 3.58 seconds. That's the triggers overhead. There is an advantage to using triggers here (and in general) if you're doing many SELECTs, but few INSERT/UPDATE/DELETE.</p>
+<h4>Enhance security</h4>
+<p>In <a title="Using triggers to block malicious code: an example" href="http://code.openark.org/blog/mysql/using-triggers-to-block-malicious-code-an-example">Using triggers to block malicious code: an example</a>, I have shown how a trigger may block changes to sensitive data. A trigger is aware of the invoker, and can implement a row-based privileges system.</p>
+<p>As another example, let's see how we can do a "privileges table partitioning". We look at the <a title="MySQL's world database setup" href="http://dev.mysql.com/doc/world-setup/en/world-setup.html">world</a>'s City table. What if we're working on some world-nations-wiki, and we want to assign users to countries, in such way that a user can only modify data for a country she is assigned to?</p>
+<p>We create a privileges table which maps users to countries:</p>
+<blockquote>
+<pre>DROP TABLE IF EXISTS `CountryUser`;
+CREATE TABLE `CountryUser` (
+  `CountryCode` char(3) NOT NULL,
+  `mysql_User` char(16) collate utf8_bin NOT NULL default '',
+  PRIMARY KEY  (`CountryCode`, `mysql_User`)
+);</pre>
+</blockquote>
+<p>And then add the security triggers on <strong>City</strong>:</p>
+<blockquote>
+<pre>DELIMITER $$
+
+DROP TRIGGER IF EXISTS City_bi $$
+CREATE TRIGGER City_bi BEFORE INSERT ON City
+FOR EACH ROW
+BEGIN
+  SELECT SUBSTRING_INDEX(USER(),'@',1) INTO @current_mysql_user;
+  IF (@current_mysql_user NOT IN (SELECT mysql_User FROM CountryUser WHERE CountryCode = NEW.CountryCode)) THEN
+    SELECT 0 FROM `Unauthorized access` INTO @error;
+  END IF;
+END $$
+
+DROP TRIGGER IF EXISTS City_bu $$
+CREATE TRIGGER City_bu BEFORE UPDATE ON City
+FOR EACH ROW
+BEGIN
+  SELECT SUBSTRING_INDEX(USER(),'@',1) INTO @current_mysql_user;
+  IF (@current_mysql_user NOT IN (SELECT mysql_User FROM CountryUser WHERE CountryCode = OLD.CountryCode)) THEN
+    SELECT 0 FROM `Unauthorized access` INTO @error;
+  END IF;
+END $$
+
+DROP TRIGGER IF EXISTS City_bd $$
+CREATE TRIGGER City_bd BEFORE DELETE ON City
+FOR EACH ROW
+BEGIN
+  SELECT SUBSTRING_INDEX(USER(),'@',1) INTO @current_mysql_user;
+  IF (@current_mysql_user NOT IN (SELECT mysql_User FROM CountryUser WHERE CountryCode = OLD.CountryCode)) THEN
+    SELECT 0 FROM `Unauthorized access` INTO @error;
+  END IF;
+END $$
+
+DELIMITER ;</pre>
+</blockquote>
+<p>Testing (as user root):</p>
+<blockquote>
+<pre>mysql&gt; INSERT INTO CountryUser (CountryCode, mysql_User) VALUES ('NLD', 'root');
+Query OK, 1 row affected (0.00 sec)
+
+mysql&gt; DELETE FROM City WHERE Name = 'Milano';
+<span style="color: #993300;">ERROR 1146 (42S02): Table 'world.Unauthorized access' doesn't exist</span>
+
+mysql&gt; DELETE FROM City WHERE Name = 'Amsterdam';
+<span style="color: #008000;">Query OK, 1 row affected (0.05 sec)</span></pre>
+</blockquote>
+<p><strong>Managing cache (e.g. invalidating memcached)</strong></p>
+<p>In <a title="Using memcached functions for MySQL; an automated alternative to Query Cache" href="http://code.openark.org/blog/mysql/using-memcached-functions-for-mysql-an-automated-alternative-to-query-cache">Using memcached functions for MySQL; an automated alternative to Query Cache</a>, I've shown how triggers can be used to invalidate memcached values. But cache management can apply to local tables as well.</p>
+<p>It is common practice to have summary tables (we used such one in our <em>counters</em> example). Summary tables are just normal tables which are filled with aggregated data, and save the need to re-aggregate that data. Much like the memcached example, triggers can be used to invalidate or reload the summary table data when relevant changes occur in underlying tables.</p>
+<p><strong>Limiting table size</strong></p>
+<p>Out last use case shows how it is possible to limit table size using triggers.</p>
+<p>By "limiting table size" we can think of row-count limitation, or storage limitation. In the following example, the <strong>logs</strong> table is limited by a certain byte size.</p>
+<blockquote>
+<pre>DROP TABLE IF EXISTS `world`.`logs`;
+CREATE TABLE  `world`.`logs` (
+  `logs_id` int(11) NOT NULL auto_increment,
+  `ts` timestamp NOT NULL default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP,
+  `message` varchar(255) character set utf8 NOT NULL,
+  PRIMARY KEY  (`logs_id`)
+) ENGINE=MyISAM;
+
+DELIMITER $$
+
+DROP TRIGGER IF EXISTS logs_bi $$
+CREATE TRIGGER logs_bi BEFORE INSERT ON City
+FOR EACH ROW
+BEGIN
+  SELECT DATA_LENGTH+INDEX_LENGTH FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='world' AND TABLE_NAME='LOGS' INTO @estimated_table_size;
+  IF (@estimated_table_size &gt; 25*1024) THEN
+    SELECT 0 FROM `logs table is full` INTO @error;
+  END IF;
+END $$
+
+DELIMITER ;</pre>
+</blockquote>
+<p>No more than 25KB of storage is allowed for this table. Let's put it to the test:</p>
+<blockquote>
+<pre>mysql&gt; INSERT INTO logs (message) VALUES ('this line is 31 characters long');
+<span style="color: #339966;">Query OK, 1 row affected (0.00 sec)</span>
+
+mysql&gt; INSERT INTO logs SELECT * FROM logs;
+<span style="color: #339966;">Query OK, 1 row affected (0.00 sec)</span>
+Records: 1  Duplicates: 0  Warnings: 0
+
+mysql&gt; INSERT INTO logs SELECT * FROM logs;
+<span style="color: #339966;">Query OK, 2 rows affected (0.01 sec)</span>
+Records: 2  Duplicates: 0  Warnings: 0
+
+...
+
+mysql&gt; INSERT INTO logs SELECT * FROM logs;
+<span style="color: #008000;">Query OK, 256 rows affected (1.84 sec)</span>
+Records: 256  Duplicates: 0  Warnings: 0
+
+mysql&gt; INSERT INTO logs SELECT * FROM logs;
+<span style="color: #993300;">ERROR 1146 (42S02): Table 'world.logs table is full' doesn't exist
+</span>
+mysql&gt; INSERT INTO logs (message) VALUES ('this line is 31 characters long');
+<span style="color: #993300;">ERROR 1146 (42S02): Table 'world.logs table is full' doesn't exist</span></pre>
+</blockquote>
+<p>A few important notes:</p>
+<ul>
+<li>INFORMATION_SCHEMA only presents estimated size.</li>
+<li>For InnoDB, small tables may claim to possess much more storage than they really do (see this <a title="How much space does empty Innodb table take ?" href="http://www.mysqlperformanceblog.com/2008/12/16/how-much-space-does-empty-innodb-table-take/">post</a> by <a title="MySQL Performance Blog" href="http://www.mysqlperformanceblog.com/">MySQL Performance Blog</a>).</li>
+<li>InnoDB does not release storage (unless you use TRUNCATE or ALTER TABLE), which means even if you delete rows from the table, it still occupies the same storage.</li>
+<li>Memory tables do not release memory unless you use TRUNCATE or ALTER TABLE.</li>
+<li>You may wish to limit table size by row count. There, again, INFORMATION_SCHEMA only provides an estimated value, and querying InnoDB for count(*) is a lengthy operation.</li>
+</ul>
+<p>A more interesting implementation of table size limitation is the notion of <em>rotating tables</em>. More on that in the next post.</p>
+<h4>More to come</h4>
+<p>In the next and final part we will look at some problems which cannot be solved with triggers due to current trigger limitations.</p>

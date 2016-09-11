@@ -1,0 +1,41 @@
+---
+title: But I DO want MySQL to say "ERROR"!
+date: 2010-03-12 06:53:28.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Configuration
+- Data Types
+- sql_mode
+- Syntax
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: shantanu.oak@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>MySQL is known for its willingness to accept invalid queries, data values. It can silently commit your transaction, truncate your data.</p>
+<ul>
+<li>Using <strong>GROUP_CONCAT</strong> with a small <strong>group_concat_max_len</strong> setting? Your result will be silently truncated (make sure to check the warnings though).</li>
+<li>Calling <strong>CREATE <span style="text-decoration: line-through;">TEMPORARY</span> TABLE</strong>? You get <a href="http://www.joinfu.com/2010/03/a-follow-up-on-the-sql-puzzle/">silent commit</a>.</li>
+<li>Issuing a <strong>ROLLBACK</strong> on non-transactional involved engines? Have a warning; no error.</li>
+<li>Using <strong>LOCK IN SHARE MODE</strong> on non transactional tables? Not a problem. Nothing reported.</li>
+<li>Adding a <strong>FOREIGN KEY</strong> on a MyISAM table? Good for you; no action actually taken.</li>
+<li>Inserting <strong>300</strong> to a <strong>TINYINT</strong> column in a relaxed <strong>sql_mode</strong>? Give me <strong>255</strong>, I'll silently drop the remaining <strong>45</strong>. I owe you.</li>
+</ul>
+<h4>Warnings and errors</h4>
+<p>It would be nice to:<!--more--></p>
+<ul>
+<li>Have an <strong>auto_propagate_warning_to_error</strong> server variable (global/session/both) which, well, does what it says.</li>
+<li>Have an <strong>i_am_really_not_a_dummy</strong> server variable which implies stricter checks for all the above and prevents you from doing with <em>anything</em> that may be problematic (or rolls back your transactions on your invalid actions).</li>
+</ul>
+<p>Connectors may be nice enough to propagate warnings to errors - that's good. But not enough: since data is already committed in MySQL.</p>
+<p>If I understand correctly, and maybe it's just a myth, it all relates to the times where MySQL had interest in a widespread adoption across the internet, in such way that it does not interfere too much with the users (hence leading to the common myth that "MySQL just works out of the box and does not require me to configure or understand anything").</p>
+<p>MySQL is a database system, and is now widespread, and is used by serious companies and products. It is time to stop play nice to everyone and provide with strict integrity -- or, be nice to everyone, just allow me to specify what "nice" means for me.</p>

@@ -1,0 +1,112 @@
+---
+title: What makes a MySQL server failure/recovery case?
+date: 2015-07-25 09:00:03.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Failover
+- orchestrator
+- Replication
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Or: How do you reach the conclusion your MySQL master/intermediate-master is dead and must be recovered?</p>
+<p>This is an attempt at making a holistic diagnosis of our replication topologies. The aim is to cover obvious and not-so-obvious crash scenarios, and to be able to act accordingly and heal the topology.</p>
+<p>At <strong>Booking.com</strong> we are dealing with very large amounts of MySQL servers. We have many topologies, and many servers in each topology. <a href="https://speakerdeck.com/shlominoach/pseudo-gtid-and-easy-mysql-replication-topology-management">See past numbers</a> to get a feel for it. At these numbers failures happen frequently. Typically we would see normal slaves failing, but occasionally -- and far more frequently than we would like to be paged for -- an intermediate master or a master would crash. But our current (and ever in transition) setup also include SANs, DNS records, VIPs, any of which can fail and bring down our topologies.</p>
+<p>Tackling issues of monitoring, disaster analysis and recovery processes, I feel safe to claim the following statements:</p>
+<ul>
+<li>The fact your monitoring tool cannot access your database does not mean your database has failed.</li>
+<li>The fact your monitoring tool can access your database does not mean your database is available.</li>
+<li>The fact your database master is unwell does not mean you should fail over.</li>
+<li>The fact your database master is alive and well does not mean you should not fail over.</li>
+</ul>
+<p>Bummer. Let's review a simplified topology with a few failure scenarios. Some of these scenarios you will find familiar. Some others may be caused by setups you're not using. I would love to say <em>I've seen it all</em> but the more I see the more I know how strange things can become.<!--more--></p>
+<p>We will consider the simplified case of a master with three replicas: we have <strong>M</strong> as master, <strong>A</strong>, <strong>B</strong>, <strong>C</strong> as slaves.</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2015/07/mysql-topologies-failures.png"><img class="alignnone size-full wp-image-7280" src="{{ site.baseurl }}/assets/mysql-topologies-failures.png" alt="mysql-topologies-failures" width="192" height="108" /></a></p></blockquote>
+<p>&nbsp;</p>
+<p>A common monitoring scheme is to monitor each machine's IP, availability of MySQL port (<strong>3306</strong>) and responsiveness to some simple query (e.g. <strong>"SELECT 1"</strong>). Some of these checks may run local to the machine, others remote.</p>
+<p>Now consider your monitoring tool fails to connect to your master.</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2015/07/mysql-topologies-failures-1.png"><img class="alignnone size-full wp-image-7281" src="{{ site.baseurl }}/assets/mysql-topologies-failures-1.png" alt="mysql-topologies-failures (1)" width="192" height="108" /></a></p></blockquote>
+<p>I've marked the slaves with question marks as the common monitoring schema does not associate the master's monitoring result to the slaves'.  Can you safely conclude your master is dead? Are your feeling comfortable with initiating a failover process? How about:</p>
+<ul>
+<li>Temporary network partitioning; it just so happens that your monitoring tool cannot access the master, though everyone else can.</li>
+<li>DNS/VIP/name cache/name resolving issue. Sometimes similar to the above; does you monitoring tool host think the master's IP is what it really is? Has something just changed? Some cache expired? Some cache is stale?</li>
+<li>MySQL connection rejection. This could be due to a serious "Too many connections" problem on the master, or due to accidental network noise.</li>
+</ul>
+<p>Now consider the following case: a first tier slave is failing to connect to the master:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2015/07/mysql-topologies-failures-2.png"><img class="alignnone size-full wp-image-7282" src="{{ site.baseurl }}/assets/mysql-topologies-failures-2.png" alt="mysql-topologies-failures (2)" width="192" height="108" /></a></p></blockquote>
+<p>The slave's IO thread is broken; do we have a problem here? Is the slave failing to connect because the master is dead, or because the slave itself suffers from a network partitioning glitch?</p>
+<h3>A holistic diagnosis</h3>
+<p>In the holistic approach we couple the master's monitoring with that of its direct slaves. Before I continue to describe some logic, the previous statement is something we must reflect upon.</p>
+<p>We should associate the master's state with that of its direct slaves. Hence we must know which are its direct slaves. We might have slaves D, E, F, G replicating from B, C. They are not in our story. But slaves come and go. Get provisioned and de-provisioned. They get repointed elsewhere. Our monitoring needs to be aware of the <em>state</em> of our replication topology.</p>
+<p>My preferred tool for the job is <a href="https://github.com/outbrain/orchestrator/">orchestrator</a>, since I author it. It is not a standard monitoring tool and does not serve metrics; but it observes your topologies and records them. And notes changes. And acts as a higher level failure detection mechanism which incorporates the logic described below.</p>
+<p>We continue our discussion under the assumption we are able to reliably claim we know our replication topology. Let's revisit our scenarios from above and then add some.</p>
+<p>We will further only require MySQL client protocol connection to our database servers.</p>
+<h3>Dead master</h3>
+<p>A "real" dead master is perhaps the clearest failure. MySQL has crashed (signal 11); or the kernel panicked; or the disks failed; or power went off. The server is <em>really not serving</em>. This is observed as:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2015/07/mysql-topologies-failures-3.png"><img class="alignnone size-full wp-image-7284" src="{{ site.baseurl }}/assets/mysql-topologies-failures-3.png" alt="mysql-topologies-failures (3)" width="192" height="108" /></a></p></blockquote>
+<p>In the holistic approach, we observe that:</p>
+<ul>
+<li>We cannot reach the master (our MySQL client connection fails).</li>
+<li>But we are able to connect to the slaves A, B, C</li>
+<li>And A, B, C <em>are all telling us</em> they cannot connect to the master</li>
+</ul>
+<p>We have now cross referenced the death of the master with its three slaves. Funny thing is the MySQL server on the master may still be up and running. Perhaps the master is suffering from some weird network partitioning problem (when I say "weird", I mean we have it; discussed further below). And <em>perhaps</em> some application is actually still able to talk to the master!</p>
+<p>And yet our entire replication topology is broken. Replication is not there for beauty; it serves our application code. And it's turning stale. Even if by some chance things are still operating on the master, this still makes for a valid failover scenario.</p>
+<h3>Unreachable master</h3>
+<p>Compare the above with:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2015/07/mysql-topologies-failures-4.png"><img class="alignnone size-full wp-image-7285" src="{{ site.baseurl }}/assets/mysql-topologies-failures-4.png" alt="mysql-topologies-failures (4)" width="192" height="108" /></a></p></blockquote>
+<p>Our monitoring scheme cannot reach our master. But it can reach the slaves, an they're all saying: <em>"I'm happy!"</em></p>
+<p>This gives us suspicion enough to avoid failing over. We may not actually have a problem: it's just <em>us</em> that are unable to connect to the master.</p>
+<p><em>Right?</em></p>
+<p>There are still interesting use cases. Consider the problem of <strong>"Too many connections"</strong> on the master. You are unable to connect; the application starts throwing errors; but the slaves are happy. They were there first. They started replicating at the dawn of time, long before there was an issue. Their persistent connections are good to go.</p>
+<p>Or the master may suffer a deadlock. A long, blocking <strong>ALTER TABLE</strong>. An accidental <strong>FLUSH TABLES WITH READ LOCK</strong>. Or whatever occasional bug we hit. Slaves are still connected; but new connections are hanging; and your monitoring query is unable to process.</p>
+<p>And still our holistic approach can find that out: as we are able to connect to our slaves, we are also able to ask them: well what have your relay logs have to say about this? Are we progressing in replication position? Do we actually find application content in the slaves' relay logs? We can do all this via MySQL protocol (<strong>"SHOW SLAVE STATUS"</strong>, <strong>"SHOW RELAYLOG EVENTS"</strong>).</p>
+<p>Understanding the topology gives you greater insight into your failure case; you have increasing leevels of confidentiality in your analysis. Strike that: in your <em>automated</em> analysis.</p>
+<h3>Dead master and slaves</h3>
+<p>They're all <em>gone</em>!</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2015/07/mysql-topologies-failures-5.png"><img class="alignnone size-full wp-image-7287" src="{{ site.baseurl }}/assets/mysql-topologies-failures-5.png" alt="mysql-topologies-failures (5)" width="192" height="108" /></a></p></blockquote>
+<p>You cannot reach the master <em>and</em> you cannot reach any of its slaves. Once you are able to associate your master and slaves you can conclude you either have a complete DC power failure problem (or is this cross DC?) or you are having a network partitioning problem. Your application may or may not be affected -- but at least you know where to start. Compare with:</p>
+<h3>Failed DC</h3>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2015/07/mysql-topologies-failures-6.png"><img class="alignnone size-full wp-image-7289" src="{{ site.baseurl }}/assets/mysql-topologies-failures-6.png" alt="mysql-topologies-failures (6)" width="192" height="108" /></a></p></blockquote>
+<p>I'm stretching it now, because when a DC fails all the red lights start flashing. Nonetheless, if M, A, B are all in one DC and C is on another, you have yet another diagnosis.</p>
+<h3>Dead master and some slaves</h3>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2015/07/mysql-topologies-failures-7.png"><img class="alignnone size-full wp-image-7290" src="{{ site.baseurl }}/assets/mysql-topologies-failures-7.png" alt="mysql-topologies-failures (7)" width="192" height="108" /></a></p></blockquote>
+<p>Things start getting complicated when you're unable to get an authorized answer from everyone. What happens if the master is dead as well as one of its slaves? We previously expected all slaves to say "we cannot replicate". For us, master being unreachable, some slaves being dead and all other complaining on IO thread is good enough indication that the master is dead.</p>
+<h3>All first tier slaves not replicating</h3>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2015/07/mysql-topologies-failures-9.png"><img class="alignnone size-full wp-image-7293" src="{{ site.baseurl }}/assets/mysql-topologies-failures-9.png" alt="mysql-topologies-failures (9)" width="192" height="108" /></a></p></blockquote>
+<p>Not a failover case, but certainly needs to ring the bells. All master's direct slaves are failing replication on some SQL error or are just stopped. Our topology is turning stale.</p>
+<h3>Intermediate masters</h3>
+<p>With intermediate master the situation is not all that different. In the below:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2015/07/Untitled-presentation.png"><img class="alignnone size-full wp-image-7294" src="{{ site.baseurl }}/assets/Untitled-presentation.png" alt="Untitled presentation" width="480" height="270" /></a></p></blockquote>
+<p>The servers <strong>E</strong>, <strong>F</strong>, <strong>G</strong> replicating from <strong>C</strong> provide us with the holistic view on <strong>C</strong>. <strong>D</strong> provides the holistic view on <strong>A</strong>.</p>
+<h3>Reducing noise</h3>
+<p>Intermediate master failover is a much simpler operation than master failover. Changing masters require name resolve changes (of some sort), whereas moving slaves around the topology affects no one.</p>
+<p>This implies:</p>
+<ul>
+<li>We don't mind over-reacting on failing over intermediate masters</li>
+<li>We pay with more noise</li>
+</ul>
+<p>Sure, we don't mind failing over <strong>D</strong> elsewhere, but as <strong>D</strong> is the only slave of <strong>A</strong>, it's enough that <strong>D</strong> hiccups that we might get an alert ("all" intermediate master's slaves are not replicating). To that effect <em>orchestrator</em> treats single slave scenarios differently than multiple slaves scenarios.</p>
+<h3>Not so fun setups and failures</h3>
+<p>At Booking.com we are in transition between setups. We have some legacy configuration, we have a roadmap, two ongoing solutions, some experimental setups, and/or all of the above combined. Sorry.</p>
+<p>Some of our masters are on SAN. We are moving away from this; for those masters on SANs we have cold standbys in an active-passive mode; so master failure -&gt; unmount SAN -&gt; mount SAN on cold standby -&gt; start MySQL on cold standby -&gt; start recovery -&gt; watch some TV -&gt; go shopping -&gt; end recovery.</p>
+<p>Only SANs fail, too. When the master fails, switching over to the cold standby is pointless if the origin of the problem is the SAN. And given that some <em>other</em> masters share the same SAN... whoa. As I said we're moving away from this setup for Pseudo GTID and then for Binlog Servers.</p>
+<p>The SAN setup also implied using VIPs for some servers. The slaves reference the SAN master via VIP, and when the cold standby start up it assumes the VIP, and the slaves know nothing about this. Same setup goes for DC masters. What happens when the VIP goes down? MySQL is running happily, but slaves are unable to connect. Does that make for a failover scenario? For intermediate masters we're pushing it to be so, failing over to a normal local-disk based server; this improves out confidence in non-SAN setups (which we have plenty of, anyhow).</p>
+<h3>Double checking</h3>
+<p>You sample your server once every X seconds. But in a failover scenario you want to make sure your data is up to date. When <em>orchestrator</em> suspects a dead master (i.e. cannot reach the master) it immediately contacts its direct slaves and checks their status.</p>
+<p>Likewise, when <em>orchestrator</em> sees a first tier slave with broken IO thread, it immediately contacts the master to check if everything is fine.</p>
+<p>For intermediate masters <em>orchestrator</em> is not so concerned and does not issue emergency checks.</p>
+<h3>How to fail over</h3>
+<p>Different story. Some other time. But failing over makes for complex decisions, based on who the replicating slaves are; with/out log-slave-updates; with-out GTID; with/out Pseudo-GTID; are binlog servers available; which slaves are available in which data centers. Or you may be using Galera (we're not) which answers most of the above.</p>
+<p>Anyway we use <em>orchestrator</em> for that; it knows our topologies, knows how they should look like, understands how to heal them, knows MySQL replication rules, and invokes external processes to do the stuff it doesn't understand.</p>

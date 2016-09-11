@@ -1,0 +1,76 @@
+---
+title: Seconds_behind_master vs. Absolute slave lag
+date: 2014-01-24 15:41:18.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Monitoring
+- Replication
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I am unable to bring myself to trust the <strong>Seconds_behind_master</strong> value on <strong>SHOW SLAVE STATUS</strong>. Even with MySQL <strong>5.5</strong>'s <strong>CHANGE MASTER TO ... MASTER_HEARTBEAT_PERIOD</strong> (good thing, applied when no traffic goes from master to slave) it's easy and common to find fluctuations in <strong>Seconds_behind_master</strong> value.</p>
+<p>And, when sampled by your favourite monitoring tool, this often leads to <em>many</em> false negatives.</p>
+<p>At Outbrain we use HAProxy as proxy to our slaves, on multiple clusters. More about that in a future post. What's important here is that our decision whether a slave enters or leaves a certain pool (i.e. gets UP or DOWN status in HAProxy) is based on replication lag. Taking slaves out when they are actually replicating well is bad, since this reduces the amount of serving instances. Putting slaves in the pool when they are actually lagging too much is bad as they contain invalid, irrelevant data.</p>
+<p>To top it all, even when correct, the <strong>Seconds_behind_master</strong> value is practically irrelevant on <strong>2nd</strong> level slaves. In a <em>Master -&gt; Slave1 -&gt; Slave2</em> setup, what does it mean that <em>Slave2</em> has <strong>Seconds_behind_master = 0</strong>? Nothing much to the application: <em>Slave1</em> might be lagging an hour behind the master, or may not be replicating at all. <em>Slave2</em> might have an hour's data missing even though it says its own replication is fine.</p>
+<p>None of the above is news, and yet many fall in this pitfall. The solution is quite old as well; it is also very simple: do your own heartbeat mechanism, at your favourite time resolution, and measure slave lag by timestamp you yourself updated on the master.</p>
+<p><strong>Maatkit</strong>/<strong>percona-toolkit</strong> did this long time ago with <strong>mk-heartbeat</strong>/<strong><a href="http://www.percona.com/doc/percona-toolkit/2.2/pt-heartbeat.html">pt-heartbeat</a></strong>. We're doing it in a very similar manner. The benefit is obvious. Consider the following two graphs; the first shows <strong>Seconds_behind_master</strong>, the seconds shows our own <strong>Absolute_slave_lag</strong> measurement.<!--more--></p>
+<blockquote>
+<p>[caption id="attachment_6590" align="alignnone" width="700"]<a href="http://code.openark.org/blog/wp-content/uploads/2013/09/seconds_behind_master.png"><img class="size-full wp-image-6590 " alt="seconds_behind_master" src="{{ site.baseurl }}/assets/seconds_behind_master.png" width="700" height="350" /></a> seconds_behind_master[/caption]</p></blockquote>
+<blockquote>
+<p>[caption id="attachment_6591" align="alignnone" width="700"]<a href="http://code.openark.org/blog/wp-content/uploads/2013/09/absolute_slave_lag.png"><img class="size-full wp-image-6591" alt="absolute_slave_lag" src="{{ site.baseurl }}/assets/absolute_slave_lag.png" width="700" height="350" /></a> absolute_slave_lag[/caption]</p></blockquote>
+<p>The two graphs were taken simultaneously on a set of servers. Excuse me for not having same colours for same slaves, I blame it on graphite. Some small gaps are seen here that are irrelevant to our discussion (yes, we had some graphite delivery issues).</p>
+<p>As you can see the <strong>Absolute_slave_lag</strong> does not (and cannot!) fluctuate. With our 10 second heartbeat resolution it always shows an accurate value. In fact, within the hearbeat resolution, it show the de facto replication lag. Let's stress this one:</p>
+<blockquote><p>When you implement your own heartbeat mechanism, your own measured slave lag makes for the de facto slave replication lag within your heartbeat interval.</p></blockquote>
+<p>As another example, consider what happens when a slave stop replicating (i.e. some issued <strong>STOP SLAVE</strong>, or replication fails). The <strong>Seconds_behind_master</strong> value is <strong>NULL</strong>, which is a good indication to error, and easy to monitor. But how does it present visually? Not too well. It is usually just not rendered:</p>
+<blockquote><p><img alt="" src="{{ site.baseurl }}/assets/wE9+fg3khXiVQAAAABJRU5ErkJggg==" /></p></blockquote>
+<p>But, consider: a slave that <strong>STOP</strong>s for <strong>1</strong> minute for whatever reason is still only <strong>1</strong> minute behind master. That is, it is by <strong>60</strong> seconds up to date with master's data. If we decide a slave should be serving for up to <strong>5</strong> minutes of lag, then our slave can still be used for serving for <strong>4</strong> more minutes! <strong>Seconds_behind_master</strong> does not provide us with helpful information. <strong>Absolute_slave_lag</strong> does. Consider the above system status when measured by <strong>Absolute_slave_lag</strong>:</p>
+<blockquote><p><img alt="" src="{{ site.baseurl }}/assets/gfzmV4p3EeQAAAABJRU5ErkJggg==" /></p></blockquote>
+<p>We now get good insight on how far our slave is behind. Of course we monitor <strong>Seconds_behind_master</strong> to find out replication is not working; by our HAProxy only cares about <strong>Absolute_slave_lag</strong>.</p>
+<h4>How does it work?</h4>
+<p>Very similar to <strong>pt-heartbeat</strong>, there's a dedicated table which we update with current timestamp. We read that timestamp on slave and compare with actual time on host.</p>
+<p>We have these DDL:</p>
+<blockquote>
+<pre>create table my_heartbeat (
+  id int unsigned not null primary key,
+  master_ts timestamp,
+  update_by varchar(128) default NULL
+);
+
+create or replace view my_heartbeat_status_v as
+  select 
+    master_ts,
+    now() as time_now,
+    timestampdiff(SECOND, master_ts, now()) as slave_lag_seconds,
+    update_by
+  from my_heartbeat
+;
+
+insert into my_heartbeat (id, master_ts, update_by) values (1, NOW(), 'init') on duplicate key update master_ts=NOW(), update_by=VALUES(update_by);
+
+create event 
+  update_heartbeat_event
+  on schedule every 10 second starts current_timestamp 
+  on completion preserve
+  enable
+  do  
+    insert into my_heartbeat (id, master_ts, update_by) values (1, NOW(), 'event_scheduler') on duplicate key update master_ts=NOW(), update_by=VALUES(update_by);
+;</pre>
+</blockquote>
+<p>We use both event scheduler as well as external script to pump the heartbeat value.</p>
+<p>On slave, utilize the view to:</p>
+<blockquote>
+<pre>select slave_lag_seconds from my_heartbeat_status_v</pre>
+</blockquote>
+<p>The above query answers: "how long ago was did I (the slave) get a timestamp update from the master?". The result is correct within 10 seconds resolution, in our example.</p>
+<p>Not new, but not well known. I hope the above provides you with better visibility into your replication lag.</p>

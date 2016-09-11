@@ -1,0 +1,183 @@
+---
+title: Self throttling MySQL queries
+date: 2011-11-01 09:55:47.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Hack
+- MyISAM
+- Performance
+- SQL
+- Stored routines
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: rjames@yahoo-inc.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Recap on the problem:</p>
+<ul>
+<li>A query takes a long time to complete.</li>
+<li>During this time it makes for a lot of I/O.</li>
+<li>Query's I/O overloads the db, making for other queries run slow.</li>
+</ul>
+<p>I introduce the notion of self-throttling queries: queries that go to sleep, by themselves, throughout the runtime. The sleep period means the query does not perform I/O at that time, which then means other queries can have their chance to execute.</p>
+<p>I present two approaches:</p>
+<ul>
+<li>The naive approach: for every <strong>1,000</strong> rows, the query sleep for <strong>1</strong> second</li>
+<li>The factor approach: for every <strong>1,000</strong> rows, the query sleeps for the amount of time it took to iterate those <strong>1,000</strong> rows (effectively doubling the total runtime of the query).<!--more--></li>
+</ul>
+<h4>Sample query</h4>
+<p>We use a simple, single-table scan. No aggregates (which complicate the solution considerably).</p>
+<blockquote>
+<pre>SELECT
+  rental_id,
+  TIMESTAMPDIFF(DAY, rental_date, return_date) AS rental_days
+FROM
+  sakila.rental
+;</pre>
+</blockquote>
+<h4>The naive solution</h4>
+<p>We need to know every <strong>1,000</strong> rows. So we need to count the rows. We do that by using a counter, as follows:</p>
+<blockquote>
+<pre>SELECT
+  rental_id,
+  TIMESTAMPDIFF(DAY, rental_date, return_date) AS rental_days,
+  @row_counter := @row_counter + 1
+FROM
+  sakila.rental,
+  (SELECT @row_counter := 0) sel_row_counter
+;</pre>
+</blockquote>
+<p>A thing that bothers me, is that I wasn't asking for an additional column. I would like the result set to remain as it were; same result structure. We also want to sleep for <strong>1</strong> second for each <strong>1,000</strong> rows. So we merge the two together along with one of the existing columns, like this:</p>
+<blockquote>
+<pre>SELECT
+  rental_id +
+    IF(
+      (@row_counter := @row_counter + 1) % 1000 = 0,
+      SLEEP(1), 0
+    ) AS rental_id,
+  TIMESTAMPDIFF(DAY, rental_date, return_date) AS rental_days
+FROM
+  sakila.rental,
+  (SELECT @row_counter := 0) sel_row_counter
+;</pre>
+</blockquote>
+<p>To remain faithful to <a href="http://code.openark.org/blog/mysql/slides-from-my-talk-programmatic-queries-things-you-can-code-with-sql">my slides</a>, I rewrite as follows, and this is <em>the naive solution</em>:</p>
+<blockquote>
+<pre>SELECT
+  rental_id +
+    CASE
+      WHEN <strong>(@row_counter := @row_counter + 1) % 1000 = 0</strong> THEN <strong>SLEEP(1)</strong>
+      ELSE <strong>0</strong>
+    END AS rental_id,
+  TIMESTAMPDIFF(DAY, rental_date, return_date) AS rental_days
+FROM
+  sakila.rental,
+  (SELECT @row_counter := 0) sel_row_counter
+;</pre>
+</blockquote>
+<p>The <strong>WHEN</strong> clause always returns <strong>0</strong>, so it does not affect the value of <strong>rental_id</strong>.</p>
+<h4>The factor approach</h4>
+<p>In the factor approach we wish to keep record of query execution, every <strong>1,000</strong> rows. I introduce a nested <strong>WHEN</strong> statement which updates time records. I rely on <strong>SYSDATE()</strong> to return the true time, and on <strong>NOW()</strong> to return query execution start time.</p>
+<blockquote>
+<pre>SELECT
+  rental_id +
+    CASE
+      WHEN (@row_counter := @row_counter + 1) IS NULL THEN NULL
+      WHEN <strong>@row_counter % 1000 = 0</strong> THEN
+        CASE
+          WHEN (@time_now := <strong>SYSDATE()</strong>) IS NULL THEN NULL
+          WHEN (@time_diff := (<strong>TIMESTAMPDIFF(SECOND, @chunk_start_time, @time_now)</strong>)) IS NULL THEN NULL
+          WHEN <strong>SLEEP(@time_diff)</strong> IS NULL THEN NULL
+          WHEN (@chunk_start_time := <strong>SYSDATE()</strong>) IS NULL THEN NULL
+          ELSE 0
+        END
+      ELSE 0
+    END AS rental_id,
+  TIMESTAMPDIFF(DAY, rental_date, return_date) AS rental_days
+FROM
+  sakila.rental,
+  (SELECT @row_counter := 0) sel_row_counter,
+  (SELECT @chunk_start_time := NOW()) sel_chunk_start_time
+;</pre>
+</blockquote>
+<h4>Proof</h4>
+<p>How can we prove that the queries do indeed work?</p>
+<p>We can see if the total runtime sums up to the number of sleep calls, in seconds; but how do we know that sleeps do occur at the correct times?</p>
+<p>A solution I offer is to use a stored routines which logs to a MyISAM table (a non transactional table) the exact time (using <strong>SYSDATE()</strong>) and value per row. The following constructs are introduced:</p>
+<blockquote>
+<pre><strong>CREATE TABLE</strong> test.proof(
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  dt DATETIME NOT NULL,
+  msg VARCHAR(255)
+) <strong>ENGINE=MyISAM</strong>;
+
+DELIMITER $$
+<strong>CREATE FUNCTION</strong> test.prove_it(message VARCHAR(255)) RETURNS TINYINT
+DETERMINISTIC
+MODIFIES SQL DATA
+BEGIN
+  <strong>INSERT INTO test.proof (dt, msg) VALUES (SYSDATE(), message); RETURN 0;</strong>
+END $$
+DELIMITER ;</pre>
+</blockquote>
+<p>The <strong>prove_it()</strong> function records the immediate time and a message into the MyISAM table, which immediately accepts the write, being non-transactional. It returns with <strong>0</strong>, so we will now embed it within the query. Of course, the function itself incurs some overhead, but it will nevertheless convince you that <strong>SLEEP()</strong>s do occur at the right time!</p>
+<blockquote>
+<pre>SELECT
+  rental_id +
+    CASE
+      WHEN (@row_counter := @row_counter + 1) IS NULL THEN NULL
+      WHEN @row_counter % 1000 = 0 THEN
+        CASE
+          WHEN (@time_now := SYSDATE()) IS NULL THEN NULL
+          WHEN (@time_diff := (TIMESTAMPDIFF(SECOND, @chunk_start_time, @time_now))) IS NULL THEN NULL
+          WHEN SLEEP(@time_diff)<strong> + test.prove_it(CONCAT('will sleep for ', @time_diff, ' seconds'))</strong> IS NULL THEN NULL
+          WHEN (@chunk_start_time := SYSDATE()) IS NULL THEN NULL
+          ELSE 0
+        END
+      ELSE 0
+    END AS rental_id,
+  TIMESTAMPDIFF(DAY, rental_date, return_date) AS rental_days
+FROM
+  sakila.rental,
+  (SELECT @row_counter := 0) sel_row_counter,
+  (SELECT @chunk_start_time := NOW()) sel_chunk_start_time
+;
+
+mysql&gt; SELECT * FROM test.proof;
++----+---------------------+--------------------------+
+| id | dt                  | msg                      |
++----+---------------------+--------------------------+
+|  1 | 2011-11-01 09:22:36 | will sleep for 1 seconds |
+|  2 | 2011-11-01 09:22:36 | will sleep for 0 seconds |
+|  3 | 2011-11-01 09:22:36 | will sleep for 0 seconds |
+|  4 | 2011-11-01 09:22:36 | will sleep for 0 seconds |
+|  5 | 2011-11-01 09:22:36 | will sleep for 0 seconds |
+|  6 | 2011-11-01 09:22:36 | will sleep for 0 seconds |
+|  7 | 2011-11-01 09:22:38 | will sleep for 1 seconds |
+|  8 | 2011-11-01 09:22:38 | will sleep for 0 seconds |
+|  9 | 2011-11-01 09:22:38 | will sleep for 0 seconds |
+| 10 | 2011-11-01 09:22:38 | will sleep for 0 seconds |
+| 11 | 2011-11-01 09:22:38 | will sleep for 0 seconds |
+| 12 | 2011-11-01 09:22:40 | will sleep for 1 seconds |
+| 13 | 2011-11-01 09:22:40 | will sleep for 0 seconds |
+| 14 | 2011-11-01 09:22:40 | will sleep for 0 seconds |
+| 15 | 2011-11-01 09:22:40 | will sleep for 0 seconds |
++----+---------------------+--------------------------+</pre>
+</blockquote>
+<p>The above query is actually very fast. Try adding <strong>BENCHMARK(1000,ENCODE('hello','goodbye'))</strong> to rental_id so as to make it slower, or just use it on a really large table, see what happens (this is what I actually used to make the query run for several seconds in the example above).</p>
+<p>Observant reads will note that the <strong>"will sleep..."</strong> message actually gets written <em>after</em> the <strong>SLEEP()</strong> call. I leave this as it is.</p>
+<p>Another very nice treat of the code is that you don't need sub-second resolution for it to work. If you look at the above, we don't actually go to sleep every <strong>1,000</strong> rows (<strong>1,000</strong> is just too quick in the query -- perhaps I should have used <strong>10,000</strong> seconds). But we <em>do</em> make it once a second has <em>elapsed</em>. Which means it works correctly <em>on average</em>. Of course, the entire discussion is only of interest when a query executes for a <em>substantial</em> number of seconds, so this is just an anecdote.</p>
+<h4>And the winner is...</h4>
+<p>Wow, this <a href="http://code.openark.org/blog/mysql/contest-for-glory-write-a-self-throttling-mysql-query">contest</a> was anything but popular. <strong><a href="http://marcalff.blogspot.com/">Marc Alff</a></strong> is the obvious winner: he is the <em>only</em> one to suggest a solution :)</p>
+<p>But Marc uses a very nice trick: he reads the <strong>PERFORMANCE_SCHEMA</strong>. Now, I'm not sure how the <strong>PERFORMANCE_SCHEMA</strong> gets updated. I know that the <strong>INFORMATION_SCHEMA.GLOBAL_STATUS</strong> table does not get updated by a query until the query completes (so you cannot expect a change in <strong>innodb_rows_read</strong> throughout the execution of the query). I just didn't test it (homework, anyone?). If it does get updated, then we can throttle the query based on InnoDB page reads using a simple query. Otherwise, an access to <strong>/proc/diskstats</strong> is possible, assuming no <em>apparmor</em> or <em>SELinux</em> are blocking us.</p>
+<p>Marc also uses a stored function, which is the <em>clean</em> way of doing it; however I distrust the overhead incurred by s stored routine and prefer my solution (which is, admittedly, not a pretty SQL sight!).</p>
+<p>Happy throttling!</p>

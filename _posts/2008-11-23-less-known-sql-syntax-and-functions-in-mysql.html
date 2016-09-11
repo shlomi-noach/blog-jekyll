@@ -1,0 +1,52 @@
+---
+title: Less known SQL syntax and functions in MySQL
+date: 2008-11-23 07:53:52.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- MyISAM
+- SQL
+- Syntax
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+excerpt: "\"Standard SQL\" is something you read about. All popular databases have
+  modified version of SQL. Each database adds its own flavor and features to the standard.
+  MySQL is no different.\r\n\r\nSome deviations are storage engine dependent. Others
+  are more general. Many, such as INSERT IGNORE, are commonly used. Here's a list
+  of some MySQL deviations to SQL, which are not so well known."
+---
+<p>"Standard SQL" is something you read about. All popular databases have modified version of SQL. Each database adds its own flavor and features to the standard. MySQL is no different.</p>
+<p>Some deviations are storage engine dependent. Others are more general. Many, such as <strong><code>INSERT IGNORE</code></strong>, are commonly used. Here's a list of some MySQL deviations to SQL, which are not so well known.<!--more--></p>
+<p>I'll be using MySQL's <a title="MySQL's world database setup" href="http://dev.mysql.com/doc/world-setup/en/world-setup.html">world database</a> for demonstration.</p>
+<h4>GROUP_CONCAT</h4>
+<p style="padding-left: 30px;">Assume the following query: <strong><code>SELECT CountryCode, COUNT(*) FROM City GROUP BY CountryCode</code></strong>, which selects the number of cities per country, using MySQL's world database. It is possible to get a name for one "sample" city per country using standard SQL: <strong><code>SELECT CountryCode, Name, COUNT(*) FROM City GROUP BY CountryCode</code></strong></p>
+<p style="padding-left: 30px;">But in MySQL it is also possible to get the list of cities per group: <strong><code>SELECT CountryCode, GROUP_CONCAT(Name), COUNT(*) FROM City GROUP BY CountryCode</code></strong>. This will provide with a comma delimited string of all city names per country.</p>
+<h4>ORDER BY NULL</h4>
+<p style="padding-left: 30px;">If you ran the previous queries, you may have noticed that the results were ordered by CountryCode. MySQL's default behavior when <strong><code>GROUP BY</code></strong> is used, is to order by the grouped column. But this means sorting is required, possibly using merge passes and temporary tables. MySQL accepts the following syntax:</p>
+<p style="padding-left: 30px;"><strong><code>SELECT CountryCode, COUNT(*) FROM City GROUP BY CountryCode ORDER BY NULL</code></strong></p>
+<p style="padding-left: 30px;">If you <strong><code>EXPLAIN</code></strong> the query, you'll see no "Using filesort". When not using <strong><code>ORDER BY NULL</code></strong>, "Using filesort" appears.</p>
+<h4>ALTER TABLE ... ORDER BY</h4>
+<p style="padding-left: 30px;">MyISAM tables are not clustered. The table data is independent of indexes. Depending on <strong><code>concurrent_insert</code></strong> settings, new rows are either appended to the end of the table, or fill the space previously occupied by <strong>DELETE</strong>d rows.</p>
+<p style="padding-left: 30px;">When you <strong><code>SELECT (*) FROM Country</code></strong>, the order of rows is as stored on disk. It is possible to do a one-time reordering of rows in a MyISAM table by executing: <strong><code>ALTER TABLE Country ORDER BY Code</code></strong>. This is a lengthy operation (on large tables), which locks the table, so take care when using it. The change does not last for long, either: as you <strong><code>INSERT</code></strong> new rows, the rows get out of order again. But if your table does not get modified, or only gets modified rarely, this is a nice trick to use when order of rows is important, and you don't want to pay the price of sorting per query.</p>
+<h4>ROW_COUNT()</h4>
+<p style="padding-left: 30px;">Anyone who uses MySQL with a connector (say, Connector/J with JDBC), knows that <strong><code>INSERT</code></strong>, <code><strong>DELETE</strong> </code>and <code><strong>UPDATE</strong> </code>statements return with an integer value: the number of modified rows. In MySQL, the explicit way to get the number of modified rows is to invoke <strong><code>SELECT ROW_COUNT()</code></strong> right after your query. This method is useful if you like to know whether your <strong><code>DELETE</code></strong> did in fact remove rows, or <strong><code>INSERT IGNORE</code></strong> did in fact add a row, etc.</p>
+<h4>LIMIT</h4>
+<p style="padding-left: 30px;">Well, MySQL DBAs are familiar with it. I just thought I'd mention <strong><code>LIMIT</code></strong>, since it's a MySQL deviation. I was surprised to find that out, when an Oracle DBA once asked me how I did paging with results. "You mean like <strong><code>LIMIT 60,10</code></strong>?" I asked, and he replied: "LIMIT??". So, you can <strong><code>LIMIT</code></strong> to limit the number of results, like: <strong><code>SELECT * FROM Country LIMIT 10</code></strong>, to only get first 10 rows, or to do paging like: <strong><code>SELECT * FROM Country LIMIT 60,10</code></strong>, which skips 60 rows, then reads 10.</p>
+<h4>SQL_CALC_FOUND_ROWS, FOUND_ROWS()</h4>
+<p style="padding-left: 30px;">While at it, it may be required to use LIMIT to only return 10 rows, but still ask MySQL how many rows there really were. Do it like this:</p>
+<p style="padding-left: 30px;"><strong><code>SELECT SQL_CALC_FOUND_ROWS Code, Name FROM Country LIMIT 10;</code></strong></p>
+<p style="padding-left: 30px;"><strong><code>SELECT FOUND_ROWS();</code></strong></p>
+<p style="padding-left: 30px;">First query gives the required 10 results. Second query says "239", which is the total rows I would get had I not used <strong><code>LIMIT</code></strong>. Note that a <strong><code>SELECT SQL_CALC_FOUND_ROWS</code></strong> is a "heavy" query, which actually searches through the entire rowset, and then only returns the LIMITed rows. Use with care.</p>
+<h4>PROCEDURE ANALYSE</h4>
+<p style="padding-left: 30px;">A very nice diagnostic tool, which tells us what data types are proper based on existing data. If we have an <strong><code>INT</code></strong> column, but all values are smaller than 200, <strong><code>PROCEDURE_ANALYSE()</code></strong> recommends that we use a <strong><code>TINYINT</code></strong>. Usage: <strong><code>SELECT * FROM Country PROCEDURE ANALYSE(10,10)</code></strong>. Just remember it does not anticipate data growth. It only relies on current data.</p>
+<h4>INSERT IGNORE</h4>
+<p style="padding-left: 30px;">OK, I said above that it is commonly used, but couldn't help myself, it's just too useful to leave out. <strong><code>INSERT IGNORE INTO City (id, Name) VALUES (1000, 'Te Anau')</code></strong> will silently abort if there's a <strong><code>UNIQUE KEY</code></strong> on `id` and an existing id=1000 value. A normal <strong><code>INSERT</code></strong> will terminate with an error, or raise an Exception in your application's code. It is of particular use when doing an extended INSERT: <strong><code>INSERT IGNORE INTO City (id, Name) VALUES (1000, 'Te Anau'), (9009, 'Wanaka')</code></strong> may have trouble with the first row, but <em>will</em> insert the second row. <strong><code>ROW_COUNT()</code></strong> can tell me how well it went.</p>

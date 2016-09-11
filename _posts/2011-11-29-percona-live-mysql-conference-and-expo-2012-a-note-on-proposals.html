@@ -1,0 +1,38 @@
+---
+title: 'Percona Live: MySQL Conference And Expo 2012 - a note on proposals'
+date: 2011-11-29 13:08:05.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- mysqlconf
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>As a member of the <a href="http://www.percona.com/live/mysql-conference-2012/conference-committee">conference committee</a> I review the session and tutorial proposals for the <a href="http://www.percona.com/live/mysql-conference-2012/">Percona Live MySQL conference</a> in Santa Clara, 2012.</p>
+<p>The sessions are expected to be technical, and I'm happy the proposals follow this guideline. I use <a href="http://datacharmer.blogspot.com/2008/09/how-to-get-your-proposal-accepted-to.html">Giuseppe</a>'s and <a href="http://www.xaprb.com/blog/2009/12/19/how-to-write-a-good-mysql-conference-proposal/">Baron</a>'s general guidelines for submitting a proposal. I wish to humbly add a couple notes myself.</p>
+<h4>Be fairly brief</h4>
+<p>Explain your session/tutorial as clearly as you can. The reader should be able to get the general impression of the session from two or three paragraphs. Some can make a point in two sentences; for most it would take somewhat more.</p>
+<p>If you're going to talk about some database feature, for example, please do not write the manual for that feature. That's for the session itself. Just explain how you're going to discuss the feature, and why it should be of interest (e.g. what the benefits of this feature are, the risks or pitfalls, the ingenious <strong>C</strong> code behind it or the quirks of the operating system involved).</p>
+<h4>Clarify</h4>
+<p>It's important for me to understand two things when reading a proposal, which establish the grounds for better evaluating the proposal:</p>
+<ul>
+<li>Who the target audience is (newbies, developers, DBAs, Linux internal experts etc.)</li>
+<li>To what depth are you going to deliver the content you describe.</li>
+</ul>
+<p>That is not to say you should explicitly state "This session is for MySQL DBAs", but the attendee should be able to easily decide whether your session appeals to his type of work or expertise. I, myself, have happened upon sessions that were completely different from what I expected. To illustrate, I give two examples, while not disclosing the exact details:</p>
+<ul>
+<li>A session which was about locking in database. I got the impression it was about ways to avoid locking, issues with mutexes etc. It turned out to be a discussion between the presenter and a few member of the audience about the specific code internals, lines <strong>667-684</strong> in the <strong>lock_module.cc</strong> file, and the recently reported bug. To me it was more like the weekly rnd meeting of some company. I couldn't understand anything of the entire talk.</li>
+<li>A session promising insight on working out great scale-out with some product: I was expecting to hear of the <em>"DOs and DON'Ts"</em>, or of great configuration and implementation tricks on the subject. However, it turned out to be more of a general talk on "how we used the product in our company and found it to work great".</li>
+</ul>
+<p>The two sessions above were perfectly valid, and had their place in the conference. But were poorly described in the two respects I mentioned.</p>
+<p>A great submission, in my opinion, is one where attendees get what the expect, and don't shyly leave the conference room <strong>15</strong> minutes into the talk.</p>
+<p>Submit a proposal <a href="http://www.percona.com/live/mysql-conference-2012/">here</a>.</p>

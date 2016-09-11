@@ -1,0 +1,91 @@
+---
+title: Merging tables with INSERT...ON DUPLICATE KEY UPDATE
+date: 2013-02-21 14:12:48.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- SQL
+- Syntax
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Had a case recently where I had to merge data from two identically structured tables containing nearly identical data.</p>
+<p>"Nearly identical" meaning most table data is identical in both; sometimes a row is missing from one of the tables; sometimes same row (according to PK) appears in both, but some columns are NULL is one tables (while others can be NULL in the second).</p>
+<p>Otherwise no contradicting data: it was not possible for some data to be "3" in one table and "4" in the other.</p>
+<h4>How do you create a merge of the tables, such that all missing rows are completed, and NULLs replaced by actual values when possible?</h4>
+<p><a href="http://www.percona.com/doc/percona-toolkit/2.1/pt-table-sync.html">pt-table-sync</a> comes to mind: one can do a bidirectional syncing of two tables, and actually stating how to resolve ambiguities (like "greater value wins"). Very powerful! An example would be:</p>
+<blockquote>
+<pre>pt-table-sync --bidirectional --conflict-column=a --conflict-comparison=greatest --tables ...</pre>
+</blockquote>
+<p>However I didn't actually have any problem with the tables themselves. The two tables were just fine as they were; missing or NULL data does not indicate an error on their part. I wanted to get their merge. <em>pt-table-sync</em> is still up for the job: we can duplicate them, merge on the copy... But I prefer a query over an external script when possible.</p>
+<h4>INSERT...ON DUPLICATE KEY UPDATE</h4>
+<p>This <a href="http://dev.mysql.com/doc/refman/5.5/en/insert-on-duplicate.html">MySQL-specific syntax</a> is actually quite powerful. It basically says "if the insert fails due to unique constraint, you get a chance to update the row causing the failure". But it also allows for smart setting of the column via the <strong>VALUES()</strong> clause. Let's present some sample data and then see the solution.<!--more--></p>
+<p>Assume the following table definition:</p>
+<blockquote>
+<pre>create table t1 (
+  pkdt datetime,
+  pki int,
+  a int,
+  b int,
+  c int,
+  primary key (pkdt, pki)
+);</pre>
+</blockquote>
+<p>Same structure holds for <strong>t1</strong>, <strong>t2</strong> and <strong>tmerge</strong> -- our target table. Looking at table data we have:</p>
+<blockquote>
+<pre>&gt; select * from t1;
++---------------------+-----+------+------+------+
+| pkdt                | pki | a    | b    | c    |
++---------------------+-----+------+------+------+
+| 2012-01-01 00:00:00 |   1 |    4 |    5 |    6 |
+| 2012-01-02 00:00:00 |   2 | NULL |    5 |    6 |
+| 2012-01-04 00:00:00 |   4 |    4 | NULL | NULL |
+| 2012-01-05 00:00:00 |   5 | NULL |    8 | NULL |
++---------------------+-----+------+------+------+
+
+&gt; select * from t2;
++---------------------+-----+------+------+------+
+| pkdt                | pki | a    | b    | c    |
++---------------------+-----+------+------+------+
+| 2012-01-01 00:00:00 |   1 |    4 | NULL |    6 |
+| 2012-01-03 00:00:00 |   3 |    4 |    5 |    6 |
+| 2012-01-04 00:00:00 |   4 |    4 |    5 |    6 |
+| 2012-01-05 00:00:00 |   5 |    7 | NULL |    9 |
++---------------------+-----+------+------+------+</pre>
+</blockquote>
+<p>We can see a row with <strong>pki=2</strong> appears in <strong>t1</strong> but not in <strong>t2</strong>; a row with <strong>pki=3</strong> appears in <strong>t2</strong> but not in <strong>t2</strong>, and various <strong>NULL</strong>s appear throughout the rows that are shared.</p>
+<p>To get the shared table, we throw in the data from <strong>t1</strong> and <strong>t2</strong> into <strong>tmerge</strong>, in such way that a real value overwrites a <strong>NULL</strong>, like this:</p>
+<blockquote>
+<pre>insert into tmerge select * from t1;
+
+insert into tmerge select * from t2
+on duplicate key update
+  a = <strong>ifnull</strong>(tmerge.a, <strong>values</strong>(a)),
+  b = <strong>ifnull</strong>(tmerge.b, <strong>values</strong>(b)),
+  c = <strong>ifnull</strong>(tmerge.c, <strong>values</strong>(c))
+;</pre>
+</blockquote>
+<p>So even while I'm inserting values to <strong>tmerge</strong>, I'm able to check for current value, compared to the value I wish to insert, and have time to make a decision. This is really cool! The result:</p>
+<blockquote>
+<pre>&gt; select * from tmerge;
++---------------------+-----+------+------+------+
+| pkdt                | pki | a    | b    | c    |
++---------------------+-----+------+------+------+
+| 2012-01-01 00:00:00 |   1 |    4 |    5 |    6 |
+| 2012-01-02 00:00:00 |   2 | NULL |    5 |    6 |
+| 2012-01-03 00:00:00 |   3 |    4 |    5 |    6 |
+| 2012-01-04 00:00:00 |   4 |    4 |    5 |    6 |
+| 2012-01-05 00:00:00 |   5 |    7 |    8 |    9 |
++---------------------+-----+------+------+------+</pre>
+</blockquote>
+<p>Just what we wanted: all possible rows inside; real value takes over <strong>NULL</strong> whenever possible.</p>

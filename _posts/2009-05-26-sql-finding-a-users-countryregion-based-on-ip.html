@@ -1,0 +1,100 @@
+---
+title: 'SQL: finding a user''s country/region based on IP'
+date: 2009-05-26 08:35:17.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Indexing
+- Performance
+- SQL
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I've encountered the same problem twice for different customers, so I guess it's worth a discussion.</p>
+<p>A common task for web applications is to find out the country/region of a user, based on her IP address, as can be detected in the HTTP request. Depending on the country of origin, the website can translate dates for different time zones, can change locale settings, and, perhaps most commonly, show advertisements in her native language.</p>
+<p>To start with, there's a table which lists the IP ranges per country/region. Let's assume we're only dealing with IPv4:</p>
+<blockquote>
+<pre>CREATE TABLE regions_ip_range (
+  regions_ip_range_id INT UNSIGNED AUTO_INCREMENT,
+  country VARCHAR(64) CHARSET utf8,
+  region VARCHAR(64) CHARSET utf8,
+  start_ip INT UNSIGNED,
+  end_ip INT UNSIGNED,
+  …
+  PRIMARY KEY(regions_ip_range_id),
+  ...
+);</pre>
+</blockquote>
+<p>The table is fixed, and is populated. Now the question arises: how do we query this table, and which indexes should be created?</p>
+<h4>The wrong way</h4>
+<p>The form I've encountered is as follows: an index is declared on regions_ip_range:</p>
+<blockquote>
+<pre>KEY ip_range_idx (start_ip, end_ip)</pre>
+</blockquote>
+<p>And the query goes like this:</p>
+<blockquote>
+<pre>SELECT * FROM regions_ip_range
+WHERE my_ip BETWEEN start_ip AND end_ip</pre>
+</blockquote>
+<p><!--more-->It takes a grasp of indexes to understand that this is wrong. I'm not saying the results are wrong, just that the query performance is bad. Let's rewrite the query to understand why. The following query is the exact equal of the above:</p>
+<blockquote>
+<pre>SELECT * FROM regions_ip_range
+WHERE my_ip &gt;= start_ip AND my_ip &lt;= end_ip</pre>
+</blockquote>
+<p>Can you see the problem?</p>
+<p>There's a range condition on the first indexed column (<strong>start_ip</strong>). This automatically negates the use of the second column (<strong>end_ip</strong>). Reversing the order won't do, since there's also a range condition on <strong>end_ip</strong>.</p>
+<p>Effectively, if this were the only query we were executing, we would get the same performance had we defined the following index:</p>
+<blockquote>
+<pre>KEY ip_range_idx (start_ip)</pre>
+</blockquote>
+<p>Now that doesn't look promising. It's fair to guess (as happens in reality) that for the vast majority of ip addresses, MySQL would rather perform a full table scan than use the index.</p>
+<h4>Another wrong way</h4>
+<p>When pointing this to people, the natural response is: "OK, then, let's index like <em>this</em>:"</p>
+<blockquote>
+<pre>KEY start_ip_idx (start_ip)
+KEY end_ip_idx (end_ip)</pre>
+</blockquote>
+<p>Now we have two indexes, one on each address. But that won't do at all. Even if we assume MySQL will use both indexes for our query, and do an index_merge, we won't have good performance. Consider: you can't have both indexes be selective for any given IP. Either the IP is close to the beginning of the global range (in which case the '<strong>my_ip &gt;= start_ip</strong>' part is not selective) or it is nearer the upper bound (in which case the '<strong>my_ip &lt;= end_ip</strong>' part is not selective), or is somewhere in the middle, in which case none is selective.</p>
+<p>In fact, I cannot imagine MySQL would choose to use index_merge at all, and so at most one index is used, if not full table scan again.</p>
+<h4>A solution</h4>
+<p>An important step towards a solution is the realization that the IP ranges are <em>mutually exclusive</em>. No IP can lie in any two ranges, just one (at least, this is the data I've worked with. If you have hierarchical ranges, you'll need to make adjustments). This means I don't really need to index both columns. One would suffice. Say I was to put the following index:</p>
+<blockquote>
+<pre>KEY start_ip_idx (start_ip)</pre>
+</blockquote>
+<p>We've seen that the presented query won't run well on this. Can we rewrite the query as well? Sure! Here's one that will work:</p>
+<blockquote>
+<pre>SELECT * FROM regions_ip_range
+WHERE start_ip &lt;= my_ip
+ORDER BY start_ip DESC LIMIT 1</pre>
+</blockquote>
+<p>What we're asking for, now, is the first range for which our IP is larger than the range's start, reading <em>backwards</em>. What the optimizer needs to do is find the first entry for which <strong>start_ip &lt;= my_ip</strong>, using the index, and then... oh, there's no need to go on, as we have <strong>LIMIT 1</strong>.</p>
+<p>If this seems confusing, you can do the opposite. Define this key:</p>
+<blockquote>
+<pre>KEY end_ip_idx (end_ip)</pre>
+</blockquote>
+<p>And use this query, instead:</p>
+<blockquote>
+<pre>SELECT * FROM regions_ip_range
+WHERE my_ip &lt;= end_ip
+ORDER BY end_ip ASC LIMIT 1</pre>
+</blockquote>
+<p>It's interesting that EXPLAIN would still claim it's going to scan a large number of rows, since it does not take the <strong>LIMIT 1</strong> into account.</p>
+<p>I've <a title="Two storage engines; different plans, Part II" href="http://code.openark.org/blog/mysql/two-storage-engines-different-plans-part-ii">written before</a> about the differences between storage engines in the way they recommend the optimizer to use (or not to use) an index. So you may need to end up with a <strong>FORCE_INDEX</strong> after all.</p>
+<h4>Assumptions</h4>
+<p>I've made a few assumptions here:</p>
+<ol>
+<li>The table lists ranges are covering: they start with 0.0.0.0 and end with 255.255.255.255.</li>
+<li>There are no 'holes' in the table. Meaning there's bound to be a range for any given IP.</li>
+<li>IP ranges are mutually exclusive (no hierarchical IP ranges)</li>
+</ol>
+<p>If the first two assumptions are not met, it should be checked, once the query returns, that <strong>my_ip</strong> is indeed between <strong>start_ip</strong> and <strong>end_ip</strong>.</p>
+<p>If assumption #3 is not met, the data can be split to two tables: one must hold the mutually exlusive data; the second one may contain whatever data you have, possibly utilizing some hierarchial algorithm such as nested sets etc.</p>

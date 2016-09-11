@@ -1,0 +1,53 @@
+---
+layout: post
+title: Killing InnoDB Blocking transactions
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags:
+- common_schema
+- InnoDB
+- scripts
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>On a busy MySQL server locks may accumulate to the point that queries are waiting on one another for long periods of time (exactly what "long" means is for you to decide based on your requirements).</p>
+<p>InnoDB's <strong>INFORMATION_SCHEMA</strong> views provide with information about transactions &amp; locks. However it is up to us to connect the points.</p>
+<p><a href="http://code.google.com/p/common-schema/">common_schema</a> provides with a useful view called <strong><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/innodb_locked_transactions.html">innodb_locked_transactions</a></strong>. This view lists down which transaction is locked (or blocked) by which transaction, the time waited being locked, as well as the auto-generated SQL queries to kill the blocking transactions.</p>
+<p>This means you can ask the view for the <strong>KILL</strong> statements for any transaction that is blocking another transaction. Or, such that are blocking other transactions for at least <strong>30</strong> seconds. Or, just the one top blocking transaction which holds a lock the longest.</p>
+<p>Let's see some one-liners:</p>
+<ul>
+<li>See which transactions are blocking, and how many are being blocked:</li>
+</ul>
+<blockquote>
+<pre>mysql&gt; SELECT locking_trx_id, COUNT(*) FROM innodb_locked_transactions GROUP BY locking_trx_id;
++----------------+----------+
+| locking_trx_id | COUNT(*) |
++----------------+----------+
+| 9AD30296C      |        2 |
+| 9AD30296E      |        1 |
++----------------+----------+</pre>
+</blockquote>
+<ul>
+<li>Kill transactions causing other transactions to block for <strong>30</strong> seconds or more:</li>
+</ul>
+<blockquote>
+<pre>CALL <strong>eval</strong>(<span style="color: #000080;">'SELECT <strong>sql_kill_blocking_query</strong> FROM <strong>innodb_locked_transactions</strong> WHERE trx_wait_seconds &gt;= 30 GROUP BY sql_kill_blocking_query'</span>);</pre>
+</blockquote>
+<p>In my experience, when such accumulation of locks appear, there's usually one single transaction which, when completes, releases the bottleneck. Transaction locks typically make for a tree (though sometimes a forest). They rarely make for a cyclic graph, as InnoDB has a lock-loop detection algorithm which automatically kills a transaction in such a loop so as to break the deadlock.</p>
+<p>Which transaction is the supposedly one-kill-to-free-them-all? The one transaction which is blocking other transactions and which is running the longest!</p>
+<ul>
+<li>Kill top blocking transaction:</li>
+</ul>
+<blockquote>
+<pre>CALL <strong>eval</strong>(<span style="color: #000080;">'SELECT <strong>sql_kill_blocking_query</strong> FROM <strong>innodb_locked_transactions</strong> WHERE trx_wait_seconds &gt;= 10 <strong>ORDER BY trx_wait_seconds DESC, locking_trx_id ASC LIMIT 1</strong>'</span>);</pre>
+</blockquote>

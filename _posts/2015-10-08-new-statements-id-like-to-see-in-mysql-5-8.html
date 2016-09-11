@@ -1,0 +1,49 @@
+---
+title: New statements I'd like to see in MySQL 5.8
+date: 2015-10-08 09:44:50.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Opinions
+meta:
+  _wpas_done_all: '1'
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Following up on <a title="Link to New features I'd like to see in MySQL 5.8" href="http://code.openark.org/blog/mysql/new-features-id-like-to-see-in-mysql-5-8" rel="bookmark">New features I'd like to see in MySQL 5.8</a>, here are <em>statements</em> I would like to see in MySQL 5.8:</p>
+<ul>
+<li><strong>ENABLE EVENTS;</strong><br />
+When promoting a slave to master, I want to be able to enable all those events that are in <strong>SLAVESIDE_DISABLED</strong> state. Today I script an iteration over the events an constructing the <strong>ALTER EVENT...ENABLE</strong> statement one by one. Just activate those!</li>
+<li><strong>SKIP GTID TRANSACTION;</strong><br />
+I have a transaction on slave that I want to skip, and there's GTID. The sequence of</p>
+<blockquote>
+<pre>STOP SLAVE;
+SET GTID_NEXT="...";
+BEGIN;
+COMMIT;
+SET GTID_NEXT="AUTOMATIC";
+START SLAVE;</pre>
+</blockquote>
+<p>is just something I don't want to do. To compute the <strong>GTID_NEXT</strong>; to open a transaction; to use session variables; this may seem straightforward to import the above from a shell script, but calculating the next GTID is not entirely trivial; issuing the above from your programming language makes for a weird <em>"all these have to be in the same session AND you're going to do a transaction meanwhile"</em>. With golang it's actually a problem.<br />
+Make it simple for me. I'm willing to do the <strong>STOP/START SLAVE</strong>.</li>
+<li><strong>BINLOG ENTRY '&lt;arbitrary text&gt;';</strong><br />
+Very selfishly, I want to be able to inject a comment into the binary log, of arbitrary text. I want this comment to appear in SBR format, as if it were a DDL.<br />
+My selfish reason: injection of Pseudo-GTID. But I can see various other use cases, such as application level injection of app-logic checkpointing; chef/glu injection of <em>"code deployed at this time"</em>; application injection of <em>"daily audit done to this point"</em>. This is too cool and too easy to skip.</li>
+<li><strong>SHOW RELAY LOGS;</strong><br />
+Similar to <strong>SHOW BINARY LOGS;</strong></li>
+<li><strong>PURGE RELAY LOGS TO '...';</strong><br />
+Similar to <strong>PURGE BINARY LOGS TO '...';</strong><br />
+It's time relay logs stopped being 2nd class citizens.</li>
+<li><strong>SHOW NONBLOCKING [GLOBAL|SESSION] STATUS;</strong><br />
+Issue a SHOW GLOBAL|SESSION STATUS query that only shows those variables for which it does not need to block. i.e. this is a safe, fast <em>"show me everything you've got that I won't need to pay for"</em>.</li>
+</ul>
+<p>Yes, yes, <em>statements</em> are also features, I know.</p>
+<p>&nbsp;</p>

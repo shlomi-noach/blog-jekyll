@@ -1,0 +1,39 @@
+---
+title: Simple guideline for choosing appropriate InnoDB PRIMARY KEYs
+date: 2010-10-21 07:52:45.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Indexing
+- InnoDB
+meta:
+  _edit_last: '2'
+  _wp_old_slug: ''
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Risking some flames, I'd like to suggest only two options for choosing <strong>PRIMARY KEY</strong>s for InnoDB tables. I suggest they should cover 99% (throwing numbers around) of cases.</p>
+<h4>PRIMARY KEY cases</h4>
+<ol>
+<li>An integer (SMALLINT / INT / BIGINT), possibly <strong>AUTO_INCREMENT</strong> column.</li>
+<li>The combination of two columns on a many-to-many connecting table (e.g. <strong>film_actor</strong>, which connects <strong>film</strong>s to <strong>actor</strong>s), the two columns being the <strong>PRIMARY KEY</strong>s of respective data tables. This rule may be extended to 3-way relation tables.</li>
+</ol>
+<p>A short recap: an InnoDB must have a <strong>PRIMARY KEY</strong>. It will pick one if you don't offer it. It can pick a really bad <strong>UNIQUE KEY</strong> (e.g. <strong>website_url(255)</strong>) or make one up using InnoDB internal row ids. If you don't have a good candidate, an <strong>AUTO_INCREMENT PRIMARY KEY</strong> is probably the easiest way out.</p>
+<p>A 2-column combination for a many-to-many connection table is common and viable. The <strong>PRIMARY KEY</strong> will not only provide with good join access method, but will also provide with the required <strong>UNIQUE</strong> constraint.</p>
+<p>An integer-based <strong>PRIMARY KEY</strong> will make for more compact &amp; shallow index tree structures, which leads to less I/O and page reads.</p>
+<p>An <strong>AUTO_INCREMENT</strong> will allow for ascending <strong>PRIMARY KEY</strong> order of <strong>INSERT</strong>, which is InnoDB-friendly: index pages will be more utilized, less fragmented.<!--more--></p>
+<h4>Exceptions</h4>
+<ul>
+<li><strong>You have a partitioned table, e.g. on date range.</strong> With partitioned tables, every UNIQUE KEY, including the PRIMARY KEY, must include partitioning columns. In such case you will have to extend the PRIMARY KEY.</li>
+<li><strong>The only key on your table is a unique constraint on some column, e.g. UNIQUE KRY (url).</strong> On one hand, it seems wasteful to create <em>another</em> column (e.g. AUTO_INCREMENT) to use as PRIMARY KEY. On the other hand, I've seen many cases where this kind of PK didn't hold up. At some point there was need for another index. Or some method had to be devised for chunking up table data (<a href="http://code.openark.org/forge/openark-kit/oak-chunk-update">oak-chunk-update</a> can do that even with non-integer PKs). I'm reluctant to use such keys as PRIMARY.</li>
+<li>I'm sure there are others.</li>
+</ul>
+<h4>Umm...</h4>
+<p>I wrote the draft for this post a while ago. And then came <a href="http://mituzas.lt/2010/07/30/on-primary-keys/">Domas</a> and ruined it. <a href="http://bugs.mysql.com/bug.php?id=55656">Wait for</a> <strong>5.1.52</strong>?</p>

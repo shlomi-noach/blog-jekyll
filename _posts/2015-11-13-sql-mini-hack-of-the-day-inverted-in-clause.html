@@ -1,0 +1,58 @@
+---
+title: SQL mini hack of the day, inverted IN clause
+date: 2015-11-13 17:28:09.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- SQL
+meta:
+  _edit_last: '2'
+  _syntaxhighlighter_encoded: '1'
+  _wpas_done_all: '1'
+  _sg_subscribe-to-comments: jean.francois.gagne.1977@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>We are used to issue queries with an <strong>IN</strong> clause of the form:</p>
+<blockquote>
+<p>[code lang="sql"]... where state in ('started', 'completed', 'failed') ...[/code]</p>
+</blockquote>
+<p>However I've had a few cases where I used an inverted format. Here's one use case followed by an inverted <strong>IN</strong> clause.</p>
+<h3>Dynamic query building</h3>
+<p>Say we have this function:</p>
+<blockquote>
+<p>[code lang="golang"]GetLaggingSlaves(clusterName string)[/code]</p>
+</blockquote>
+<p>Which, based on whether given <strong>clusterName</strong> is empty or not, would return list of all lagging slaves, or only those in the given cluster, respectively:<!--more--></p>
+<blockquote>
+<p>[code lang="sql"]SELECT hostname FROM database_instance WHERE slave_lag_seconds &gt; 60[/code]</p>
+</blockquote>
+<p>or</p>
+<blockquote>
+<p>[code lang="sql"]SELECT hostname FROM database_instance WHERE cluster_name = 'mycluster:3306' AND slave_lag_seconds &gt; 60[/code]</p>
+</blockquote>
+<p>To avoid SQL injection you would create a prepared statement, but you don't want to copy+paste everything, and so you build your query dynamically based on the value of <strong>clusterName</strong>. You want to end up with either:</p>
+<blockquote>
+<p>[code lang="sql"]SELECT hostname FROM database_instance WHERE slave_lag_seconds &gt; ?[/code]</p>
+<p><strong>, acceptableLag</strong></p></blockquote>
+<p>or</p>
+<blockquote>
+<p>[code lang="sql"]SELECT hostname FROM database_instance WHERE cluster_name = ? AND slave_lag_seconds &gt; ?[/code]</p>
+<p><strong>, clusterName, acceptableLag</strong></p></blockquote>
+<p>Dynamic query building is good practice, but a little pain (BTW I'm designing a new, simple &amp; non intrusive query builder for golang). Is there a way to just get away with one query that has it all?</p>
+<p>This is one option:</p>
+<blockquote>
+<p>[code lang="sql"]SELECT hostname FROM database_instance WHERE (cluster_name = ? OR ? = '') AND slave_lag_seconds &gt; ?[/code]</p>
+<p><strong>,clusterName, clusterName, acceptableLag</strong></p></blockquote>
+<p>and it is somewhat painful to list clusterName twice in the arguments list. This is where the inverted <strong>IN</strong> clause kicks in. It will negate usage of an index, and may look strange at first glance, but as you get used to it it just becomes another pattern:</p>
+<blockquote>
+<p>[code lang="sql"]SELECT hostname FROM database_instance WHERE ? IN (cluster_name, '') AND slave_lag_seconds &gt; ?[/code]</p>
+<p><strong>, clusterName, acceptableLag</strong></p></blockquote>
+<p>So when <strong>clusterName</strong> is empty, all rows where <strong>slave_lag_seconds &gt; acceptableLag</strong> are fetched; when non empty, only those where <strong>cluster_name</strong> equals our value.</p>

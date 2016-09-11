@@ -1,0 +1,41 @@
+---
+layout: post
+title: Linux configuration for MySQL
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags:
+- Linux
+meta:
+  _edit_last: '2'
+author:
+  login: admin
+  email: shlomi@openark.org
+  display_name: admin
+  first_name: ''
+  last_name: ''
+---
+<p>For some time now I'm trying to create a standard setup procedure for setting up Linux machines, dedicated or almost dedicated to MySQL. I am a long time Linux user, but not a sys-admin and by no means a Linux expert. During the MySQL trainings I'm encouraging experienced sys-admins to speak up their mind; still, I can't make out a clear setup process.</p>
+<p>I would like this post to sum up the top important Linux settings (not MySQL configuration): the ones you do the moment you unpack the machine and plug it in. I'll throw away a couple of settings; your advice is very much appreciated.</p>
+<p>To have some sort of order, let's define a common machine and database requirements:</p>
+<ul>
+<li>Machine is an HP DL380 or similar (e.g. DELL 2950), either 4 or 8 cores total; 16GB of RAM. Assume there is disk battery backup cache.</li>
+<li>Machine has 6 SAS disks: two disks in RAID 1 setup, for the OS; four disks in RAID 10 or RAID5 for MySQL's data.</li>
+<li>The database size is some dozens of GB, let's say around 50GB. It does not fit in memory.</li>
+<li>Database is InnoDB based only.</li>
+<li>Database is expected to be I/O bound; around 50 active concurrent connections; most DML are SELECTs, rest are mainly INSERT/UPDATE/DELETE.</li>
+</ul>
+<p>Here are a couple of steps I make on new machines:</p>
+<ul>
+<li>Set the "noatime" option in /etc/fstab for MySQL's data partition.</li>
+<li>Set the number of open files to 8192 for the mysql user. Even though I do not normally expect MySQL to have so many open files, this is not such a high limit. If we consider the maximum open connections (typically hundreds) and open tables (hundreds to thousands), we can often get a few thousands of open files. The default is 1024 open files, which I find too low.</li>
+</ul>
+<p>Some points I wish to discuss:</p>
+<p>A recent <a href="http://www.mysqlperformanceblog.com/2008/12/18/xtradb-benchmarks-15x-gain/">post </a>on mysql performance blog has suggested changing the scheduling algorithm. How about it?</p>
+<p>Would you favor RedHat (or RedHat based, like CentOS) distributions over Debian? I've had good experience with Ubuntu Server, but have heard a lot of criticism. What's you experience? Other flavors?</p>
+<p>What file system would you use for MySQL? ext3 (slow on large files, considered rock solid)? XFS (fast, has some nasty bug-features behavior after crash)? Other file systems, preferably maintained by people not murdering their wives?</p>
+<p>Important configuration not mentioned here?</p>
+<p>Your comments are highly appreciated!</p>

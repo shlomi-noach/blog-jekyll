@@ -1,0 +1,66 @@
+---
+layout: post
+title: 'Caching: bypassing the Query Cache with cache tables'
+date: 
+type: post
+published: false
+status: draft
+categories: []
+tags: []
+meta:
+  _edit_last: '2'
+  _syntaxhighlighter_encoded: '1'
+author:
+  login: admin
+  email: shlomi@openark.org
+  display_name: admin
+  first_name: ''
+  last_name: ''
+---
+<p>MySQL's query cache is a valuable tool. On a simple configuration, MySQL will attempt to store SELECT results in the query cache, so that subsequent, identical SELECTs get the data straight from cache, with no need to parse, validate, optimize and execute the query.</p>
+<p>The query cache has its drawbacks, though. One of the most noticeable being the invalidation mechanism: once a certain table's data changes (by means of INSERT, UPDATE, DELETE), all queries which include that table in some form are invalidated, even if the change does not apply to them.</p>
+<p>For example, using MySQL's world database, we wish to get those cities in the Netherlands:</p>
+<p>SELECT * FROM City WHERE CountryCode='NLD';</p>
+<p>The results of this query will, on normal settings, be cached in the query cache. However, the following query:</p>
+<p>UPDATE City SET Population=Population+1 WHERE Name='Roma';</p>
+<p>(Congratulations on Rome's newborn) will invalidate our Netherlands query, even though it does not affect its data. We further assume that City is a very large table, on which our queries are expensive, either because of locks or because of complexity.</p>
+<p>Let us describe a way to bypass this invalidation scheme, using cache tables, triggers and stored procedures. Our solution is only targeted at a specific query or set of queries, and it is not a general solution to caching problems. The idea behind the solution, though, is general enough to be used elsewhere.</p>
+<p>We will create the following table:</p>
+<p>CREATE TABLE CityCache LIKE City;</p>
+<p>The CityCache table is identical to City, and will only stored cache able data. Assuming we are interested in selecting cities by country, we offer the following stored procedure:</p>
+<blockquote><p>[code lang="sql"]DELIMITER $$</p>
+<p>DROP PROCEDURE IF EXISTS `world`.`selectCityByCountry` $$<br />
+CREATE PROCEDURE `world`.`selectCityByCountry` (IN countryCodeInput CHAR(3))<br />
+BEGIN<br />
+ DECLARE countCities INT DEFAULT 0;<br />
+ SELECT COUNT(*) INTO countCities FROM (SELECT ID FROM CityCache WHERE CountryCode=countryCodeInput LIMIT 1) AS c;<br />
+ IF countCities = 0<br />
+ THEN INSERT INTO CityCache SELECT * FROM City WHERE CountryCode=countryCodeInput;<br />
+ END IF;<br />
+ SELECT * FROM CityCache WHERE CountryCode=countryCodeInput;<br />
+END $$</p>
+<p>DELIMITER ;[/code]</p></blockquote>
+<p>This procedure accepts one argument: a country code, and returns the cities in this country. Only it attempts to return the selection from the CityCache table. If the data is not there, it is INSERTed there from the City table first. For example, the following query:</p>
+<p>call SelectCityByCountry('GBR');</p>
+<p>Will find out that no British cities are listed in CityCache, INSERT into CityCache the relevant cities from City, then return those rows. Subsequent calls with the same parameters will read the data directly from CityCache. Moreover, CityCache table is as yet unaffected by changes to City itself.</p>
+<p>Just one moment there! At current, queries performed from within stored procedures, and stored routines calls themselves are thoroughly disregarded by the query cache! So, what have we done so far? Have we created a cache table, which does not benefit from query caching at all?</p>
+<p>Well, we just may wish to ALTER TABLE to ENGINE=MEMORY to make our queries super fast.</p>
+<p>OK, how about invalidation, then? We'll use MySQL's triggers to invalidate rows in CityCache, in the following manner: any change to a city must invalidate all other cities in same country. By "change" we include adding, removing and updating. Here's the deal:</p>
+<p>CREATE TRIGGER City_ai AFTER INSERT ON City<br />
+FOR EACH ROW<br />
+DELETE FROM CityCache WHERE CityCache.CountryCode = NEW.CountryCode;</p>
+<p>CREATE TRIGGER City_bd BEFORE DELETE ON City<br />
+FOR EACH ROW<br />
+DELETE FROM CityCache WHERE CityCache.CountryCode = OLD.CountryCode;</p>
+<p>DELIMITER $$<br />
+CREATE TRIGGER City_au AFTER UPDATE ON City<br />
+FOR EACH ROW<br />
+BEGIN<br />
+IF OLD.CountryCode != NEW.CountryCode<br />
+THEN DELETE FROM CityCache WHERE CityCache.CountryCode = OLD.CountryCode;<br />
+END IF;<br />
+DELETE FROM CityCache WHERE CityCache.CountryCode = NEW.CountryCode;<br />
+END $$<br />
+DELIMITER ;</p>
+<p>Conclusion: following a problematic query invalidation issue, we have decided to completely avoid using the query cache and use our own cached table. Our smaller cache table is cheaper to use, and will only contains valid data, as copied from the original table.</p>
+<p>world.CityCache</p>

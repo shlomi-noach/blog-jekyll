@@ -1,0 +1,61 @@
+---
+title: 'Purging old rows with QueryScript: three use cases'
+date: 2012-11-14 11:15:35.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Bulk operations
+- common_schema
+- Indexing
+- QueryScript
+- scripts
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Problem: you need to purge old rows from a table. This may be your weekly/monthly cleanup task. The table is large, the amount of rows to be deleted is large, and doing so in one big <strong>DELETE</strong> is too heavy.</p>
+<p>You can use <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-chunk-update.html">oak-chunk-update</a> or <a href="http://www.percona.com/doc/percona-toolkit/2.1/pt-archiver.html">pt-archiver</a> to accomplish the task. You can also use server side scripting with <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script.html">QueryScript</a>, offering a very simple syntax with no external scripting, dependencies and command line options.</p>
+<p>I wish to present three cases of row deletion, with three different solutions. In all cases we assume some <strong>TIMESTAMP</strong> column exists in table, by which we choose to purge the row. In all cases we assume we wish to purge rows older than <strong>1</strong> month.</p>
+<p>We assume the naive query is this:</p>
+<blockquote>
+<pre>DELETE FROM my_schema.my_table WHERE row_timestamp &lt; CURDATE() - INTERVAL 1 MONTH</pre>
+</blockquote>
+<h4>Case 1: TIMESTAMP column is indexed</h4>
+<p>I almost always index a timestamp column, if only for being able to quickly purge data (but usually also to slice data by date). In this case where the column is indexed, it's very easy to figure out which rows are older than <strong>1</strong> month.</p>
+<p>We break the naive query into smaller parts, and execute these in sequence:<!--more--></p>
+<blockquote>
+<pre>while (<span style="color: #000080;"><strong>DELETE FROM</strong> my_schema.my_table <strong>WHERE</strong> row_timestamp &lt; CURDATE() - INTERVAL 1 MONTH <strong>ORDER BY</strong> row_timestamp <strong>LIMIT</strong> 1000</span>)
+  throttle 1;</pre>
+</blockquote>
+<p>How does the above work?</p>
+<p>QueryScript accepts a <strong>DELETE</strong> statement as a conditional expression in a while loop. The expression evaluates to <strong>TRUE</strong> when the <strong>DELETE</strong> affects rows. Once the <strong>DELETE</strong> ceases to affect rows (when no more rows match the <strong>WHERE</strong> condition), the <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_while.html"><strong>while</strong></a> loop terminates.</p>
+<p>The <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_throttle.html"><strong>throttle</strong></a> command allows us to play <em>nice</em>: by throttling we increase the total runtime through sleeping in between loop iterations.</p>
+<h4>Case 2: TIMESTAMP column is not indexed, and there is no heuristic for matching rows</h4>
+<p>This case is hardest to tackle by means of optimization: there is no index, and we cannot assume or predict anything about the distribution of old rows. We must therefore scan the entire table so as to be able to purge old rows.</p>
+<p>This <em>does not</em> mean we have to do one huge full table scan. As long as we have some way to split the table, we are still good. We can utilize the <strong>PRIMARY KEY</strong> or another <strong>UNIQUE KEY</strong> so as to break the table into smaller, distinct parts, and work our way on these smaller chunks:</p>
+<blockquote>
+<pre><strong>split</strong> (<span style="color: #000080;">DELETE FROM my_schema.my_table WHERE row_timestamp &lt; CURDATE() - INTERVAL 1 MONTH</span>)
+  throttle 1;</pre>
+</blockquote>
+<p>The <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_split.html"><strong>split</strong></a> statement will automagically calculate the chunks and inject filtering conditions onto the query, such that each execution of the query relates to a distinct set of rows.</p>
+<h4>Case 3: TIMESTAMP column not indexed, but known to be monotonic</h4>
+<p>This is true for many tables. Rows with <strong>AUTO_INCREMENT</strong> columns and <strong>TIMESTAMP</strong> columns are created with <strong>CURRENT_TIMESTAMP</strong> values. This makes for a monotonic function: as the <strong>AUTO_INCREMENT</strong> grows, so does the <strong>TIMESTAMP</strong>.</p>
+<p>This makes for the following observation: it we iterate the table row by row, and reach a point where the current row is not old, then we can stop looking. Timestamps will only increase by value, which means further rows only turn to be <em>newer</em>.</p>
+<p>With this special case at hand, we can:</p>
+<blockquote>
+<pre><strong>split</strong> (<span style="color: #000080;"><strong></strong>DELETE FROM my_schema.my_table WHERE row_timestamp &lt; CURDATE() - INTERVAL 1 MONTH</span>) {
+  if (<strong>$split_rowcount</strong> = 0)
+    break;
+  throttle 1;
+}</pre>
+</blockquote>
+<p><em>split</em> is a looping device, and a <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_break.html"><strong>break</strong></a> statement works on <em>split</em> just as on a <strong>while</strong> statement.</p>
+<p><em>split</em> provides with magic variables which describe current chunk status. <strong>$split_rowcount</strong> relates to the number of rows affected by last chunk query. No more rows affected? This means we've hit recent rows, and we do not expect to find old rows any further. We can stop looking.</p>

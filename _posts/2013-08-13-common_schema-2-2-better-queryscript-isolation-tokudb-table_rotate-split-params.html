@@ -1,0 +1,56 @@
+---
+title: 'common_schema 2.2: better QueryScript isolation & cleanup; TokuDB; table_rotate,
+  split params'
+date: 2013-08-13 05:39:12.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- Development
+- Open Source
+- QueryScript
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><a href="https://code.google.com/p/common-schema/"><strong>common_schema 2.2</strong></a> is released. This is shortly after the 2.1 release; it was only meant as bug fixes release but some interesting things came up, leading to new functionality.</p>
+<p>Highlights of the <strong>2.2</strong> release:</p>
+<ul>
+<li>Better QueryScript isolation &amp; cleanup: isolation improved across replication topology, cleanup done even on error</li>
+<li>Added <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/tokudb_views.html">TokuDB related views</a></li>
+<li><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_split.html"><strong>split</strong></a> with "index" hint (Ike, this is for you)</li>
+<li><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/table_rotate.html"><strong>table_rotate()</strong></a>: a <em>logrotate</em>-like mechanism for tables</li>
+<li>better throw()</li>
+</ul>
+<p>Drill down:</p>
+<h4>Better QueryScript isolation &amp; cleanup</h4>
+<p><em>common_schema</em> <strong>2.1</strong> introduced persistent tables for QueryScript. This also introduced the problem of isolating concurrent scripts, all reading from and writing to shared tables. In <strong>2.1</strong> isolation was based on session id. However although unique per machine, collisions were possible across replication topology: a script could be issued on master, another on slave (I have such use cases) and both use same (local) session id.</p>
+<p>With 2.2 isolation is based on server_id &amp; session id combination; this is unique across a replication topology.</p>
+<p>Until <strong>2.1</strong>, QueryScript used temporary tables. This meant any error would just break the script, and the tables were left (isolated as they were, and auto-destroyed in time). With persistent tables a script throwing an error meant legacy code piling up. With <em>common_schema</em> <strong>2.2</strong> and on MySQL &gt;= <strong>5.5</strong> all exceptions are caught, cleanup is made, leaving exceptions to be <strong>RESIGNAL</strong>led.</p>
+<h4>TokuDB views</h4>
+<p>A couple TokuDB related views help out in converting to TokuDB and in figuring out tables status on disk:<!--more--></p>
+<ul>
+<li><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/sql_alter_table_tokudb.html"><strong>sql_alter_table_tokudb</strong></a> will help you out to generate the complex ALTER statement to TokuDB engine if you happen to used COMPRESSED InnoDB tables with KEY_BLOCK_SIZE specified. The view generates a complex DROP KEYs &amp; ADD KEYs statementl this is due to bug ...</li>
+<li><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/tokudb_file_map.html"><strong>tokudb_file_map</strong></a> simplifies the <strong>INFORMATION_SCHEMA.Tokudb_file_map</strong> table: the original view is not normalized and is difficult to interpret and follow when your table had many indexes or is partitioned (I will write more on this shortly). with <em>common_schema</em>'s <strong>tokudb_file_map</strong> you get, per table, the list of files representing that table, along with a couple Shell commands to tell you <em>the thing you want to know most</em>: "what is the size of my TokuDB table on disk?"</li>
+</ul>
+<h4>split</h4>
+<p>QueryScript's <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_split.html"><strong>split</strong></a> device now supports the <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_split.html#parameters">"<strong>index</strong>" parameter</a> (or <em>hint</em>), which instructs the split() operation to use an explicitly named index. If used, the index must exist and must be UNIQUE.</p>
+<h4>table_rotate()</h4>
+<p>Rotate your tables a-la logrotate with <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/table_rotate.html"><strong>table_rotate()</strong></a>: generate a new, identical, empty table, version your table, pushing older versions along the line; optionally drop older versions. You get the picture. Got some nice use case behind this on cleaning up a test database.</p>
+<h4>throw()</h4>
+<p>On MySQL &gt;= <strong>5.5</strong> <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/throw.html"><strong>throw()</strong></a> uses SIGNAL. No more weird <em>"table `Unknown column '$t' in 'field list'` does not exist"</em> messages. Just plain old:</p>
+<blockquote>
+<pre>ERROR 1054 (42S22): Unknown column '$t' in 'field list'</pre>
+</blockquote>
+<h4>Get it</h4>
+<p><em>common_schema</em> is free and open source. It is licensed under GPL v2. This is where you can <a href="https://code.google.com/p/common-schema/">find and download latest common_schema release</a>.</p>
+<p>Your input is welcome! Please submit your bugs, or otherwise share your experience with <em>common_schema</em>.</p>

@@ -1,0 +1,58 @@
+---
+layout: post
+title: On converting large datasets to TokuDB
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Issues:</p>
+<p>Not friendly to massive partitioning!</p>
+<p>Ran out of resources; set open_files_limit to 30,000 and table_open_cache to 16000 for it to work!</p>
+<p>And still ran out of resources...</p>
+<p>crashed a few times. No stack trace</p>
+<p>But recovery went well! Even if crash is in middle of ALTER TABLE (compare that to InnoDB...)</p>
+<p>key_block_size issue. what a pain...</p>
+<p>How TokuDB can improve:</p>
+<p>key_block_size issue. common_schema to the rescue!</p>
+<p>multiple files in datadir</p>
+<p>naming - bah! the mapping not better either. common_schema to the rescue!</p>
+<p>TMP files? You <strong>REALLY</strong> want to use tokudb_load_save_space</p>
+<p>The one thing that interests a DBA: how large is a given table on disk?</p>
+<p>The second thing: what are my largest tables on disk? Monitor them.</p>
+<p>common_schema to the rescue...</p>
+<p>common_schema.tokudb_file_map</p>
+<p>Finally went with YEARly partitioning -- not ready yet to give up on partitioning. So 7 partitions per table (2010 -- 2015, MAXVALUE)</p>
+<p>- and finally crashes stop; all those mysterious incidents gone away...</p>
+<p>The good:</p>
+<p>SHOW PROCESSLIST</p>
+<p>| 5566 | snoach          | localhost | outbrain_dwh       | Query   |  3019 | Fetched about 312724000 rows, loading data still remains                    | alter table obcg_geo_content_campaign_tra</p>
+<p>| 5566 | snoach          | localhost | outbrain_dwh       | Query   |  9085 | Loading of data about 66.1% done                                            | alter table obcg_geo_content_campaign_traffic_d engine=tokudb row_format=tokudb_small<br />
+|  5566 | snoach          | localhost | outbrain_dwh       | Query   |  1906 | Queried about 33113001 rows, Inserted about 33113000 rows | alter table dwdd_referred_doc_click_d                engine=tokudb row_format=tokudb_small                partition by range( |</p>
+<p>Cool!</p>
+<p>compresion: AMAZING!</p>
+<p>Got 10% size from InnoDB KEY_BLOCK_SIZE=8, which means about 5% size of non-compressed InnoDB data == 20 times compression! Wow!</p>
+<p>From 2TB down to =&gt; 200GB</p>
+<p>Convert time: 300GB key_block_size=8 ==&gt; tokudb_small in 9 hours. I dare you to create a 300GB InnoDB compressed table within 09 hours.</p>
+<p>ALTER TABLE from InnoDB to TokuDB is quick!</p>
+<p>KILL QUERY (ALTER query) works well: a few minutes to get rid of files, and during this time server is responsive</p>
+<h4>performance</h4>
+<p>LOAD DATA INFILE is slower on TokuDB. I'm using replica; slave catch time is larger than with InnoDB slave.</p>
+<p>a query was way slower on TokuDB -- well duh! because no index on date, and InnoDB has MONTHly partitioning; tokudb has YEARly -- so many more rows to scan.</p>
+<p>HAHA: adding index in TokuDB is painless! Non blocking, quick to complete, resulting obviously in elimination of query slowness. Cool!!!</p>
+<p>variables (courtesy Gerry)</p>
+<p>Well you thought it would make sense to use o_direct?? Not necessarily. If your (real) dataset is larger than memory (ahem, 4TB &gt; 128GB) then you should know OS caching is for compressed data; tokudb caching is for uncompressed data!</p>
+<p>Cool, back to 50% memory to tokudb, the rest for compressed OS cache.</p>
+<p>other variables...</p>
+<p>ANALYZE TABLE...</p>

@@ -1,0 +1,28 @@
+---
+layout: post
+title: State of InnDB Online DDL in MySQL 5.6.9-RC (and for the bad news)
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>In <a title="Permanent Link to State of InnDB Online DDL in MySQL 5.6.9-RC (good news included)" href="http://code.openark.org/blog/mysql/state-of-inndb-online-ddl-in-mysql-5-6-9-rc-good-news-included" rel="bookmark">State of InnDB Online DDL in MySQL 5.6.9-RC (good news included)</a> I found very encouraging online DDL for InnoDB behavior.</p>
+<p>I tested ROW_FORMAT manipulation, adding and removing of indexes, adding and removing of columns. All went just well.</p>
+<p>But I felt the experiment was incomplete, so I wanted to test the following additional DDL:</p>
+<ul>
+<li>MODIFY COLUMN: change an existing column from one datatype to another (say INT to BIGINT)</li>
+<li>ADD CONSTRAINT: add foreign key constraints to a table</li>
+<li>Repeat all tests on table with constraints</li>
+</ul>
+<p>&nbsp;</p>

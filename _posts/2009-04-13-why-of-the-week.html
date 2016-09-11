@@ -1,0 +1,64 @@
+---
+title: '"Why?" of the week'
+date: 2009-04-13 20:05:42.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: serg@mysql.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>As progress on <a title="oak-online-alter-table" href="http://code.openark.org/forge/openark-kit/oak-online-alter-table">oak-online-alter-table</a> goes on, I'm encountering more and more limitations, for which I must find workarounds. Here's two:</p>
+<h4>CREATE TABLE ... LIKE ...</h4>
+<p>It works well, but it doesn't copy any foreign key constraints. So, if the original table is this:</p>
+<blockquote>
+<pre>CREATE TABLE `dept_emp` (
+  `emp_no` int(11) NOT NULL,
+  `dept_no` char(4) NOT NULL,
+  `from_date` date NOT NULL,
+  `to_date` date NOT NULL,
+  PRIMARY KEY  (`emp_no`,`dept_no`),
+  KEY `emp_no` (`emp_no`),
+  KEY `dept_no` (`dept_no`),
+  CONSTRAINT `dept_emp_ibfk_1` FOREIGN KEY (`emp_no`) REFERENCES `employees` (`emp_no`) ON DELETE CASCADE,
+  CONSTRAINT `dept_emp_ibfk_2` FOREIGN KEY (`dept_no`) REFERENCES `departments` (`dept_no`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=latin1</pre>
+</blockquote>
+<p>Then <strong>CREATE TABLE dept_emp_shadow LIKE dept_emp</strong> results with:<!--more--></p>
+<blockquote>
+<pre>CREATE TABLE `dept_emp_shadow` (
+  `emp_no` int(11) NOT NULL,
+  `dept_no` char(4) NOT NULL,
+  `from_date` date NOT NULL,
+  `to_date` date NOT NULL,
+  PRIMARY KEY  (`emp_no`,`dept_no`),
+  KEY `emp_no` (`emp_no`),
+  KEY `dept_no` (`dept_no`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1</pre>
+</blockquote>
+<p>Why is that? Why wouldn't the constraints be duplicated? No explanation is given in the manual, though the behavior is documented:</p>
+<blockquote><p><code class="literal">"</code><strong><code class="literal">CREATE TABLE ... LIKE</code></strong> does not preserve any <strong> <code class="literal">DATA DIRECTORY</code></strong> or <strong><code class="literal">INDEX       DIRECTORY</code></strong> table options that were specified for the       original table, or any foreign key definitions."</p>
+<p>from <a href="http://dev.mysql.com/doc/refman/5.0/en/create-table.html">http://dev.mysql.com/doc/refman/5.0/en/create-table.html</a></p></blockquote>
+<p>Sure, I can work it by hand, or write some automation script, but... so much fuss!</p>
+<h4>Changing triggers in a critical section</h4>
+<p>Say you wanted to alter a trigger. There's no <strong>ALTER TRIGGER</strong> statement. So you must <strong>DROP</strong> the trigger first, then <strong>CREATE</strong> a new one.</p>
+<p>Can this be done such that nothing accidentally happens in between? The following code:</p>
+<blockquote>
+<pre>LOCK TABLES City WRITE;
+DROP TRIGGER IF EXISTS City_AI;
+CREATE TRIGGER City_AI AFTER INSERT ON City
+  FOR EACH ROW SET @dummy := 17;
+UNLOCK TABLES;</pre>
+</blockquote>
+<p>Causes a deadlock. In fact, any tampering with a trigger while the table is locked causes a deadlock. This was described in bug <a href="http://bugs.mysql.com/bug.php?id=23713">#23713</a>, and has been set as fixed, although Paul DuBois notes there's still a deadlock. (I'm running 5.0.77 on Linux x64) .</p>
+<p>There's an explanation ([29 Nov 2007 12:42]    Bugs System) which is unsatisfactory, as I could not make of it a solution for 5.0. <strong>Perhaps a wise reader can shed light?</strong></p>
+<p>I'll try to re-submit this bug. It really gets in my way...</p>

@@ -1,0 +1,41 @@
+---
+layout: post
+title: 'The depth of an index: how deep is a MyISAM key?'
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags:
+- Indexing
+- InnoDB
+- MyISAM
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>InnoDB and MyISAM use B+ and B trees for indexes (InnoDB also has internal hash index).</p>
+<p>In both these structures, the depth of the index is an important factor. When looking for an indexed row, a search is made on the index, from root to leaves.</p>
+<p>Assuming the index is not in memory, the depth of the index represents the minimal cost (in I/O operation) for an index based lookup. Of course, most of the time we expect large portions of the indexes to be cached in memory. Even so, an the depth of the index is an important factor. The deeper the index is, the worse it performs: there are simply more lookups on index nodes.</p>
+<p>What affects the depth of an index?</p>
+<p>There are quite a few structural issues, but it boils down to two important factors:</p>
+<ol>
+<li>The number of rows in the table: obviously, more rows leads to larger index, larger indexes grow in depth.</li>
+<li>The size of the indexed column(s). An index on an INT column can be expected to be shallower than an index on a CHAR(16) column (on a very small number of rows they may have the same depth, so we'll assume a very large number of rows).</li>
+</ol>
+<p>Let's emphasize the second factor. It is best to index shorter columns, if that is possible. It is the reason behind using an index on a VARCHAR's prefix (e.g. KEY(email_address(16)). It is also a reason to use INT, instead of BIGINT columns for your primary key, when BIGINT is not required.</p>
+<p>The larger the indexed data type is (or the total size of data types for all columns in a combined index), the less values that can fit in an index node. The less values in a node, the more node splits occurs; the more nodes are required to build the index. The less values in the node, the less <em>wide</em> the index tree is. The less wide an index tree is, and the more nodes it has - the deeper it gets.</p>
+<p>So bigger data types lead to deeper trees. Deeper trees lead to more IO operations on lookup.</p>
+<h4>InnoDB</h4>
+<p>On InnoDB there's another issue: all tables are clustered by primary key. Any access to table data requires diving into, or traversing the primary key tree.</p>
+<p>On InnoDB, a secondary index (any index which is not the primary key) does not lead to table data. Instead, the "data" in the leaf nodes of a secondary index - are the primary key values.</p>
+<p>And so, when looking up a value on an InnoDB table using a secondary key, we first search the secondary key to retrieve the primary key value, then go to the primary key tree to retrieve the data.</p>
+<p>This means two index lookups, one of which is always the primary key.</p>
+<p>On InnoDB, it is therefore in particular important to keep the primary key small. Have small data types. Prefer an SMALLINT to INT, if possible. Prefer an INT to BIGINT, if possible. Prefer an integer value over some VARCHAR text.</p>
+<p>With long data types used in an InnoDB primary key, not only is the primary key index bloated (deep), but also every other index gets to be bloated, as the leaf values in all other indexes are those same long data types.</p>

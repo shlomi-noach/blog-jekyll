@@ -1,0 +1,32 @@
+---
+title: 'Quick reminder: avoid using binlog-do-db'
+date: 2010-03-02 21:03:50.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Configuration
+- Replication
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: awfief@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Nothing new about this warning; but it's worth repeating:</p>
+<p>Using <a href="http://dev.mysql.com/doc/refman/5.1/en/replication-options-binary-log.html#option_mysqld_binlog-do-db"><strong>binlog-do-db</strong></a> is dangerous to your replication. It means the master will not write to binary logs any statement not in the given database.</p>
+<p>Ahem. Not exactly. It will not write to binary logs any statement which did not originate from the given database.</p>
+<p>Which is why a customer, who was using <strong>Toad for MySQL</strong> as client interface to MySQL, and by default connected to the <strong>mysql</strong> schema, did not see his queries being replicated. In fact, he later on got replication errors. If you do:</p>
+<blockquote>
+<pre>USE test;
+INSERT INTO world.City VALUES (...)</pre>
+</blockquote>
+<p>Then the statement is assumed to be in the <strong>test</strong> database, not in the <strong>world</strong> database.</p>
+<p>Slightly better is using <strong>replicate-do-db</strong> on the slave machines. At least we allow the master to write everything. But still, for the same reasons, slaves may fail to repeat a perfectly valid query, just because it has been issued in the context of the wrong database. <strong>replicate-ignore-db</strong> is somewhat safer yet, but the trap is still there.</p>
+<p>My advice is that replication should replicate <em>everything</em>. Make sure you and everyone else you work with understand the implications of <strong>binlog-do-db</strong> and <strong>replicate-do-db</strong> before implementing it.</p>

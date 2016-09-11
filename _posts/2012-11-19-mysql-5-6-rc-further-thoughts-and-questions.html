@@ -1,0 +1,32 @@
+---
+title: 'MySQL 5.6 RC: further thoughts and questions'
+date: 2012-11-19 12:21:25.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- New Features
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Here are a few questions I came up with while experimenting with MySQL <strong>5.6.7</strong> &amp; <strong>5.6.8</strong>. They are the impressions of a first-time encounter with <strong>5.6</strong>, which is a single opportunity for a person to point out the things that strike as odd.</p>
+<p>Bugs-wise, just submitted another crashing bug for <strong>5.6.8</strong>. I'm just one man, so I extrapolate to realize there is still much work to be done.</p>
+<p>The below list does not necessarily make for a bug list; mostly things that puzzle me. I hope it can stir some additional thinking.</p>
+<ol>
+<li>Transportable tablespace: what's the difference between <strong>FLUSH TABLES</strong> my_table <strong>WITH READ LOCK</strong> and <strong>FLUSH TABLES</strong> my_table <strong>FOR EXPORT</strong>? Both create the <strong>.cfg</strong> file, and both seem to operate just as well. <a href="http://blogs.innodb.com/wp/2012/04/innodb-transportable-tablespaces/">One document</a> says <strong>READ LOCK</strong>, <a href="http://dev.mysql.com/doc/innodb/1.1/en/glossary.html#glos_transportable_tablespace">another</a> says <strong>FOR EXPORT</strong>.</li>
+<li>What's the <strong>ALGORITHM=?</strong> flag in online <strong>ALTER TABLE</strong>? Apparently one can write to altered table even on <strong>ALGORITHM=COPY</strong>. There's not enough documentation to explain.</li>
+<li>How come there's not a single example of online InnoDB DDL in official docs?</li>
+<li>Why the inconsistency of putting <strong>ALGORITHM=...</strong>, <strong>LOCK=...</strong> in between commas, as opposed to other flags/commands not between commas? For example: <strong>ALTER TABLE my_table ADD COLUMN i INT, ALGORITHM=COPY, LOCK=SHARED, ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=4</strong></li>
+<li>Why would anyone care about <strong>FULLTEXT</strong> search word <a href="http://blogs.innodb.com/wp/2011/07/innodb-full-text-search-tutorial/">proximity</a><em> by bytes</em>? Typically, one would want proximity by <em>words</em>. I can find the excuse for proximity by <em>characters</em>. By <em>bytes</em>? A user is not interested in the low level representation of the text!</li>
+<li>Could we get a distinct tablespace for the mysql internal InnoDB tables? (I understand there's a separate tablespace for UNDO logs)</li>
+<li>Why the need to configure <strong>gtid_mode=ON</strong> as well as <strong>disable-gtid-unsafe-statements</strong> so as to enable GTID replication? If only the first is set, an error is produced upon <strong>CHANGE MASTER TO MASTER_AUTO_POSITION=1</strong></li>
+<li>And when said error is produced, why does it not mention <strong>disable-gtid-unsafe-statements</strong>, and instead read out a cryptic message? Also note <a href="http://datacharmer.blogspot.co.il/2012/11/mysql-568-broken-compatibility-ahead.html">this post</a> by Giuseppe Maxia.</li>
+</ol>

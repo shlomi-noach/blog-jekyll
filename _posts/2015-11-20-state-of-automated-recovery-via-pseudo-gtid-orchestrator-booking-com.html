@@ -1,0 +1,92 @@
+---
+title: State of automated recovery via Pseudo-GTID & Orchestrator @ Booking.com
+date: 2015-11-20 11:41:13.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Failover
+- High availability
+- orchestrator
+- Pseudo GTID
+- Replication
+meta:
+  _wpas_done_all: '1'
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This post sums up some of my work on MySQL resilience and high availability at <a href="http://www.booking.com">Booking.com</a> by presenting the current state of automated master and intermediate master recoveries via <a href="http://code.openark.org/blog/mysql/refactoring-replication-topology-with-pseudo-gtid">Pseudo-GTID</a> &amp; <strong><a href="https://github.com/outbrain/orchestrator">Orchestrator</a></strong>.</p>
+<p>Booking.com uses many different MySQL topologies, of varying vendors, configurations and workloads: Oracle MySQL, MariaDB, statement based replication, row based replication, hybrid, OLTP, OLAP, GTID (few), no GTID (most), Binlog Servers, filters, hybrid of all the above.</p>
+<p>Topologies size varies from a single server to many-many-many. Our typical topology has a master in one datacenter, a bunch of slaves in same DC, a slave in another DC acting as an intermediate master to further bunch of slaves in the other DC. Something like this, give or take:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2015/11/booking-topology-sample.png"><img class="alignnone wp-image-7480 size-medium" src="{{ site.baseurl }}/assets/booking-topology-sample-300x169.png" alt="booking-topology-sample" width="300" height="169" /></a></p></blockquote>
+<p>However as we are building our third data center (with MySQL deployments mostly completed) the graph turns more complex.</p>
+<p>Two high availability questions are:</p>
+<ul>
+<li>What happens when an intermediate master dies? What of all its slaves?</li>
+<li>What happens when the master dies? What of the entire topology?</li>
+</ul>
+<p>This is not a technical drill down into the solution, but rather on overview of the state. For more, please refer to recent presentations in <a href="https://speakerdeck.com/shlominoach/managing-and-visualizing-your-replication-topologies-with-orchestrator">September</a> and <a href="https://speakerdeck.com/shlominoach/pseudo-gtid-and-easy-mysql-replication-topology-management">April</a>.</p>
+<p>At this time we have:</p>
+<ul>
+<li>Pseudo-GTID deployed on all chains
+<ul>
+<li>Injected every 5 seconds</li>
+<li>Using the <a href="http://code.openark.org/blog/mysql/pseudo-gtid-ascending">monotonically ascending</a> variation</li>
+</ul>
+</li>
+<li>Pseudo-GTID based automated failover for intermediate masters on all chains</li>
+<li>Pseudo-GTID based automated failover for masters on roughly 30% of the chains.
+<ul>
+<li>The rest of 70% of chains are set for manual failover using Pseudo-GTID.</li>
+</ul>
+</li>
+</ul>
+<p>Pseudo-GTID is in particular used for:</p>
+<ul>
+<li>Salvaging slaves of a dead intermediate master</li>
+<li>Correctly grouping and connecting slaves of a dead master</li>
+<li>Routine refactoring of topologies. This includes:
+<ul>
+<li>Manual repointing of slaves for various operations (e.g. offloading slaves from a busy box)</li>
+<li>Automated refactoring (for example, used by our automated upgrading script, which consults with <em>orchestrator</em>, upgrades, shuffles slaves around, updates intermediate master, suffles back...)</li>
+</ul>
+</li>
+<li>(In the works), failing over binlog reader apps that audit our binary logs.</li>
+</ul>
+<p><!--more-->Furthermore, Booking.com is also <a href="https://www.percona.com/live/europe-amsterdam-2015/sessions/binlog-servers-bookingcom">working on Binlog Servers</a>:</p>
+<ul>
+<li>These take production traffic and offload masters and intermediate masters</li>
+<li>Often co-serve slaves using round-robin VIP, such that failure of one Binlog Server makes for simple slave replication self-recovery.</li>
+<li>Are interleaved alongside standard replication
+<ul>
+<li>At this time we have no "pure" Binlog Server topology in production; we always have normal intermediate masters and slaves</li>
+</ul>
+</li>
+<li>This hybrid state makes for greater complexity:
+<ul>
+<li>Binlog Servers are not designed to participate in a game of changing masters/intermediate master, unless <a href="http://jfg-mysql.blogspot.nl/2015/09/abstracting-binlog-servers-and-mysql-master-promotion-wo-reconfiguring-slaves.html">successors come from their own sub-topology</a>, which is not the case today.
+<ul>
+<li>For example, a Binlog Server that replicates directly from the master, cannot be repointed to just any new master.</li>
+<li>But can still hold valuable binary log entries that other slaves may not.</li>
+</ul>
+</li>
+<li>Are not actual MySQL servers, therefore of course cannot be promoted as masters</li>
+</ul>
+</li>
+</ul>
+<p><em>Orchestrator</em> &amp; Pseudo-GTID makes this hybrid topology still resilient:</p>
+<ul>
+<li><em>Orchestrator</em> understands the limitations on the hybrid topology and can salvage slaves of 1st tier Binlog Servers via Pseudo-GTID</li>
+<li>In the case where the Binlog Servers were the most up to date slaves of a failed master, <em>orchestrator</em> knows to first move potential candidates under the Binlog Server and then extract them out again.</li>
+<li>At this time Binlog Servers are still unstable. Pseudo-GTID allows us to comfortably test them on a large setup with reduced fear of losing slaves.</li>
+</ul>
+<p>Otherwise <em>orchestrator</em> already understands pure Binlog Server topologies and can do master promotion. When pure binlog servers topologies will be in production <em>orchestrator</em> will be there to watch over.</p>
+<h3>Summary</h3>
+<p>To date, Pseudo-GTID has high scores in automated failovers of our topologies; <em>orchestrator's</em> <a href="http://code.openark.org/blog/mysql/what-makes-a-mysql-server-failurerecovery-case">holistic approach</a> makes for reliable diagnostics; together they reduce our dependency on specific servers &amp; hardware, physical location, latency implied by SAN devices.</p>

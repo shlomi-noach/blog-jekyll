@@ -1,0 +1,574 @@
+---
+title: SQL pie chart
+date: 2009-08-12 12:49:41.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Graphs
+- SQL
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>My other half says I'm losing it. But I think that as an enthusiast kernel developer she doesn't have the right to criticize people. ("I like user space better!" - she exclaims upon reading this).</p>
+<p>Shown below is a (single query) SQL-generated pie chart. I will walk through the steps towards making this happen, and conclude with what, I hope you'll agree, are real-world, useful usage samples.</p>
+<blockquote>
+<pre>+----------------------------------------------------------------------+
+| pie_chart                                                            |
++----------------------------------------------------------------------+
+|                                                                      |
+|                         ;;;;;;;;;;;;;;;;;;;;;                        |
+|                  oooooooo;;;;;;;;;;;;;;;;;;;;;;;;;;;                 |
+|             oooooooooooooo;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;            |
+|          ooooooooooooooooo                 ;;;;;;;;;;;;#####         |
+|        oooooooooooooo                           ;#############       |
+|       oooooooooooo                                 ############      |
+|      oooooooooooo                                   ############     |
+|      ooooooooooo                                     ###########     |
+|      oooooooooooo                                   ::::::::::::     |
+|       oooooooooooo                                 ::::::::::::      |
+|        ooooooooo:::::                           ::::::::::::::       |
+|          o::::::::::::::::                 :::::::::::::::::         |
+|             :::::::::::::::::::::::::::::::::::::::::::::            |
+|                  :::::::::::::::::::::::::::::::::::                 |
+|                         :::::::::::::::::::::                        |
+|                                                                      |
+| ##  red: 1 (10%)                                                     |
+| ;;  blue: 2 (20%)                                                    |
+| oo  orange: 3 (30%)                                                  |
+| ::  white: 4 (40%)                                                   |
++----------------------------------------------------------------------+</pre>
+</blockquote>
+<h4>Requirements</h4>
+<p>We need a generic query, which returns at least these two columns: <strong>name_column</strong> and <strong>value_column</strong>. For example, the following query will do:<!--more--></p>
+<blockquote>
+<pre>SELECT name AS name_column, value AS value_column FROM sample_values2;
++-------------+--------------+
+| name_column | value_column |
++-------------+--------------+
+| red         |            1 |
+| blue        |            2 |
+| orange      |            3 |
+| white       |            4 |
++-------------+--------------+</pre>
+</blockquote>
+<p>Find sample data in <a href="http://code.openark.org/blog/wp-content/uploads/2009/08/pie_data.sql">pie_data.sql</a>.</p>
+<h4>Part 1: expanding the original query</h4>
+<p>We're going to need to take the above query's results and expand them: how much is the ratio from total, per value? As first step, accumulate values:</p>
+<blockquote>
+<pre>SELECT
+  name_column,
+  value_column,
+  @accumulating_value := @accumulating_value+value_column AS accumulating_value
+FROM (
+  SELECT name AS name_column, value AS value_column FROM sample_values2
+  ) select_values,
+  (SELECT @accumulating_value := 0) select_accumulating_value
+;
++-------------+--------------+--------------------+
+| name_column | value_column | accumulating_value |
++-------------+--------------+--------------------+
+| red         |            1 |                  1 |
+| blue        |            2 |                  3 |
+| orange      |            3 |                  6 |
+| white       |            4 |                 10 |
++-------------+--------------+--------------------+</pre>
+</blockquote>
+<p>Next, we calculate ratio of accumulating value, and present it both in [0..1] range, as well as in [0..2*PI] (radians):</p>
+<blockquote>
+<pre>SELECT
+  name_order,
+  name_column,
+  value_column,
+  accumulating_value,
+  accumulating_value/@accumulating_value AS accumulating_value_ratio,
+  2*PI()*accumulating_value/@accumulating_value AS accumulating_value_radians
+FROM (
+  SELECT
+    name_column,
+    value_column,
+    @name_order := @name_order+1 AS name_order,
+    @accumulating_value := @accumulating_value+value_column AS accumulating_value,
+    @aggregated_name_column := CONCAT(@aggregated_name_column, name_column, ',') AS aggregated_name_column
+  FROM (
+    SELECT name AS name_column, value AS value_column FROM sample_values2
+    ) select_values,
+    (SELECT @name_order := 0) select_name_order,
+    (SELECT @accumulating_value := 0) select_accumulating_value,
+    (SELECT @aggregated_name_column := '') select_aggregated_name_column
+  ) select_accumulating_values
+;
++------------+-------------+--------------+--------------------+--------------------------+----------------------------+
+| name_order | name_column | value_column | accumulating_value | accumulating_value_ratio | accumulating_value_radians |
++------------+-------------+--------------+--------------------+--------------------------+----------------------------+
+|          1 | red         |            1 |                  1 |                      0.1 |           0.62831853071796 |
+|          2 | blue        |            2 |                  3 |                      0.3 |            1.8849555921539 |
+|          3 | orange      |            3 |                  6 |                      0.6 |            3.7699111843078 |
+|          4 | white       |            4 |                 10 |                        1 |            6.2831853071796 |
++------------+-------------+--------------+--------------------+--------------------------+----------------------------+</pre>
+</blockquote>
+<p>The radians value will help us decide where in the pie chart lies each value.</p>
+<h4>Part 2: behind the scenes of the pie chart</h4>
+<p>We now explain how the pie chart works. Later on we combine with <strong>Part 1</strong>, to produce the complete chart.</p>
+<p>We first generate a coordinates system (see <a href="http://code.openark.org/blog/mysql/sql-graphics">SQL graphics</a>):</p>
+<blockquote>
+<pre>SELECT
+  GROUP_CONCAT(CONCAT(t2.value,'.',t1.value) order by t1.value separator ' ') as circle
+FROM
+  tinyint_asc t1,
+  tinyint_asc t2,
+  (select @size := 10) sel_size,
+  (select @radius := (@size/2 - 1)) sel_radius
+WHERE
+  t1.value &lt; @size
+  AND t2.value &lt; @size
+GROUP BY t2.value
+;
++-----------------------------------------+
+| circle                                  |
++-----------------------------------------+
+| 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 |
+| 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 |
+| 2.0 2.1 2.2 2.3 2.4 2.5 2.6 2.7 2.8 2.9 |
+| 3.0 3.1 3.2 3.3 3.4 3.5 3.6 3.7 3.8 3.9 |
+| 4.0 4.1 4.2 4.3 4.4 4.5 4.6 4.7 4.8 4.9 |
+| 5.0 5.1 5.2 5.3 5.4 5.5 5.6 5.7 5.8 5.9 |
+| 6.0 6.1 6.2 6.3 6.4 6.5 6.6 6.7 6.8 6.9 |
+| 7.0 7.1 7.2 7.3 7.4 7.5 7.6 7.7 7.8 7.9 |
+| 8.0 8.1 8.2 8.3 8.4 8.5 8.6 8.7 8.8 8.9 |
+| 9.0 9.1 9.2 9.3 9.4 9.5 9.6 9.7 9.8 9.9 |
++-----------------------------------------+</pre>
+</blockquote>
+<p>Taking a slightly big step further, we calculate the angle per coordinate, in relation to center of coordinate system. Calculation is in radians, but presented in degrees, since it's more readable. Also, we note in which quarter of the graph each point lies.</p>
+<blockquote>
+<pre>SELECT
+  group_concat(
+    round(radians*180/PI())
+    order by col_number separator ' ') as circle
+FROM (
+  SELECT
+    t1.value AS col_number,
+    t2.value AS row_number,
+    @dx := (t1.value - (@size-1)/2) AS dx,
+    @dy := ((@size-1)/2 - t2.value) AS dy,
+    @abs_radians := IF(@dx = 0, PI()/2, (atan(abs(@dy/@dx)))) AS abs_radians,
+    CASE
+      WHEN SIGN(@dy) &gt;= 0 AND SIGN(@dx) &gt;= 0 THEN @abs_radians
+      WHEN SIGN(@dy) &gt;= 0 AND SIGN(@dx) &lt;= 0 THEN PI()-@abs_radians
+      WHEN SIGN(@dy) &lt;= 0 AND SIGN(@dx) &lt;= 0 THEN PI()+@abs_radians
+      WHEN SIGN(@dy) &lt;= 0 AND SIGN(@dx) &gt;= 0 THEN 2*PI()-@abs_radians
+    END AS radians
+  FROM
+    tinyint_asc t1,
+    tinyint_asc t2,
+    (select @size := 15) sel_size,
+    (select @radius := (@size/2 - 1)) sel_radius
+  WHERE
+    t1.value &lt; @size
+    AND t2.value &lt; @size) select_combinations
+  GROUP BY row_number
+;
++-------------------------------------------------------------+
+| circle                                                      |
++-------------------------------------------------------------+
+| 135 131 126 120 113 106 98 90 82 74 67 60 54 49 45          |
+| 139 135 130 124 117 108 99 90 81 72 63 56 50 45 41          |
+| 144 140 135 129 121 112 101 90 79 68 59 51 45 40 36         |
+| 150 146 141 135 127 117 104 90 76 63 53 45 39 34 30         |
+| 157 153 149 143 135 124 108 90 72 56 45 37 31 27 23         |
+| 164 162 158 153 146 135 117 90 63 45 34 27 22 18 16         |
+| 172 171 169 166 162 153 135 90 45 27 18 14 11 9 8           |
+| 180 180 180 180 180 180 180 90 0 0 0 0 0 0 0                |
+| 188 189 191 194 198 207 225 270 315 333 342 346 349 351 352 |
+| 196 198 202 207 214 225 243 270 297 315 326 333 338 342 344 |
+| 203 207 211 217 225 236 252 270 288 304 315 323 329 333 337 |
+| 210 214 219 225 233 243 256 270 284 297 307 315 321 326 330 |
+| 216 220 225 231 239 248 259 270 281 292 301 309 315 320 324 |
+| 221 225 230 236 243 252 261 270 279 288 297 304 310 315 319 |
+| 225 229 234 240 247 254 262 270 278 286 293 300 306 311 315 |
++-------------------------------------------------------------+</pre>
+</blockquote>
+<p>The above needs some formattign to present well, but that's not the purpose; I'm only showing the above to explain the steps taken.</p>
+<h4>Part 3: combining the two</h4>
+<p>Next step is probably the most significant one: we're going to present a rough, square, weird looking pie chart using the original values:</p>
+<blockquote>
+<pre>SELECT
+  group_concat(
+    (SELECT name_order FROM
+      (
+      SELECT
+        name_order,
+        name_column,
+        value_column,
+        accumulating_value,
+        accumulating_value/@accumulating_value AS accumulating_value_ratio,
+        2*PI()*accumulating_value/@accumulating_value AS accumulating_value_radians
+      FROM (
+        SELECT
+          name_column,
+          value_column,
+          @name_order := @name_order+1 AS name_order,
+          @accumulating_value := @accumulating_value+value_column AS accumulating_value,
+          @aggregated_name_column := CONCAT(@aggregated_name_column, name_column, ',') AS aggregated_name_column
+        FROM (
+          SELECT name AS name_column, value AS value_column FROM sample_values2
+          ) select_values,
+          (SELECT @name_order := 0) select_name_order,
+          (SELECT @accumulating_value := 0) select_accumulating_value,
+          (SELECT @aggregated_name_column := '') select_aggregated_name_column
+        ) select_accumulating_values
+      ) select_for_radians
+    WHERE accumulating_value_radians &gt;= radians LIMIT 1
+    )
+    order by col_number separator ' ') as circle
+FROM (
+  SELECT
+    t1.value AS col_number,
+    t2.value AS row_number,
+    @dx := (t1.value - (@size-1)/2) AS dx,
+    @dy := ((@size-1)/2 - t2.value) AS dy,
+    @abs_radians := IF(@dx = 0, PI()/2, (atan(abs(@dy/@dx)))) AS abs_radians,
+    CASE
+      WHEN SIGN(@dy) &gt;= 0 AND SIGN(@dx) &gt;= 0 THEN @abs_radians
+      WHEN SIGN(@dy) &gt;= 0 AND SIGN(@dx) &lt;= 0 THEN PI()-@abs_radians
+      WHEN SIGN(@dy) &lt;= 0 AND SIGN(@dx) &lt;= 0 THEN PI()+@abs_radians
+      WHEN SIGN(@dy) &lt;= 0 AND SIGN(@dx) &gt;= 0 THEN 2*PI()-@abs_radians
+    END AS radians
+  FROM
+    tinyint_asc t1,
+    tinyint_asc t2,
+    (select @size := 21) sel_size,
+    (select @radius := (@size/2 - 1)) sel_radius
+  WHERE
+    t1.value &lt; @size
+    AND t2.value &lt; @size) select_combinations
+  GROUP BY row_number
+;
++-------------------------------------------+
+| circle                                    |
++-------------------------------------------+
+| 3 3 3 3 3 3 3 2 2 2 2 2 2 2 2 2 2 2 2 2 2 |
+| 3 3 3 3 3 3 3 3 2 2 2 2 2 2 2 2 2 2 2 2 2 |
+| 3 3 3 3 3 3 3 3 2 2 2 2 2 2 2 2 2 2 2 2 2 |
+| 3 3 3 3 3 3 3 3 2 2 2 2 2 2 2 2 2 2 2 2 1 |
+| 3 3 3 3 3 3 3 3 3 2 2 2 2 2 2 2 2 2 2 1 1 |
+| 3 3 3 3 3 3 3 3 3 2 2 2 2 2 2 2 2 1 1 1 1 |
+| 3 3 3 3 3 3 3 3 3 2 2 2 2 2 2 2 1 1 1 1 1 |
+| 3 3 3 3 3 3 3 3 3 3 2 2 2 2 2 1 1 1 1 1 1 |
+| 3 3 3 3 3 3 3 3 3 3 2 2 2 1 1 1 1 1 1 1 1 |
+| 3 3 3 3 3 3 3 3 3 3 2 2 1 1 1 1 1 1 1 1 1 |
+| 3 3 3 3 3 3 3 3 3 3 2 1 1 1 1 1 1 1 1 1 1 |
+| 3 3 3 3 3 3 3 3 3 4 4 4 4 4 4 4 4 4 4 4 4 |
+| 3 3 3 3 3 3 3 3 4 4 4 4 4 4 4 4 4 4 4 4 4 |
+| 3 3 3 3 3 3 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 |
+| 3 3 3 3 3 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 |
+| 3 3 3 3 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 |
+| 3 3 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 |
+| 3 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 |
+| 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 |
+| 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 |
+| 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 |
++-------------------------------------------+</pre>
+</blockquote>
+<p>The interesting SQL trick is that <em>everything goes within the GROUP_CONCAT clause</em>. Instead of presenting the coordinate, we check on the enhanced values table, looking for the first row which has a greater angle (in radians) than the current pixel has. We then display <strong>1</strong>, <strong>2</strong>, etc. to denote the value.</p>
+<p>The next step is actually very simple: instead of drawing the full square, limit to a circle!</p>
+<blockquote>
+<pre>SELECT
+  group_concat(
+    IF(round(sqrt(pow(col_number-(@size-1)/2, 2) + pow(row_number-(@size-1)/2, 2))) BETWEEN @radius/2 AND @radius,
+    (SELECT name_order FROM
+      (
+      SELECT
+        name_order,
+        name_column,
+        value_column,
+        accumulating_value,
+        accumulating_value/@accumulating_value AS accumulating_value_ratio,
+        2*PI()*accumulating_value/@accumulating_value AS accumulating_value_radians
+      FROM (
+        SELECT
+          name_column,
+          value_column,
+          @name_order := @name_order+1 AS name_order,
+          @accumulating_value := @accumulating_value+value_column AS accumulating_value,
+          @aggregated_name_column := CONCAT(@aggregated_name_column, name_column, ',') AS aggregated_name_column
+        FROM (
+          SELECT name AS name_column, value AS value_column FROM sample_values2
+          ) select_values,
+          (SELECT @name_order := 0) select_name_order,
+          (SELECT @accumulating_value := 0) select_accumulating_value,
+          (SELECT @aggregated_name_column := '') select_aggregated_name_column
+        ) select_accumulating_values
+      ) select_for_radians
+    WHERE accumulating_value_radians &gt;= radians LIMIT 1
+    ), '-')
+    order by col_number separator ' ') as circle
+FROM (
+  SELECT
+    t1.value AS col_number,
+    t2.value AS row_number,
+    @dx := (t1.value - (@size-1)/2) AS dx,
+    @dy := ((@size-1)/2 - t2.value) AS dy,
+    @abs_radians := IF(@dx = 0, PI()/2, (atan(abs(@dy/@dx)))) AS abs_radians,
+    CASE
+      WHEN SIGN(@dy) &gt;= 0 AND SIGN(@dx) &gt;= 0 THEN @abs_radians
+      WHEN SIGN(@dy) &gt;= 0 AND SIGN(@dx) &lt;= 0 THEN PI()-@abs_radians
+      WHEN SIGN(@dy) &lt;= 0 AND SIGN(@dx) &lt;= 0 THEN PI()+@abs_radians
+      WHEN SIGN(@dy) &lt;= 0 AND SIGN(@dx) &gt;= 0 THEN 2*PI()-@abs_radians
+    END AS radians
+  FROM
+    tinyint_asc t1,
+    tinyint_asc t2,
+    (select @size := 21) sel_size,
+    (select @radius := 7) sel_radius
+  WHERE
+    t1.value &lt; @size
+    AND t2.value &lt; @size) select_combinations
+  GROUP BY row_number
+;
++-------------------------------------------+
+| circle                                    |
++-------------------------------------------+
+| - - - - - - - - - - - - - - - - - - - - - |
+| - - - - - - - - - - - - - - - - - - - - - |
+| - - - - - - - - - - - - - - - - - - - - - |
+| - - - - - - - - 2 2 2 2 2 - - - - - - - - |
+| - - - - - - 3 3 3 2 2 2 2 2 2 - - - - - - |
+| - - - - - 3 3 3 3 2 2 2 2 2 2 2 - - - - - |
+| - - - - 3 3 3 3 3 2 2 2 2 2 2 2 1 - - - - |
+| - - - - 3 3 3 3 3 - - - 2 2 2 1 1 - - - - |
+| - - - 3 3 3 3 3 - - - - - 1 1 1 1 1 - - - |
+| - - - 3 3 3 3 - - - - - - - 1 1 1 1 - - - |
+| - - - 3 3 3 3 - - - - - - - 1 1 1 1 - - - |
+| - - - 3 3 3 3 - - - - - - - 4 4 4 4 - - - |
+| - - - 3 3 3 3 3 - - - - - 4 4 4 4 4 - - - |
+| - - - - 3 3 4 4 4 - - - 4 4 4 4 4 - - - - |
+| - - - - 3 4 4 4 4 4 4 4 4 4 4 4 4 - - - - |
+| - - - - - 4 4 4 4 4 4 4 4 4 4 4 - - - - - |
+| - - - - - - 4 4 4 4 4 4 4 4 4 - - - - - - |
+| - - - - - - - - 4 4 4 4 4 - - - - - - - - |
+| - - - - - - - - - - - - - - - - - - - - - |
+| - - - - - - - - - - - - - - - - - - - - - |
+| - - - - - - - - - - - - - - - - - - - - - |
++-------------------------------------------+</pre>
+</blockquote>
+<p>That looks a lot more like a pie chart.</p>
+<h4>Part 4: doing the fancy work</h4>
+<p>We will now add (in one big step):</p>
+<ul>
+<li>Stretching along the X-axis.</li>
+<li>Condensing the spaces.</li>
+<li>Coloring for the pie parts.</li>
+<li>A legend.</li>
+</ul>
+<p>The text in <strong>bold</strong> is the original query, and is the only thing you need to change in order to create your own pie charts.</p>
+<blockquote>
+<pre>SELECT
+  group_concat(
+    IF(round(sqrt(pow(col_number/@stretch-0.5-(@size-1)/2, 2) + pow(row_number-(@size-1)/2, 2))) BETWEEN @radius*2/3 AND @radius,
+    (SELECT SUBSTRING(@colors, name_order, 1) FROM
+      (
+      SELECT
+        name_order,
+        name_column,
+        value_column,
+        accumulating_value,
+        accumulating_value/@accumulating_value AS accumulating_value_ratio,
+        @aggregated_data := CONCAT(@aggregated_data, name_column, ': ', value_column, ' (', ROUND(100*value_column/@accumulating_value), '%)', '|') AS aggregated_name_column,
+        2*PI()*accumulating_value/@accumulating_value AS accumulating_value_radians
+      FROM (
+        SELECT
+          name_column,
+          value_column,
+          @name_order := @name_order+1 AS name_order,
+          @accumulating_value := @accumulating_value+value_column AS accumulating_value
+        FROM (
+          <strong>SELECT name AS name_column, value AS value_column FROM sample_values2 LIMIT 4</strong>
+          ) select_values,
+          (SELECT @name_order := 0) select_name_order,
+          (SELECT @accumulating_value := 0) select_accumulating_value,
+          (SELECT @aggregated_data := '') select_aggregated_name_column
+        ) select_accumulating_values
+      ) select_for_radians
+    WHERE accumulating_value_radians &gt;= radians LIMIT 1
+    ), ' ')
+    order by col_number separator '') as pie
+FROM (
+  SELECT
+    t1.value AS col_number,
+    t2.value AS row_number,
+    @dx := (t1.value/@stretch - (@size-1)/2) AS dx,
+    @dy := ((@size-1)/2 - t2.value) AS dy,
+    @abs_radians := IF(@dx = 0, PI()/2, (atan(abs(@dy/@dx)))) AS abs_radians,
+    CASE
+      WHEN SIGN(@dy) &gt;= 0 AND SIGN(@dx) &gt;= 0 THEN @abs_radians
+      WHEN SIGN(@dy) &gt;= 0 AND SIGN(@dx) &lt;= 0 THEN PI()-@abs_radians
+      WHEN SIGN(@dy) &lt;= 0 AND SIGN(@dx) &lt;= 0 THEN PI()+@abs_radians
+      WHEN SIGN(@dy) &lt;= 0 AND SIGN(@dx) &gt;= 0 THEN 2*PI()-@abs_radians
+    END AS radians
+  FROM
+    tinyint_asc t1,
+    tinyint_asc t2,
+    (select @size := 23) sel_size,
+    (select @radius := (@size/2 - 1)) sel_radius,
+    (select @stretch := 4) sel_stretch,
+    (select @colors := '#;o:X"@+-=123456789abcdef') sel_colors
+  WHERE
+    t1.value &lt; @size*@stretch
+    AND t2.value &lt; @size) select_combinations
+  GROUP BY row_number
+UNION ALL
+  SELECT
+    CONCAT(
+      REPEAT(SUBSTRING(@colors, value, 1), 2),
+      '  ',
+      SUBSTRING_INDEX(SUBSTRING_INDEX(@aggregated_data, '|', value), '|', -1)
+    )
+  FROM
+    tinyint_asc
+  WHERE
+    value BETWEEN 1 AND @name_order
+;
++----------------------------------------------------------------------------------------------+
+| pie                                                                                          |
++----------------------------------------------------------------------------------------------+
+|                                                                                              |
+|                                   ;;;;;;;;;;;;;;;;;;;;;;;;;                                  |
+|                          oooooooo;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;                         |
+|                    ooooooooooooooo;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;                   |
+|                oooooooooooooooooooo;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;               |
+|             oooooooooooooooooooooooo                     ;;;;;;;;;;;;;;;;;;;;;###            |
+|           oooooooooooooooooooo                                 ;;;;;;;;;###########          |
+|         oooooooooooooooooo                                         ##################        |
+|       ooooooooooooooooo                                               #################      |
+|      ooooooooooooooooo                                                 #################     |
+|      oooooooooooooooo                                                   ################     |
+|     oooooooooooooooo                                                     ################    |
+|      oooooooooooooooo                                                   ::::::::::::::::     |
+|      ooooooooooooooooo                                                 :::::::::::::::::     |
+|       ooooooooooooooooo                                               :::::::::::::::::      |
+|         oooooooooooooo::::                                         ::::::::::::::::::        |
+|           ooooooo:::::::::::::                                 ::::::::::::::::::::          |
+|             ::::::::::::::::::::::::                     ::::::::::::::::::::::::            |
+|                :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::               |
+|                    :::::::::::::::::::::::::::::::::::::::::::::::::::::::                   |
+|                          :::::::::::::::::::::::::::::::::::::::::::                         |
+|                                   :::::::::::::::::::::::::                                  |
+|                                                                                              |
+| ##  red: 1 (10%)                                                                             |
+| ;;  blue: 2 (20%)                                                                            |
+| oo  orange: 3 (30%)                                                                          |
+| ::  white: 4 (40%)                                                                           |
++----------------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>Making the legend is by itself an interesting hack: aggregating an unknown number of rows using a session user variable, then splitting it again. Of course, this works well if we only have a small number of rows (values), as we expect in our case.</p>
+<h4>Showcase</h4>
+<p>OK. Why? <em>Why?</em></p>
+<p>Here are three charts I hope will convince the skeptic reader:</p>
+<p><em>Given the <strong>sakila</strong> database, list the 8 largest tables (size in KB):</em></p>
+<blockquote>
+<pre>+------------------------------------------------------------------------------+
+| pie_chart                                                                    |
++------------------------------------------------------------------------------+
+|                                                                              |
+|                            #######################                           |
+|                    #######################################                   |
+|               #################################################              |
+|            ##################                   ##################           |
+|         ###############                               ###############        |
+|        ;;###########                                     #############       |
+|      ;;;;;;;;;;;;;                                         #############     |
+|      ;;;;;;;;;;;;                                           ############     |
+|     ;;;;;;;;;;;;;                                           #############    |
+|      ;;;;;;;;;;;;                                           @@@@@@@@@@@@     |
+|      ;;;;;;;;;;;;;                                         """""""""""""     |
+|        ;;;;;;;;;;;;;                                     XX"""""""""""       |
+|         ;;;;;;;;;;;;;;;                               XXXXXXXXXXXXX""        |
+|            ;;;;;;;;;;;;;;;;;;                   ::::::::::XXXXXXXX           |
+|               ;;;;;;;;;;;;;;;;;;;;;;;;;;oooooooooo::::::::::::X              |
+|                    ;;;;;;;;;;;;;;;;;;;;;;ooooooooooo::::::                   |
+|                            ;;;;;;;;;;;;;;ooooooooo                           |
+|                                                                              |
+| ##  rental: 2850816 (43%)                                                    |
+| ;;  payment: 2228224 (34%)                                                   |
+| oo  inventory: 376832 (6%)                                                   |
+| ::  film_text: 325440 (5%)                                                   |
+| XX  film: 278528 (4%)                                                        |
+| ""  film_actor: 278528 (4%)                                                  |
+| @@  customer: 131072 (2%)                                                    |
+| ++  staff: 98304 (1%)                                                        |
++------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p><em>How much disk space does each storage engine consume (sum table size per engine)?</em></p>
+<blockquote>
+<pre>+------------------------------------------------------------------------------+
+| pie_chart                                                                    |
++------------------------------------------------------------------------------+
+|                                                                              |
+|                            #######################                           |
+|                    #######################################                   |
+|               #################################################              |
+|            ##################                   ##################           |
+|         ###############                               ###############        |
+|        #############                                     #############       |
+|      #############                                         #############     |
+|      ############                                           ############     |
+|     #############                                           #############    |
+|      ############                                           oooooooooooo     |
+|      #############                                         ;;;;;;;;;;;oo     |
+|        #############                                     ;;;;;;;;;;;;;       |
+|         ###############                               ;;;;;;;;;;;;;;;        |
+|            ##################                   #;;;;;;;;;;;;;;;;;           |
+|               #####################################;;;;;;;;;;;;              |
+|                    ###################################;;;;                   |
+|                            #######################                           |
+|                                                                              |
+| ##  InnoDB: 1908732 (84%)                                                    |
+| ;;  MyISAM: 284074 (12%)                                                     |
+| oo  ARCHIVE: 84276 (4%)                                                      |
++------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p><em>What were the most popular DMLs during the last 10 seconds?</em></p>
+<blockquote>
+<pre>+------------------------------------------------------------------------------+
+| pie_chart                                                                    |
++------------------------------------------------------------------------------+
+|                                                                              |
+|                            #######################                           |
+|                    #######################################                   |
+|               #################################################              |
+|            ##################                   ##################           |
+|         ###############                               ###############        |
+|        #############                                     #############       |
+|      #############                                         #############     |
+|      ############                                           ############     |
+|     #############                                           #############    |
+|      ############                                           oooo::::::::     |
+|      #############                                         ooooooooooooo     |
+|        #############                                     ooooooooooooo       |
+|         ###############                               ooooooooooooooo        |
+|            #################;                   ;;;;;;;;;ooooooooo           |
+|               #############;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;oo              |
+|                    ######;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;                   |
+|                            ;;;;;;;;;;;;;;;;;;;;;;;                           |
+|                                                                              |
+| ##  com_select: 1876 (69%)                                                   |
+| ;;  com_insert: 514 (19%)                                                    |
+| oo  com_delete: 277 (10%)                                                    |
+| ::  com_update: 63 (2%)                                                      |
++------------------------------------------------------------------------------+</pre>
+</blockquote>
+<h4>Conclusion</h4>
+<p>ASCII graphics always look funny; some would say the same about <em>top</em>, <em>wget</em>,  <em>cal</em>, etc. (should I even mention <em>lynx</em>?)</p>
+<p>I think it is possible to do most common charting with SQL: I've already shown how to do horizontal graphs and pie charts. Multi-column bar charts can also be worked out. These are not meant as a permanent solution; but it's good to be able to visualize some values without having to install Nagios (along with <em>apache</em>, <em>php</em>, drivers, etc.), or otherwise exporting table, copying to desktop machines, loading into OpenOffice impress, generating graphs.</p>
+<p>Sometimes you just need an immediate overlook. This is where I find SQL charting to be useful.</p>
+<p>Sure, there are Perl and Python solutions for that; that's easily achieved as well. But doing it from with the MySQL client gives, in my opinion, a level of confidence: you'll always be able to produce the graph; <em>perl-DBD-MySQL</em> or no <em>perl-DBD-MySQL</em>; Linux or Windows.</p>
+<p>Besides, it was fun doing it.</p>

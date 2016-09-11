@@ -1,0 +1,48 @@
+---
+title: On stored routines and dynamic statements
+date: 2012-06-18 11:16:29.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- Prepared Statements
+- QueryScript
+- Stored routines
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I very much enjoyed reading <a href="http://blog.mclaughlinsoftware.com/2012/06/16/overloading-procedures/" rel="bookmark">Overloading Procedures</a> by Michael McLaughlin: good stuff!</p>
+<p>I'm dealing with similar issues in <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script.html">common_schema/QueryScript</a>, where I implement a whole new scripting language within MySQL, interpreted by stored routines. I am now finalizing the next version of <em>common_schema/QueryScript</em>, with a major addition to the scripting language to put yet even more power at the hands of the programmer/DBA using simple, clean syntax.</p>
+<p>Still hush hush, the development of that feature touched at the very same issues described in Michael's post. Present in current release, these issues are intensified by the use and complexity of the new development. Here are a few insights of mine:</p>
+<h4>Internal array implementation</h4>
+<p>Like Michael, I started by implementing arrays through tables. That is, create a (temporary, in my case) table, wrap it up with a lot of stored routine code, and simulate an array. This array is not yet provided to the user, but is used internally for QueryScript's own code.</p>
+<p>Well, disappointment here: during load tests on intense structures, such as a <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_foreach.html">foreach</a> loop, where each iteration of the loop requires the creation of an array, I found that the current solution does not hold well on busy servers.</p>
+<p>Seemingly, there's nothing wrong with the creation of a new table every once in a while -- and in particular a temporary table. However, I quickly found out that a busy server thrashes the table cache with such intense rate of creation/dropping of tables. The competition over the table cache mutex becomes intolerable and hogs not only the script's execution but the entire server's.</p>
+<p>There's also the issue of the type of array values -- no going around using textual columns, of course, but -- how long? A <strong>VARCHAR(32767)</strong> should be enough for any reasonable implementation, but -- how much memory would that consume? Both <strong>MEMORY</strong> and standard temporary tables (<em>Percona Server</em> has that partially <a href="http://www.mysqlperformanceblog.com/2011/09/06/dynamic-row-format-for-memory-tables/">resolved</a>) use a fixed row format, which means a 32K text is actually allocated in memory even when your value is 'x'.<!--more--></p>
+<p>The next release completely rewrites the internal array implementation. How does it work now?</p>
+<p>By avoiding using tables in the first place. To implement arrays now, I chose to use a well formatted text, such that can be easily parsed and manipulated.</p>
+<p>I chose XML format, for which MySQL provides with <a href="http://dev.mysql.com/doc/refman/5.1/en/xml-functions.html">a couple functions</a>. Far from covering real XML manipulation requirements, but with a little effort and hacking, can provide with a reasonable base for work.</p>
+<p>This also means the entire array resides in a single string, and this can be implemented by a User Defined Variable. So -- no tables!</p>
+<p>Moreover, there is now no need for stored procedures, since no dynamic SQL is sued. It's all functions, which makes for an easier access. And to wrap it up -- no need to decide about value limits. What fits in the string is what you get.</p>
+<p>This solution is not perfect, either, of course. There's more CPU used to parse/manipulate the XML (not a bug problem on my work since arrays are typically small), allocation/reallocation of memory (any manipulation assigns a new value to the User Defined Variable), and handling of <strong>NULL</strong>s is more complex.</p>
+<p>Bottom line: overdoing <strong>CREATE TABLE/DROP TABLE</strong>, even for <strong>TEMPORARY</strong>, can be a pain. Avoid it.</p>
+<h4>Dyamic SQL</h4>
+<p>You can't invoke dynamic SQL from within dynamic SQL. There is a wide variety of additional commands that cannot be invoked by dynamic SQL.</p>
+<p>This calls for some attention. If you want to be able to dynamically invoke server commands issued by the user, you either limit the user's choice of commands, or you find another way.</p>
+<p><em>QueryScript</em> is a classic <em>"interpreted by an interpreter"</em> code. I wish there was a better way, but I use stored routines to interpret <em>QueryScript</em> text. So the <em>QueryScript</em> interpreter takes care not to over do it. While just reading the script's text and sending it for dynamic invocation is certainly easier to code, it makes for said limitations. Thanks to <a href="http://rpbouman.blogspot.co.il/">Roland</a>'s contributions, <em>common_schema</em> parses user's text, analyses and find intended queries, and -- sometimes -- simply runs it without dynamic invocation. Think nested if-else statement.</p>
+<p>Still, most user's code is indeed invoked dynamically.</p>
+<h4>Parsing by comma</h4>
+<p>If a user provides a comma delimited string, it is very dangerous to parse it via comma. The text <strong>'one,two,three,four'</strong> seems fine, but what about <strong>'one,two,"hi, dad"'</strong>?</p>
+<p>So <em>common_schema</em> does a lot of such parsing. It takes care to properly analyze quoted text. But more than that: since the parsing of such text is costly, <em>common_schema</em> translates such text to a well-formed delimited text, such that there is a known, unique delimiter, not to be found within quotes, such that be splitting using said delimiter we get the definite tokenizing of the text.</p>
+<p>To illustrate how it works: it attempts an unlikely single-character delimiter. Consider <strong>'\0'</strong>. Is <strong>'\0'</strong> found in the original text? If not, we can once analyze the proper tokenization, then replace appropriate commas with <strong>'\0'</strong>. Wait, is <strong>'\0'</strong> found anywhere in the text? Then we try the even more unlikely delimiter <strong>'\0\b'</strong>, then the yet unlikelier <strong>'\0\b\r'</strong>, etc.</p>
+<h4>QueryScript</h4>
+<p>QueryScript is a way to write stored SQL code "the way it ought to be": simple, clean, useful, dynamic, flexible, wicked cool. A lot is going on, and I have enough ideas to last a couple years worth of development. No intention to create a heavyweight, full blown language. On the contrary: the language is intended to be simple, lightweight, and provide with easy to access interface to complex SQL operations. <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script.html">Start the journey here</a>.</p>

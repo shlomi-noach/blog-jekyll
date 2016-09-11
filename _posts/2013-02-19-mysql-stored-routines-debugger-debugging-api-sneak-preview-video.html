@@ -1,0 +1,44 @@
+---
+title: 'MySQL Stored Routines Debugger & Debugging API: sneak preview video'
+date: 2013-02-19 11:32:27.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- debug
+- Stored routines
+- video
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+  _oembed_b7a302babad7a0809cd3fbcdde8793d2: <iframe width="500" height="375" src="http://www.youtube.com/embed/yOCERssiHMA?feature=oembed"
+    frameborder="0" allowfullscreen></iframe>
+  _oembed_time_b7a302babad7a0809cd3fbcdde8793d2: '1429722936'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This is a sneak peek video introduction/preview of an in-development free and open source server side debugger &amp; debugging API for MySQL stored routines.</p>
+<p>MySQL does not provide server side debugging capabilities for stored routines. Some tools exist, including MySQL's own, that assist in stored routine debugging. These are all GUI based and, to the best of my knowledge, MS Windows based. There is one solution in alpha stage that is developed for Java/eclipse; I did not look at the code. See discussion <a href="http://www.xaprb.com/blog/2012/11/01/stored-procedure-debugging-in-mysql/">here</a> and <a href="http://blog.webyog.com/2011/12/06/debugging-stored-programs-in-mysql/">here</a>.</p>
+<p>An ideal solution would be to have debugging API in the server itself - independently of your client, programming language or operating system. To the best of my knowledge, nothing like that is being developed.</p>
+<p>I'm now presenting a <strong>rdebug</strong>: a stored routines server-side debugger, Pure-SQL, based on stored routines. <em>rdebug</em> is developed as part of <a href="http://code.google.com/p/common-schema">common_schema,</a> and actually relies on some of its power.</p>
+<p>Like some other tools, it uses code injection and manipulation: it injects debugging info into your stored routine. You need to "compile" your routine with debugging info.</p>
+<p>Unlike some other tools, it actually runs your stored routines. It does not mimic or simulate them on client side. It does not break them into smaller routines, attempting to assemble the original behavior from lego bricks.</p>
+<p><strong>The quick technical overview</strong> is that you use two processes (MySQL threads): the worker process running the routine (your natural <strong>call my_routine()</strong>), and the debugger process. The debugger process attaches itself to the worker process; it controls the worker by commands like <em>"step over"</em>; it gets data from the worker: what's the current stack trace? What variables are now available and what are their values?; it manipulates the worker's data: it can utilize breakpoints to modify worker's local &amp; session variables.<!--more--></p>
+<p>The debugger code is itself written with stored routines. Your own routines are analyzed by stored routine code. Stored routines inject code into your routine. Stored routines invoke and control the debugging progress. Stored routines manipulate your routine's data. All access to the debugger is via (did I mention?) stored routines. This leads to <em>server-side</em> (alas not server-code) <em>debugger &amp; debugger API</em>: any tool, GUI or command line, can utilize these stored routine calls so as to implement a debugger.</p>
+<p>Since the solution is written with stored routines -- thus allowing you to debug your existing <strong>5.1</strong>, <strong>5.5</strong> &amp; <strong>5.6</strong> servers -- it is also limited by what info can be retrieved by stored routines. One can view/modify local routine variables &amp; user defined variables, set breakpoints etc. One cannot get the "state of a cursor", though, since no such info exists for a stored routine code.</p>
+<p>having injected code operate from within your routine does mean a lot more actions are taken, like hidden <strong>INSERT</strong>s and <strong>UPDATE</strong>s. Calls to <strong>ROW_COUNT()</strong> and <strong>LAST_INSERT_ID()</strong> can be skewed. That's a limitation I'm unsure as yet how to overcome; but not overcoming it won't bring everything down as far as I'm concerned.</p>
+<p>Some of the injected code calls upon dynamic SQL. This means at current stored functions are not possible to debug - just stored procedures. There's a way around this for future development. There is no support for triggers, and I don't expect there will be in the near future. No investigation into events as yet.<br />
+<a name="video"></a></p>
+<h4>A video is worth a thousand blogs</h4>
+<p>Watch a live demo of debugging a simple routine; the demo presents a step-by-step debugging of a routine, listing, getting and setting variables.</p>
+<p>http://www.youtube.com/watch?v=yOCERssiHMA</p>
+<h4>What's the status?</h4>
+<p>What you've seen in the video is a first actual milestone - not a POC. Still need to implement nested stack level, step-in and step-out commands, conditional breakpoints, worker temporary table access from debugger process. Lot's of stuff, but looking good.</p>
+<p>This work is the result of a personal interest. All input, feedback, profound mistakes, feature requests, <em>"dude, there's already a far better tool that does all that"</em> comments, questions -- are welcome!</p>

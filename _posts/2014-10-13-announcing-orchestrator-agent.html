@@ -1,0 +1,54 @@
+---
+title: Announcing orchestrator-agent
+date: 2014-10-13 14:59:24.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Backup
+- Open Source
+- orchestrator
+- Replication
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><strong><a href="https://github.com/outbrain/orchestrator-agent">orchestrator-agent</a></strong> is a side-kick, complementary project of <strong><a href="https://github.com/outbrain/orchestrator">orchestrator</a></strong>, implementing a daemon service on one's MySQL hosts which communicates with and accepts commands from <em>orchestrator</em>, built with the original purpose of providing an automated solution for provisioning new or corrupted slaves.</p>
+<p>It was built by <a href="https://github.com/outbrain">Outbrain</a>, with Outbrain's specific use case in mind. While we release it as open source, only a small part of its functionality will appeal to the public (this is why it's not strictly part of the <em>orchestrator</em> project, which is a general purpose, wide-audience solution). Nevertheless, it is a simple implementation of a daemon, such that can be easily extended by the community. The project is open for pull-requests!</p>
+<p>A quick breakdown of <em>orchestrator-agent</em> is as follows:</p>
+<ul>
+<li>Executes as a daemon on linux hosts</li>
+<li>Interacts and invokes OS commands (via <em>bash</em>)</li>
+<li>Does not directly interact with a MySQL server running on that host (does not connect via mysql credentials)</li>
+<li>Expects a single MySQL service on host</li>
+<li>Can control the MySQL service (e.g. stop, start)</li>
+<li>Is familiar with LVM layer on host</li>
+<li>Can take LVM snapshots, mount snapshots, remove snapshots</li>
+<li>Is familiar with the MySQL data directory, disk usage, file system</li>
+<li>Can send snapshot data from a mounted snapshot on a running MySQL host</li>
+<li>Can prepare data directory and receive snapshot data from another host</li>
+<li>Recognizes local/remote datacenters</li>
+<li>Controlled by <em>orchestrator,</em> two <em>orchestrator-agents</em> implement an automated and audited solution for seeding a new/corrupted MySQL host based on a running server.</li>
+</ul>
+<p><!--more-->Offline, hard-copy backups aside, Outbrain implements quick backups via LVM snapshots. Some slaves (depending on strength, datacenter etc.) take the role of <em>snapshot servers</em>. These slaves take an LVM snapshot once per day, and <em>keep it open</em> unmounted. At any given time we might have multiple open snapshots on a snapshot server. At a few minutes notice, we are able to restore MySQL to yesterday's, the day before, two days before, ... state. This only takes mounting of the desired snapshot and starting MySQL over the mounted volume.</p>
+<p>We've in fact put this method to practice in at least one major occasion last year, that proved it to be of significant worth: we were able to fix a compromise to some dataset within minutes of action.</p>
+<p>But we also use these snapshots on a daily basis, putting them constantly to practice (hence validating this backup method routinely): we provision new MySQL servers based on those snapshots. A new or corrupted server can be seeded with a snapshot data (preferably from a host in same datacenter). We don't need to perform a backup <em>now</em>. We can take the one from <em>tonight</em>.</p>
+<p>There is some fuss around this: need to verify MySQL not running on target host, clean up the target host, choose the best source host, choose the best snapshot on source host, mount it, deliver the data, accept the data, do post-copy cleanup, start the MySQL service on target host, ... Or we might choose to actually do take a fresh, immediate snapshot from a server not configured as <em>snapshot server</em>... We used to do all these by shell scripts, but realized this will not sustain us.</p>
+<p><em>Orchestrator-agent</em> was invented with this particular use case in mind, and <em>orchestrator</em> was extended to support these operations. <em>Orchestrator</em> can act as the controller of a seed/provisioning operation, getting info from/to <em>orchestrator-agent</em> and coordinating two agents to send/receive the data.</p>
+<p>The agent still relies on some external commands (via <em>bash</em>) to implement some functionality; to some extent, we have broken down complex shell scripts then wrapped again, now controlled and audited by the agent; but this will slowly change as we move more code into <em>orchestrator-agent</em> itself.</p>
+<h4>Should you use orchestrator-agent?</h4>
+<p>If, like us, you use LVM snapshots, at least as a partial form of backup - bingo!</p>
+<p>Otherwise, <em>orchestrator-agent</em> can assist in stopping/starting the MySQL service, tailing the error log; simple stuff like that -- probably too much fuss for such basic operations.</p>
+<p>But it can be easily extended to support other forms of backup (though do note that <em>orchestrator-agent</em> does not and should not perform scheduled backups, merely manipulate them); so if you like to contribute code into <em>orchestrator-agent</em>, please let us know! It would be nice to have a solution that works for multiple use cases.</p>
+<h4>Get it</h4>
+<p><em>orchestrator-agent</em> is released under the <a href="https://github.com/outbrain/orchestrator-agent/blob/master/LICENSE">Apache 2.0 license</a>, and is free to use.</p>
+<p>Pre-compiled, <strong>RPM</strong> and <strong>deb</strong> packages <a href="https://github.com/outbrain/orchestrator-agent/releases">can be found on the releases page</a>.</p>
+<p>&nbsp;</p>

@@ -1,0 +1,25 @@
+---
+title: 'REPLACE INTO: think twice'
+date: 2008-12-17 09:03:19.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Syntax
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>The <a title="REPLACE Syntax" href="http://dev.mysql.com/doc/refman/5.0/en/replace.html">REPLACE [INTO]</a> syntax allows us to INSERT a row into a table, except that if a UNIQUE KEY (including PRIMARY KEY) violation occurs, the old row is deleted prior to the new INSERT, hence no violation.</p>
+<p>Sounds very attractive, and has a nice syntax as well: the same syntax as a normal INSERT INTO's. It certainly has a nicer syntax than <a title="INSERT ... ON DUPLICATE KEY UPDATE Syntax" href="http://dev.mysql.com/doc/refman/5.0/en/insert-on-duplicate.html">INSERT INTO ... ON DUPLICATE KEY UPDATE</a>, and it's certainly shorter than using a SELECT to see if a row exists, then doing either INSERT or UPDATE.</p>
+<p>But weak hearted people as myself should be aware of the following: it is a heavyweight solution. It may be just what you were looking for in terms of ease of use, but the fact is that on duplicate keys, a DELETE and INSERT are performed, and this calls for a closer look.<!--more--></p>
+<p>Whenever a row is deleted, all indexes need to be updated, and most importantly the PRIMARY KEY. When a new row is inserted, the same happens. Especially on InnoDB tables (because of their clustered nature), this means much overhead. The restructuring of an index is an expensive operation. Index nodes may need to be merged upon DELETE. Nodes may need to be split due to INSERT. After many REPLACE INTO executions, it is most probable that your index is more fragmented than it would have been, had you used SELECT/UPDATE or INSERT INTO ... ON DUPLICATE KEY</p>
+<p>Also, there's the notion of "well, if the row isn't there, we create it. If it's there, it simply get's updated". This is false. The row doesn't just get updated, it is completely removed. The problem is, if there's a PRIMARY KEY on that table, and the REPLACE INTO does not specify a value for the PRIMARY KEY (for example, it's an AUTO_INCREMENT column), the new row gets a different value, and this may not be what you were looking for in terms of behavior.</p>
+<p>Many uses of REPLACE INTO have no intention of changing PRIMARY KEY (or other UNIQUE KEY) values. In that case, it's better left alone. On a production system I've seen, changing REPLACE INTO to INSERT INTO ... ON DPLICATE KEY resulted in a ten fold more throughput (measured in queries per second) and a drastic decrease in IO operations and in load average.</p>

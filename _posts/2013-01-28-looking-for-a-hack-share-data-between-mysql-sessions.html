@@ -1,0 +1,26 @@
+---
+title: 'Looking for a hack: share data between MySQL sessions'
+date: 2013-01-28 15:27:58.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Hack
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I'm looking for a way to share data between two MySQL connections/sessions. Obviously tables are the trivial answer, but for reasons of security (possibly insufficient privileges) I wish to avoid that.</p>
+<p>The type of data to be passed can vary. Ideally I would be able to pass multiple pieces of information (dates, texts, integers, etc.) around. If impossible, I would do with texts only, and if impossible yet, I could do with a single text (but reasonably long).</p>
+<p>There is a way to do so: by writing to the file system (<strong>SELECT INTO OUTFILE</strong> + <strong>LOAD_FILE()</strong>). However I wish to avoid it, since writing to files from within MySQL requires creation of a new file each time; no overwrite and no purging; this litters the file system.</p>
+<p>So: any other tricks? Is there some way to pass data via <strong>GET_LOCK()</strong>/<strong>RELEASE_LOCK()</strong> (none that I can see other than Morse code)?</p>
+<p>Is there some global variable that is unused, can be changed dynamically, and has enough space? (I couldn't find one)</p>
+<p>I appreciate any input.</p>

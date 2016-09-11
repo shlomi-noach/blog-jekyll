@@ -1,0 +1,34 @@
+---
+layout: post
+title: 'Syntax of the day: LOAD XML'
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags:
+- SQL
+- Syntax
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Another one of those commands lying out there for years and I never noticed:</p>
+<p><strong>LOAD XML INFILE</strong> is for XML what <strong>LOAD DATA INFILE</strong> is for CSV. So you can load XML files directly into tables.</p>
+<blockquote>
+<pre>bash$ mysql sakila -e "select * from actor" <strong>--xml</strong> &gt; /tmp/actor.xml
+
+mysql [sakila]&gt; <strong>create table</strong> actor_xml <strong>like</strong> actor;
+Query OK, 0 rows affected (1.06 sec)
+
+mysql [sakila]&gt; <strong>load xml infile</strong> '/tmp/actor.xml' <strong>into table</strong> actor_xml;
+Query OK, 200 rows affected (0.15 sec)
+Records: 200  Deleted: 0  Skipped: 0  Warnings: 0</pre>
+</blockquote>
+<p>Pretty straightforward.</p>

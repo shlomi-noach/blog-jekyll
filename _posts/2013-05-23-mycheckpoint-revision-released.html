@@ -1,0 +1,39 @@
+---
+title: mycheckpoint revision 231 released
+date: 2013-05-23 14:21:52.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Development
+- Monitoring
+- mycheckpoint
+- Open Source
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>A <a href="http://code.google.com/p/mycheckpoint/">new release</a> for <strong><a href="http://code.openark.org/forge/mycheckpoint">mycheckpoint</a></strong>: lightweight, SQL oriented MySQL monitoring solution.</p>
+<p>If you're unfamiliar with <em>mycheckpoint</em>, well, the one minute sales pitch is: it's a free and open source monitoring tool for MySQL, which is extremely easy to install and execute, and which includes <a href="http://code.openark.org/forge/mycheckpoint/documentation/custom-monitoring">custom queries</a>, <a href="http://code.openark.org/forge/mycheckpoint/documentation/alerts">alerts</a> (via <a href="http://code.openark.org/forge/mycheckpoint/documentation/emails">emails</a>), and out of the box <a href="http://code.openark.org/forge/mycheckpoint/documentation/http-web-server">HTTP server</a> and <a href="http://mycheckpoint.googlecode.com/svn/trunk/doc/html/sample/http/mcp_sql00/sv_report_html_brief">charting</a>.</p>
+<p>This is mostly a maintenance release, with some long-time requested features, and of course solved bugs. Here are a few highlights:</p>
+<ul>
+<li>Supports MariaDB and MySQL 5.6 (issues with new variables, space padded variables, text-valued variables)</li>
+<li>Supports alerts via function invocation on monitored host (so not only checking alerts via aggregated data like <strong>'Seconds_behind_master'</strong> but also by <strong>SELECT my_sanity_check_function()</strong> on monitored instance). See <a href="http://code.openark.org/forge/mycheckpoint/documentation/alerts">alerts.</a></li>
+<li>Supports single-running-instance via <strong>"--single"</strong> command line argument</li>
+<li>Supports strict <strong>sql_mode</strong>, including <strong>ONLY_FULL_GROUP_BY</strong>, overcoming <a href="http://bugs.mysql.com/bug.php?id=69310">bug #69310</a>.<strong><br />
+</strong></li>
+<li>Supports sending of pending email HTML report</li>
+<li>Better re-deployment process</li>
+<li>Better recognizing of SIGNED/UNSIGNED values</li>
+<li>Some other improvements in charting, etc.</li>
+</ul>
+<p><em>mycheckpoint</em> is released under the BSD license.</p>
+<p><a href="http://code.google.com/p/mycheckpoint/">Downloads are available</a> from the project's page.</p>

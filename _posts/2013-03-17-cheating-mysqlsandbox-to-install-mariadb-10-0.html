@@ -1,0 +1,81 @@
+---
+title: Cheating mysqlsandbox to install MariaDB 10.0
+date: 2013-03-17 08:19:50.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Hack
+- tools
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><em>mysqlsandbox</em> is version-aware. The new <strong>5.6</strong> version, for example, requires <a href="http://datacharmer.blogspot.co.il/2012/09/mysql-sandbox-updated-with-minimal.html">special</a> <a href="http://datacharmer.blogspot.co.il/2013/02/mysql-sandbox-3030-now-adapted-to-work.html">care</a> because of the system InnoDB tables or otherwise modified system tables.</p>
+<p>At this moment, it will refuse to install MariaDB <strong>10.0</strong> (alpha):</p>
+<blockquote>
+<pre><strong>bash$</strong> make_sandbox /tmp/mariadb-10.0.1-linux-x86_64.tar.gz 
+unpacking /tmp/mariadb-10.0.1-linux-x86_64.tar.gz
+<span style="color: #800000;">unsupported version 10.0</span></pre>
+</blockquote>
+<p>This is perfectly legitimate, and I have no quarrel with this fact. However, I did want to setup MariaDB <strong>10.0</strong> as a sandbox.</p>
+<p>As it turns out <em>mysqlsandbox</em> relies on MySQL package naming conventions to detect the version: the fact that a <strong>tgz</strong> file distribution is named <strong>mariadb-10.0.1-linux-x86_64.tar.gz</strong> and extracts onto <strong>mariadb-10.0.1-linux-x86_64</strong>, tells <em>mysqlsandbox</em> that this is version <strong>10.0.1</strong>. Easy enough to cheat, then: pick a version that <em>mysqlsandbox</em> will work with, and which is compatible sandbox-wise with your own, and do the renames. For that matter, I picked <strong>5.5</strong>, and, actually, made it <strong>5.5.100</strong>:<!--more--></p>
+<blockquote>
+<pre><strong>bash:/tmp$</strong> tar xzf <span style="color: #800000;">mariadb-10.0.1-linux-x86_64.tar.gz</span>
+<strong>bash:/tmp$</strong> mv <span style="color: #800000;">mariadb-10.0.1-linux-x86_64</span> <span style="color: #000080;">mariadb-5.5.100-linux-x86_64</span>
+<strong>bash:/tmp$</strong> tar czf <span style="color: #000080;">/tmp/mariadb-5.5.100-linux-x86_64.tar.gz</span> <span style="color: #000080;">./mariadb-5.5.100-linux-x86_64</span>
+<strong>bash:/tmp$</strong> make_sandbox <span style="color: #000080;">mariadb-5.5.100-linux-x86_64.tar.gz</span> 
+
+unpacking /tmp/mariadb-5.5.100-linux-x86_64.tar.gz
+Executing low_level_make_sandbox --basedir=/tmp/5.5.100 \
+        --sandbox_directory=msb_5_5_100 \
+        <span style="color: #339966;">--install_version=5.5</span> \
+        --sandbox_port=55100 \
+        --no_ver_after_name \
+        --my_clause=log-error=msandbox.err
+&gt;&gt;/tmp
+    The MySQL Sandbox,  version 3.0.29
+    (C) 2006-2013 Giuseppe Maxia
+installing with the following parameters:
+upper_directory                = /home/shlomi/sandboxes
+sandbox_directory              = msb_5_5_100
+sandbox_port                   = 55100
+check_port                     = 
+no_check_port                  = 
+datadir_from                   = script
+install_version                = 5.5
+basedir                        = /tmp/5.5.100
+tmpdir                         = 
+my_file                        = 
+operating_system_user          = shlomi
+db_user                        = msandbox
+remote_access                  = 127.%
+ro_user                        = msandbox_ro
+rw_user                        = msandbox_rw
+repl_user                      = rsandbox
+db_password                    = msandbox
+repl_password                  = rsandbox
+my_clause                      = log-error=msandbox.err
+master                         = 
+slaveof                        = 
+high_performance               = 
+prompt_prefix                  = mysql
+prompt_body                    =  [\h] {\u} (\d) &gt; 
+force                          = 
+no_ver_after_name              = 1
+verbose                        = 
+load_grants                    = 1
+no_load_grants                 = 
+no_run                         = 
+no_show                        = 
+do you agree? ([Y],n)</pre>
+</blockquote>
+<p>It worked well for me; perhaps I'm missing on something, so watch your own setup.</p>

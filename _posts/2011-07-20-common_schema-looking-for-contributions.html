@@ -1,0 +1,39 @@
+---
+title: 'common_schema: looking for contributions'
+date: 2011-07-20 16:27:12.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- Open Source
+meta:
+  _edit_last: '2'
+  _oembed_46fc684097e08c13d181e7a7b60f0fc7: '{{unknown}}'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>In my <a href="http://code.openark.org/blog/mysql/announcing-common_schema-common-views-routines-for-mysql">announcement</a> for <a title="common_schema" href="../../forge/common_schema">common_schema</a> I have failed to deliver the following message:</p>
+<blockquote><p>I will be happy to receive contributions to <em>common_schema</em>, and I will be happy to have contributors on this project</p></blockquote>
+<h4>What kind of contributions are wanted?</h4>
+<p>So, I'm mostly interested right now in:</p>
+<ul>
+<li>Views: providing more insight on metadata (data types, schemata, volumes, transactions, locks, connections, etc.)</li>
+<li>Views: SQL code generation (e.g. <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/sql_foreign_keys.html">generate my FOREIGN KEYs</a>)</li>
+<li>Functions: DETERMINISTIC, NO SQL, preferably no control flow inside, making for simple calls what is usually a typical, repeating function combination.</li>
+<li>Tables: small, static data that is handy to have around. But really, <em>small</em>.</li>
+</ul>
+<p>Less interested in:</p>
+<ul>
+<li>Procedures</li>
+<li>OS dependent solutions (e.g. calling LOAD_FILE('/proc/meminfo') which only makes sense on Linux)</li>
+</ul>
+<p>I've got a few ideas already, and have received contributions and ideas from others (I'm looking at you, Roland).</p>
+<p>If you have a good idea you'd like to share, why don't you <a href="http://code.google.com/p/common-schema/issues/entry?template=Request%20for%20new%20component">submit it under the Issues page</a> (submit as <em>"Request for new component"</em>)</p>
+<p>Everything is done on my spare time, and there's not much of that. So, if you do submit something and it's not in right away, please be patient. Thanks!</p>

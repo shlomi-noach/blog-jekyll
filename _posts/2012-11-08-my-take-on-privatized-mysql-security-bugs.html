@@ -1,0 +1,34 @@
+---
+title: My take on privatized MySQL security bugs
+date: 2012-11-08 08:31:16.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Bugs
+- Opinions
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>A couple weeks ago I submitted <a href="http://bugs.mysql.com/bug.php?id=67315">Bug #67315: Crashing server by stored function referencing user defined variable in query</a>. If you press that link, you can't see the bug (though I can as I submitted it).</p>
+<p>This is due to Oracle's policy for security-related bugs. Tomas Ulin, Vice President MySQL Development at Oracle , was kind enough to discuss Oracle's policy with me, and these are the key points as I understand them:</p>
+<p>Oracle's basic approach is to protect its customers. By publicizing security-bugs, Oracle's customers are vulnerable to black hatters attacks. Therefore Oracle takes measures and privatizes security bugs (crashing bugs can be treated as security bugs since a crash is a form of Denial of Service).</p>
+<p>But what of a bug reported in a RC version, as was in my case? There is no strict policy there, according to Ulin. However with a version this close to GA, it is uncertain that a specific bug would be fixed in time. It may happen, then, that a bug would find itself well into GA releases, thereby exposing customers to attacks.</p>
+<p>Moreover, GA bugs that are already fixed may remain private, as customers will not necessarily haste to upgrade their working servers for every bug fix.</p>
+<h4>My take</h4>
+<p>Bug privatization has disadvantages, as well:<!--more--></p>
+<ul>
+<li>One could be left with the knowledge that there's some serious bug in one's server, but with no way to defend oneself, or take measures against hitting that bug</li>
+<li>Forks are left outside; and for maintainer could try and tackle that bug, thereby improving the product. But with private bugs, forks just have to sit and wait idly.</li>
+</ul>
+<p>I don't necessarily have to have a take on this, but I got curious: how do other organizations work? And very quickly, I got <a href="https://fedoraproject.org/wiki/Security/Bugs#Embargoed_Security_Issues">here</a>. And although the domain reads <em>fedoraproject.org</em>, this is also the RedHat Enterprise Linux way of doing it. A bug can be embargoed, even if it's upstream.</p>
+<p>RedHat/Fedora have a notion of embargo expiry time; but I don't know exactly how that works - I did some looking but could not determine that there is a fixed expiry time at the time of embargo.</p>
+<p>Comparing RedHat/Fedora's and Oracle's approaches, I'm not sure there's that much of a difference. Perhaps Oracle is stricter. I did not make a thorough research, but the logic makes sense to me, which makes the policy reasonable in my view.</p>

@@ -1,0 +1,95 @@
+---
+title: Multi condition UPDATE query
+date: 2011-01-27 10:30:24.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Indexing
+- SQL
+meta:
+  _edit_last: '2'
+  _syntaxhighlighter_encoded: '1'
+  _oembed_55835302a9154b1a33fa9bef669291f7: '<iframe src="http://www.slideshare.net/slideshow/embed_code/28163348"
+    width="427" height="356" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"
+    style="border:1px solid #CCC; border-width:1px 1px 0; margin-bottom:5px; max-width:
+    100%;" allowfullscreen> </iframe> <div style="margin-bottom:5px"> <strong> <a
+    href="https://www.slideshare.net/shlominoach/commonschema-22" title="common_schema
+    2.2 DBA&#x27;s framework for MySQL" target="_blank">common_schema 2.2 DBA&#x27;s
+    framework for MySQL</a> </strong> from <strong><a href="http://www.slideshare.net/shlominoach"
+    target="_blank">Shlomi Noach</a></strong> </div>'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>A simple question I've been asked:</p>
+<p>Is it possible to merge two <strong>UPDATE</strong> queries, each on different <strong>WHERE</strong> conditions, into a single query?</p>
+<p>For example, is it possible to merge the following two <strong>UPDATE</strong> statements into one?</p>
+<blockquote>
+<pre>mysql&gt; <strong>UPDATE</strong> film <strong>SET</strong> rental_duration=rental_duration+1 <strong>WHERE</strong> rating = 'G';
+Query OK, 178 rows affected (0.01 sec)
+
+mysql&gt; <strong>UPDATE</strong> film <strong>SET</strong> rental_rate=rental_rate-0.5 <strong>WHERE</strong> length &lt; 90;
+Query OK, 320 rows affected (0.01 sec)
+</pre>
+</blockquote>
+<p>To verify our tests, we take a checksum:</p>
+<blockquote>
+<pre>mysql&gt; pager md5sum
+PAGER set to 'md5sum'
+mysql&gt; <strong>SELECT</strong> film_id, title, rental_duration, rental_rate <strong>FROM</strong> film <strong>ORDER BY</strong> film_id;
+c2d253c3919efaa6d11487b1fd5061f3  -
+</pre>
+</blockquote>
+<p>Obviously, the following query is <strong>incorrect</strong>:<!--more--></p>
+<blockquote>
+<pre>mysql&gt; <strong>UPDATE</strong> film <strong>SET</strong> rental_duration=rental_duration+1, rental_rate=rental_rate-0.5  <strong>WHERE</strong> rating = 'G' <strong>OR</strong> length &lt; 90;
+Query OK, 431 rows affected (0.03 sec)
+
+mysql&gt; pager md5sum
+PAGER set to 'md5sum'
+mysql&gt; <strong>SELECT</strong> film_id, title, rental_duration, rental_rate <strong>FROM</strong> film <strong>ORDER BY</strong> film_id;
+09d450806e2cd7fa78a83ac5bef72d2b  -
+</pre>
+</blockquote>
+<h4>Motivation</h4>
+<p>Why would you want to do that?</p>
+<ul>
+<li>While it may seem strange, the merge can be logically (application-wise) perfectly reasonable.</li>
+<li>The <strong>UPDATE</strong> may be time consuming - perhaps it requires full table scan on a large table. Doing it with one scan is faster than two scans.</li>
+</ul>
+<h4>The solution</h4>
+<p>Use a condition for the <strong>SET</strong> clauses, optionally drop the <strong>WHERE</strong> conditions.</p>
+<blockquote>
+<pre><strong>UPDATE</strong>
+ film
+<strong>SET</strong>
+ rental_duration=<strong>IF</strong>(rating = 'G', rental_duration+1, rental_duration),
+ rental_rate=<strong>IF</strong>(length &lt; 90, rental_rate-0.5, rental_rate)
+;
+
+mysql&gt; pager md5sum
+PAGER set to 'md5sum'
+mysql&gt; <strong>SELECT</strong> film_id, title, rental_duration, rental_rate <strong>FROM</strong> film <strong>ORDER BY</strong> film_id;
+c2d253c3919efaa6d11487b1fd5061f3  -
+</pre>
+</blockquote>
+<p>The above query necessarily does a full table scan. If there's a benefit to using indexes in the <strong>WHERE</strong> clause, it may still be applied, using an <strong>OR</strong> condition:</p>
+<blockquote>
+<pre><strong>UPDATE</strong>
+ film
+<strong>SET</strong>
+ rental_duration=<strong>IF</strong>(rating = 'G', rental_duration+1, rental_duration),
+ rental_rate=<strong>IF</strong>(length &lt; 90, rental_rate-0.5, rental_rate)
+<strong>WHERE</strong>
+ rating = 'G'
+ OR length &lt; 90
+;
+</pre>
+</blockquote>
+<p>If there is a computational overhead to the <strong>IF</strong> statement, I have not noticed it. This kind of solution plays well when each of the distinct queries requires a full scan, on large tables.</p>

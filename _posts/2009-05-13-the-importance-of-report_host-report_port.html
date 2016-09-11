@@ -1,0 +1,66 @@
+---
+title: The importance of report_host & report_port
+date: 2009-05-13 09:09:41.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Configuration
+- Replication
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>The two server variables, <a href="http://dev.mysql.com/doc/refman/5.0/en/replication-options-slave.html#option_mysqld_report-host">report_host</a> and <a href="http://dev.mysql.com/doc/refman/5.0/en/replication-options-slave.html#option_mysqld_report-port">report_port</a>, are not commonly used. One of the reasons, I suspect, is that they do not appear in any of the standard <strong>.cnf</strong> files provided with a MySQL installation.</p>
+<p>For a replication environment, I find these two variables to be very useful.</p>
+<h4>Where are these variables used?</h4>
+<p>Here's a slightly modified exerpt from a MySQL master node I have, and which has two slaves:<!--more--></p>
+<blockquote>
+<pre>mysql&gt; SHOW SLAVE HOSTS;
++-----------+------------+------+-------------------+-----------+
+| Server_id | Host       | Port | Rpl_recovery_rank | Master_id |
++-----------+------------+------+-------------------+-----------+
+|        21 | webhost1   | 3306 |                 0 |        25 |
+|       117 | webhost2   | 3306 |                 0 |        25 |
++-----------+------------+------+-------------------+-----------+
+2 rows in set (0.00 sec)</pre>
+</blockquote>
+<p>A <strong>SHOW SLAVE HOSTS</strong> command lists down all servers participating in a replicated environment. The above excerpt is very simple: it lists two slaves for the given master.</p>
+<p>Well, the above description is misleading. What <strong>SHOW SLAVE HOSTS</strong> really shows is the entire replication setup. That is, if I ran the above on one of the replication slaves (say webhost1) - I still get the same output. Moreover, if there are second level slaves, they're listed as well. So what I actually get is a complete picture of the participating slave instances in a replication environment, and I get this picture from any of those instanced.</p>
+<p>The relevance to this post is that the "Host" and "Port" attributes are reported as defiend in <strong>report_host</strong> &amp; <strong>report_port</strong> per instance.</p>
+<h4>Using SHOW PROCESSLIST</h4>
+<p>When you <strong>SHOW PROCESSLIST</strong>, you also get the replicating hosts, right? Let's see the output of <strong>SHOW PROCESSLIST\G</strong>:</p>
+<blockquote>
+<pre>*************************** 1. row ***************************
+     Id: 18491376
+   User: replication_user
+   Host: 192.168.0.21:43198
+     db: NULL
+Command: Binlog Dump
+   Time: 61316
+  State: Has sent all binlog to slave; waiting for binlog to be updated
+   Info: NULL
+*************************** 2. row ***************************
+     Id: 18491804
+   User: replication_user
+   Host: 192.168.0.117:32988
+     db: NULL
+Command: Binlog Dump
+   Time: 61208
+  State: Has sent all binlog to slave; waiting for binlog to be updated
+   Info: NULL
+*************************** 3. row ***************************</pre>
+</blockquote>
+<p>Well, here's the difference: you do get the replicating host, but not necessarily the way you wanted it. You get the IP, or you could get a hostname if you had one declared in <strong>/etc/hosts</strong>. But you do not get the port. The reported port is the socket which is used by the replication process, not the port on which the replicating slave listens.</p>
+<p>You also only get one level down. If you want to map the entire topology, you'd have to drill down to the slaves and recursively continue the process.</p>
+<h4>Proper reporting</h4>
+<p>If you had two MySQL instances running on the same machine, the output of <strong>SHOW PROCESSLIST</strong> would be useless. You'd get two rows listing the same host - but on which port does each one listen? Perhaps you need the host to be reported in a very specific way, so that the firewall allows you access back to the machine?</p>
+<p>It is therefore important to properly set up the two variables. Set <strong>report_port</strong> to the same <strong>port</strong> used for <strong>[mysqld]</strong>. Set <strong>report_host</strong> to whatever value that can be used to trace back from the master (or from the monitoring machine).</p>
+<p><strong>SHOW SLAVE HOSTS</strong> only lists slaves which are currently replicating. Any slave which has been stopped, or which has no relay log space (therefore temporarily suspending the IO thread) - are not listed. Knowing in advance the number of machines in your replication setup is useful: if you find the same number of rows in <strong>SHOW SLAVE HOSTS</strong> - you are doing well.</p>

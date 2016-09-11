@@ -1,0 +1,40 @@
+---
+title: Notes on "5 Tips for migrating your MySQL server to a Galera Cluster"
+date: 2012-12-17 09:00:18.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Galera
+- Opinions
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This post comes as response to <a href="http://www.codership.com/content/5-tips-migrating-your-mysql-server-galera-cluster">5 Tips for migrating your MySQL server to a Galera Cluster</a> by Henrik Ingo (Galera), which is a good read. This post is a bit lengthy which is one of the reasons why I didn't just comment on said post.</p>
+<p>The Galera talk in London was indeed well crowded, judging from my own chair. I think there is an obvious interest in Galera, as well as a general thirst for information from real-life experience. I am personally very interested in production stories; either "war stories" or "peace stories" - anything to shed more light on the adoption of this technology.</p>
+<p>For disclosure, I have not tried Galera myself as yet. Not on production nor on staging machines. But here's a couple thoughts on Henrik's post:<!--more--></p>
+<h4>Primary keys</h4>
+<p>I think this is a classic "emerging technology" issue. The technology is designed to work with a specific configuration. In our case: InnoDB tables that all have a PRIMARY KEY. And it makes sense, and it's good practice anyway, but as it happens people <em>do</em> forget or neglect to create PRIMARY KEYs on their tables.</p>
+<p>An emerging technology would want to avoid poor experience (modified values for PK, replication failure) by avoiding the problem in the first place. In my view, Galera should simply refuse to work with InnoDB tables that do not have a PRIMARY KEY. This could work out in several ways:</p>
+<ol>
+<li>Live: cease to replicate (better than replicate wrong info)</li>
+<li>Better yet: refuse to start the server (much as InnoDB will refuse to start if the transaction log size differs from the size indicated in the config file)</li>
+<li>Live &amp; better: refuse to create an InnoDB table without a PRIMARY KEY, or refuse INSERTs into such tables</li>
+<li>Offline: provide with an initial "review_my_database_and_see_if_it_will_work_just_fine_with_galera" shell/Perl/install script.</li>
+</ol>
+<p>Number 4 is easiest to begin with, I suppose; is OK for many people to run once, and could detect a variety of problems.</p>
+<h4>Events and Triggers</h4>
+<p>I reject the notion of not using triggers because you don't know how they will behave. Either Galera supports triggers - in which case you should loudly acknowledge that triggers are <em>just fine</em>, or it does not, in which case you should loudly exclaim <em>"this won't work"</em>.</p>
+<p>Triggers have many downsides, performance impact is, for me, the worst of them. However, I don't understand the question <em>"do you actually know what they will do when you run them in a multi-master cluster? For that matter, do you know what they do on a master-slave cluster?"</em>. Does the question refer to Galera cluster? Well, I don't really know the math behind Galera, either. Does that mean I should not use Galera? Or does the question relate to standard MySQL replication? In which case - yes, it's in the docs.</p>
+<p>Instructing the users to avoid certain features because "it's dark out there" is not the right way. <em>[UPDATE: please see Henrik's comment]</em></p>
+<h4>Also</h4>
+<p>I should also note the very good post by Marco Tusa: <a href="http://www.tusacentral.net/joomla/index.php/mysql-blogs/146-mysql-ndb-a-mysql-with-galera-why-we-should-not-compare-them">MySQL Ndb &amp; MySQL with Galera why we should not compare them.</a> Marco rejects the comparison between NDB Cluster and Galera for many technical reasons. However there is one level of comparison that is not technical: the desire to be able to query any server out of N servers in a group, and to have consistent results, as well as the desire to allow for one server to crash without worrying about immediate actions like failovers, decision making, lost data etc. This level of comparison should not be taken lightly; this is the <em>"what people actually want, without the gory details"</em>.</p>
+<p>I'm looking forward to learning more about Galera. While schedule is not completely finalized yet, I think it's safe to slip the word that you can find some informative talks in the <a href="http://www.percona.com/live/mysql-conference-2013/">next Percona Live</a> conference in Santa Clara, April (no plug intended though happy to plug).</p>

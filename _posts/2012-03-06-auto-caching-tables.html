@@ -1,0 +1,244 @@
+---
+title: Auto caching tables
+date: 2012-03-06 15:18:36.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Hack
+- MyISAM
+- SQL
+- Stored routines
+- Views
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Is there a way to create a caching table, some sort of a materialized view, such that <em>upon selecting</em> from that table, its data is validated/invalidated?</p>
+<p><em>Hint</em>: yes.</p>
+<p>But to elaborate the point: say I have some table <strong>data_table</strong>. Can I rewrite all my queries which access <strong>data_table</strong> to read from some <strong>autocache_data_table</strong>, but have nothing changed in the query itself? No caveats, no additional <strong>WHERE</strong>s, and still have that <strong>autocache_data_table</strong> provide with the correct data, dynamically updated by some rule <em>of our choice</em>?</p>
+<p>And: no <em>crontab</em>, no <em>event scheduler</em>, and no funny triggers on <strong>data_table</strong>? In such way that invalidation/revalidation occurs <em>upon <strong>SELECT</strong></em>?</p>
+<p>Well, yes.</p>
+<p>This post is long, but I suggest you read it through to understand the mechanism, it will be worthwhile.</p>
+<h4>Background</h4>
+<p>The following derives from my long research on how to provide better, faster and <em>safer</em> access to <strong>INFORMATION_SCHEMA</strong> tables. It is however not limited to this exact scenario, and in this post I provide with a simple, general purpose example. I'll have more to share about <strong>INFORMATION_SCHEMA</strong> specific solutions shortly.</p>
+<p>I was looking for a server side solution which would not require query changes, apart from directing the query to other tables. Solution has to be supported by all standard MySQL installs; so: no plugins, no special rebuilds.<!--more--></p>
+<h4>Sample data</h4>
+<p>I'll explain by walking through the solution. Let's begin with some sample table:</p>
+<blockquote>
+<pre>CREATE TABLE sample_data (
+  id INT UNSIGNED NOT NULL PRIMARY KEY,
+  dt DATETIME,
+  msg VARCHAR(128) CHARSET ascii
+);
+
+INSERT INTO sample_data VALUES (1, NOW(), 'sample txt');
+INSERT INTO sample_data VALUES (2, NOW(), 'sample txt');
+INSERT INTO sample_data VALUES (3, NOW(), 'sample txt');
+
+SELECT * FROM sample_data;
++----+---------------------+------------+
+| id | dt                  | msg        |
++----+---------------------+------------+
+|  1 | 2011-11-24 11:01:30 | sample txt |
+|  2 | 2011-11-24 11:01:30 | sample txt |
+|  3 | 2011-11-24 11:01:30 | sample txt |
++----+---------------------+------------+</pre>
+</blockquote>
+<p>In this simplistic example, I wish to create a construct which looks exactly like <strong>sample_data</strong>, but which caches data according to some heuristic. It will, in fact, cache the entire content of <strong>sample_data</strong>.</p>
+<p>That much is not a problem: just create another table to cache the data:</p>
+<blockquote>
+<pre>CREATE TABLE cache_sample_data LIKE sample_data;</pre>
+</blockquote>
+<p>The big question is: how do you make the table invalidate itself while <strong>SELECT</strong>ing from it?</p>
+<p>Here's the deal. I'll ask for your patience while I draw the outline, and start with failed solutions. By the end, everything will work.</p>
+<h4>Failed attempt: purge rows from the table even while reading it</h4>
+<p>My idea is to create a stored function which purges the <strong>cache_sample_data</strong> table, then fills in with fresh data, according to some heuristic. Something like this:</p>
+<blockquote>
+<pre>DELIMITER $$
+
+CREATE FUNCTION `revalidate_cache_sample_data`() RETURNS tinyint unsigned
+    MODIFIES SQL DATA
+    DETERMINISTIC
+    SQL SECURITY INVOKER
+BEGIN
+  if(rand() &gt; 0.1) then
+    return 0; -- simplistic heuristic
+  end if;
+
+  DELETE FROM cache_sample_data;
+  INSERT INTO cache_sample_data SELECT * FROM sample_data;
+  RETURN 0;
+END $$
+
+DELIMITER ;</pre>
+</blockquote>
+<p>So the function uses some heuristic. It's a funny <strong>RAND()</strong> in our case; you will want to check up on time stamps, or some flags, what have you. But this is not the important part here, and I want to keep the focus on the main logic.</p>
+<p>Upon deciding the table needs refreshing, the function purges all rows, then copies everything from <strong>sample_data</strong>. Sounds fair enough?</p>
+<p>Let's try and invoke it. Just write some query by hand:</p>
+<blockquote>
+<pre>mysql&gt; SELECT revalidate_cache_sample_data();
++--------------------------------+
+| revalidate_cache_sample_data() |
++--------------------------------+
+|                              <strong>0</strong> |
++--------------------------------+
+
+mysql&gt; SELECT revalidate_cache_sample_data();
++--------------------------------+
+| revalidate_cache_sample_data() |
++--------------------------------+
+|                              <strong>0</strong> |
++--------------------------------+
+
+mysql&gt; SELECT revalidate_cache_sample_data();
++--------------------------------+
+| revalidate_cache_sample_data() |
++--------------------------------+
+|                              <strong>1</strong> |
++--------------------------------+</pre>
+</blockquote>
+<p>First two invocations - nothing. The third one indicated a revalidation of cache data. Let's verify:</p>
+<blockquote>
+<pre>mysql&gt; SELECT * FROM cache_sample_data;
++----+---------------------+------------+
+| id | dt                  | msg        |
++----+---------------------+------------+
+|  1 | 2011-11-24 11:01:30 | sample txt |
+|  2 | 2011-11-24 11:01:30 | sample txt |
+|  3 | 2011-11-24 11:01:30 | sample txt |
++----+---------------------+------------+</pre>
+</blockquote>
+<p>OK, seems like the function works.</p>
+<p>We now gather some courage, and try combining calling to this function even while SELECTing from the cache table, like this:</p>
+<blockquote>
+<pre>SELECT
+  cache_sample_data.*
+FROM
+  cache_sample_data,
+  (SELECT revalidate_cache_sample_data()) AS select_revalidate
+;
++----+---------------------+------------+
+| id | dt                  | msg        |
++----+---------------------+------------+
+|  1 | 2011-11-24 11:01:30 | sample txt |
+|  2 | 2011-11-24 11:01:30 | sample txt |
+|  3 | 2011-11-24 11:01:30 | sample txt |
++----+---------------------+------------+</pre>
+</blockquote>
+<p>To explain what happens in the above query, consider its <a href="http://code.openark.org/blog/mysql/slides-from-my-talk-programmatic-queries-things-you-can-code-with-sql">programmatic nature</a>: we create a derived table, populated by the function's result. That means the function is invoked in order to generate the derived table. The derived table itself must be materialized before the query begins execution, and so it is that we first invoke the function, then make the <strong>SELECT</strong>.</p>
+<p>Don't open the champagne yet. While the above paragraph is correct, we are deceived: in this last invocation, the function did <strong>not</strong> attempt a revalidation. The <strong>RAND()</strong> function just didn't provide with the right value.</p>
+<p>Let's try again:</p>
+<blockquote>
+<pre>SELECT
+  cache_sample_data.*
+FROM
+  cache_sample_data,
+  (SELECT revalidate_cache_sample_data()) AS select_revalidate
+;
+<strong>ERROR 1442 (HY000): Can't update table 'cache_sample_data' in stored function/trigger because it is already used by statement which invoked this stored function/trigger.</strong></pre>
+</blockquote>
+<p>Aha! Bad news. The MySQL manual says on <a href="http://dev.mysql.com/doc/refman/5.1/en/stored-program-restrictions.html">Restrictions on Stored Programs</a>:</p>
+<blockquote><p>A stored function or trigger cannot modify a table that is already being used (for reading or writing) by the statement that invoked the function or trigger.</p></blockquote>
+<h4>Anyone to the rescue?</h4>
+<p>I was quite upset. Can we not make this work? At sorrow times like these, one reflects back on words of wiser people. What would <a href="http://rpbouman.blogspot.com/">Roland Bouman</a> say on this?</p>
+<p>Oh, yes; he would say: <em>"we can use a <strong>FEDERATED</strong> table which connect onto itself, thus bypass the above restriction"</em>.</p>
+<p>Unfortunately, <strong>FEDERATED</strong> is by default disabled nowadays; I cannot rely on its existence. Besides, to use <strong>FEDERATED</strong> one has to fill in passwords and stuff. Definitely not an out-of-the-box solution in this case.</p>
+<p>Few more days gone by. Decided the problem cannot be solved. And then it hit me.</p>
+<h4>MyISAM to the rescue</h4>
+<p><em><strong>MyISAM</strong></em>? Really?</p>
+<p>Yes, and not only <strong>MyISAM</strong>, but also its cousin: it's long abandoned cousin, forgotten once <strong>views</strong> and <strong>partitions</strong> came into MySQL. <strong><a href="http://dev.mysql.com/doc/refman/5.1/en/merge-storage-engine.html">MERGE</a></strong>.</p>
+<p><strong>MERGE</strong> reflects the data contained within <strong>MyISAM</strong> tables. Perhaps the most common use for <strong>MERGE</strong> is to work out partitioned-like table of records, with <strong>MyISAM</strong> table-per month, and an overlooking <strong>MERGE</strong> table dynamically adding and removing tables from its view.</p>
+<p>But I intend for <strong>MERGE</strong> a different use: just be an identical reflection of <strong>cache_sample_data</strong>.</p>
+<p>So we must work out the following:</p>
+<blockquote>
+<pre>ALTER TABLE <strong>cache_sample_data</strong> ENGINE=<strong>MyISAM</strong>;
+CREATE TABLE <strong>cache_sample_data_wrapper</strong> LIKE cache_sample_data;
+ALTER TABLE <strong>cache_sample_data_wrapper</strong> ENGINE=<strong>MERGE</strong> <strong>UNION=(cache_sample_data)</strong>;</pre>
+</blockquote>
+<p>I just want to verify the new table is setup correctly:</p>
+<blockquote>
+<pre>mysql&gt; SELECT * FROM cache_sample_data_wrapper;
++----+---------------------+------------+
+| id | dt                  | msg        |
++----+---------------------+------------+
+|  1 | 2011-11-24 11:01:30 | sample txt |
+|  2 | 2011-11-24 11:01:30 | sample txt |
+|  3 | 2011-11-24 11:01:30 | sample txt |
++----+---------------------+------------+</pre>
+</blockquote>
+<p>Seems fine.</p>
+<p>So the next step is what makes the difference: the two tables are <em>not the same</em>. One <em>relies on the other</em>, but they are distinct. Our function <strong>DELETE</strong>s from and <strong>INSERT</strong>s to <strong>cached_sample_data</strong>, but it does <em>not affect, nor lock</em>, <strong>cache_sample_data_wrapper</strong>.</p>
+<p>We now rewrite our query to read:</p>
+<blockquote>
+<pre>SELECT
+  cache_sample_data_wrapper.*
+FROM
+  <strong>cache_sample_data_wrapper</strong>,
+  (SELECT revalidate_cache_sample_data()) AS select_revalidate
+;</pre>
+</blockquote>
+<p>This query is perfectly valid. It works. To illustrate, I do:</p>
+<blockquote>
+<pre>-- Try this a few times till RAND() is lucky:
+
+<strong>TRUNCATE</strong> cache_sample_data;
+
+SELECT
+  cache_sample_data_wrapper.*
+FROM
+  cache_sample_data_wrapper,
+  (SELECT revalidate_cache_sample_data()) AS select_revalidate
+;
++----+---------------------+------------+
+| id | dt                  | msg        |
++----+---------------------+------------+
+|  1 | 2011-11-24 11:01:30 | sample txt |
+|  2 | 2011-11-24 11:01:30 | sample txt |
+|  3 | 2011-11-24 11:01:30 | sample txt |
++----+---------------------+------------+</pre>
+</blockquote>
+<p>Whoa! Where did all this data come from? Didn't we just <strong>TRUNCATE</strong> the table?</p>
+<p>The query worked. The function re-populated <strong>cache_sample_data</strong>.</p>
+<h4>The final touch</h4>
+<p>Isn't the above query just <em>beautiful</em>? I suppose not many will share my opinion. What happened to my declaration that <em>"the original query need not be changed, apart from querying a different table"</em>?</p>
+<p>Yes, indeed. It's now time for the final touch. There's nothing amazing in this step, but we all know the way it is packaged is what makes the sale. We will now use <em>views</em>. We use two of them since a view must not contain a <em>subquery</em> in the <strong>FROM</strong> clause. Here goes:</p>
+<blockquote>
+<pre>CREATE OR REPLACE VIEW <strong>revalidate_cache_sample_data_view</strong> AS
+  SELECT revalidate_cache_sample_data()
+;
+
+CREATE OR REPLACE VIEW <strong>autocache_sample_data</strong> AS
+  SELECT
+    cache_sample_data_wrapper.*
+  FROM
+    cache_sample_data_wrapper,
+    revalidate_cache_sample_data_view
+;</pre>
+</blockquote>
+<p>And finally, we can make a very simple query like this:</p>
+<blockquote>
+<pre>SELECT * FROM <strong>autocache_sample_data</strong>;
+--
+-- <strong><span style="color: #ff9900;">Magic in work now!</span></strong>
+--
++----+---------------------+------------+
+| id | dt                  | msg        |
++----+---------------------+------------+
+|  1 | 2011-11-24 11:01:30 | sample txt |
+|  2 | 2011-11-24 11:01:30 | sample txt |
+|  3 | 2011-11-24 11:01:30 | sample txt |
++----+---------------------+------------+</pre>
+</blockquote>
+<p>Much as we would query the original <strong>sample_data</strong> table.</p>
+<h4>Summary</h4>
+<p>So what have we got? A stored routine, a <strong>MyISAM</strong> table, a <strong>MERGE</strong> table and two views. Quite a lot of constructs just to cache a table! But a beautiful cache access: <em>plain old SQL queries</em>. The flow looks like this:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2011/11/autocache_flow.png"><img class="alignnone size-full wp-image-4463" title="autocache flow chart" src="{{ site.baseurl }}/assets/autocache_flow.png" alt="" width="835" height="625" /></a></p></blockquote>
+<p>Our cache table is a <strong>MyISAM</strong> table. It can get corrupted, which is bad. But not completely bad: it's nothing more than a cache; we can throw away its entire data, and revalidate. We can actually ask the function to revalidate (say, pass a parameter).</p>

@@ -1,0 +1,41 @@
+---
+title: 'Auto caching INFORMATION_SCHEMA tables: seeking input'
+date: 2012-03-08 20:31:56.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Hack
+- INFORMATION_SCHEMA
+- Replication
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<h4>The short version</h4>
+<p>I have it all working. It's kind of magic. But there are issues, and I'm not sure it should even exist, and am looking for input.</p>
+<h4>The long version</h4>
+<p>In <a title="Link to Auto caching tables" href="http://code.openark.org/blog/mysql/auto-caching-tables" rel="bookmark">Auto caching tables</a> I presented with a hack which allows getting cached or fresh results via a simple SELECT queries.</p>
+<p>The drive for the above hack was <strong>INFORMATION_SCHEMA</strong> tables. There are two major problems with <strong>INFORMATION_SCHEMA</strong>:</p>
+<ol>
+<li>Queries on schema-oriented tables such as <strong>TABLES</strong>, <strong>COLUMNS</strong>, <strong>STATISTICS</strong>, etc. are heavyweight. How heavyweight? Enough to make a lockdown of your database. Enough to crash down your database in some cases.</li>
+<li>The data is always generated on-the-fly, as you request it. Query the <strong>COLUMNS</strong> table twice, and risk two lockdowns of your database.</li>
+</ol>
+<p>The auto-cache mechanism solves issue <strong>#2</strong>. I have it working, time based. I have an auto-cache table for each of the <strong>INFORMATION_SCHEMA</strong> heavyweight tables. Say, every <strong>30</strong> minutes the cache is invalidated. Throughout those <strong>30</strong> minutes, you get a free pass!</p>
+<p>The auto-cache mechanism also paves the road to solving issue <strong>#1</strong>: since it works by invoking a stored routine, I have better control of the way I read <strong>INFORMATION_SCHEMA</strong>. This, I can take advantage of <a href="http://dev.mysql.com/doc/refman/5.1/en/information-schema-optimization.html">INFORMATION_SCHEMA optimization</a>. It's tedious, but not complicated.</p>
+<p>For example, if I wanted to cache the <strong>TABLES</strong> table, I don't necessarily read the entire <strong>TABLES</strong> data in one read. Instead, I can iterate the schemata, get a list of table names per schema, then read full row data for these, table by table. The result? Many many more <strong>SELECT</strong>s, but more optimized, and no one-big-lock-it-all query.</p>
+<h4>And the problem is...</h4>
+<p><!--more-->I have two burning problems.</p>
+<ol>
+<li><strong>INFORMATION_SCHEMA</strong> optimization only works <em>that much</em>. It sometimes does not work. In particular, I've noticed that if you have a view which relies on another view (possibly relying on yet another view), things get out of hand. I author a monitoring tool for MySQL called <a href="http://code.openark.org/forge/mycheckpoint/">mycheckpoint</a>. It uses some fancy techniques for generating aggregated data, HTML and charts, by means of nested views. There are a few views there I can never query for in <strong>COLUMNS</strong>. It just crashes down my server. Repeatedly. And it's a good machine with good configuration. Make that <strong>5</strong> machines. They all crash, repeatedly. I just can't trust <strong>INFORMATION_SCHEMA</strong>!</li>
+<li>Replication: any caching table is bound to replicate. Does it make any sense to replicate cache for internal metadata? Does it make sense to query for the cached table on slave, to have it answer for <em>master'</em>s data? With plain old <strong>INFORMATION_SCHEMA</strong>, every server is on its own. Caching kinda works against this. Or is it fair enough, since we would usually expect master/slaves to reflect same schema structure?</li>
+</ol>
+<p>I would feel much better if I could read <strong>SHOW</strong> statements with a <strong>SELECT</strong> query. Though I've found this <a href="http://code.openark.org/blog/mysql/reading-results-of-show-statements-on-server-side">nice hack</a>, it can't work from a stored function, only via stored procedure. So it can't be used from within a <strong>SELECT</strong> query. I've been banging my head for months now, I think I gave up on this one.</p>
+<p>Any insights are welcome!</p>

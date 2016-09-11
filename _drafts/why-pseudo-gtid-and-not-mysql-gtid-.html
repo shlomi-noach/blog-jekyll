@@ -1,0 +1,42 @@
+---
+layout: post
+title: Why Pseudo GTID and not MySQL GTID?
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags:
+- GTID
+- orchestrator
+- Pseudo GTID
+- Replication
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I recently introduced the concept of replication refactoring with Pseudo GTID, as a way to achieve the GTID-like feature of being able to easily move and connect slaves across the topology.</p>
+<p>But, that's what GTID is there for, right? Why did I come up with Pseudo GTID when there's GTID? Here's some food for thought:</p>
+<ul>
+<li>GTID only applicable from MySQL <strong>5.6</strong> (or MariaDB <strong>10.0</strong>)</li>
+<li>With <strong>5.6</strong>, GTID can only be enabled all-at-once, and you have to shutdown your entire replication topology so as to convert it to GTID (and shut it down again to rollback)</li>
+<li><strong>5.6</strong> GTID is not crash-safe. Standard replication is (crash-safe is built on top of system InnoDB tables, but these only know how to store file+pos, not GTID).</li>
+<li>MySQL GTID and MariaDB GTID are incompatible -- completely different implementation. You should be aware that choosing to use GTID means you cannot migrate from one to another.</li>
+</ul>
+<p>When <strong>5.6</strong> was announced, there was a lot of buzz around GTID. It was meant to be the magic solution to replication refactoring, making for very easy failovers. But in reality it turned out to have complications. So much that Facebook invested a lot of effort into <a href="http://www.percona.com/live/mysql-conference-2014/sessions/global-transaction-id-facebook">changing it</a>, Booking.com to <a href="http://blog.booking.com/mysql-5.6-gtids-evaluation-and-online-migration.html">hack it</a>. Most others, like us at <a href="https://github.com/outbrain">Outbrain</a>, have just given up on the desire to migrate to GTID.</p>
+<p>There is a risk in migrating your production topology into GTID (less so if you're starting a brand new topology). It is an intrusive operation.</p>
+<p>The requirements for Pseudo GTID are:</p>
+<ul>
+<li>Pseudo GTID entries injected into the master (unique statements that can be identified in binary log entries). See <a href="http://code.openark.org/blog/mysql/pseudo-gtid">example for SBR</a> and <a href="http://code.openark.org/blog/mysql/pseudo-gtid-row-based-replication">one for SBR &amp; RBR</a>, or just take <a href="https://github.com/outbrain/orchestrator/wiki/Orchestrator-Manual#pseudo-gtid">the wiki's recommendation</a>.</li>
+<li><strong>log_bin</strong> and <strong>log_slave_updates</strong> enabled on all slaves</li>
+<li>Standard replication (not multi-source, non-GTID, non-schema-parallel)</li>
+</ul>
+<p>Pseudo GTID is non-intrusive. You don't need to modify your topology, your methods, your deployment scripts or backup scripts, with the exception of the above configuration.</p>
+<p>Of course, Pseudo GTID is new and experimental; this is a risk, by definition. But we're going in that direction, and have faith in it.</p>
+<p>&nbsp;</p>

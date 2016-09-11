@@ -1,0 +1,71 @@
+---
+title: Orchestrator visual cheatsheet, TL;DR the "smart" way
+date: 2015-09-02 09:14:05.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Open Source
+- orchestrator
+- Pseudo GTID
+- Replication
+meta:
+  _wpas_done_all: '1'
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><strong><a href="https://github.com/outbrain/orchestrator">Orchestrator</a></strong> is <em>really</em> growing. And the amount of users (DBAs, sys admins) using it is growing. Which gives me a lot of immediate feedback in the form of <em>"Look, there's just too many options to move slaves around! Which ones should we use?"</em></p>
+<h3>TL;DR look at the two visualized commands below</h3>
+<p>They are enough</p>
+<h3>The "smart" commands to end all commands</h3>
+<p>So all relocation commands are important, and give you fine-grained, pin-pointed control of the method of topology refactoring. However, most of the time you <em>just want to move those servers around</em>. Which is why there's a new "smart" mode which support these two commands, which you should be happy using:</p>
+<ul>
+<li><strong>relocate</strong>: move a single slave to another position</li>
+<li><strong>relocate-slaves</strong>: move all/some slaves of some server to another position.</li>
+</ul>
+<p>What makes these commands Smart? You can move slaves around from <em>anywhere</em> to <em>anywhere</em>. And <em>orchestrator</em> figures out the bast execution path. If possible, it uses GTID. Not possible? Is Pseudo-GTID available? Great, using Pseudo-GTID. Oh, are there binlog servers involved? Really simple, use them. None of the above? <em>Orchestrator</em> will use "standard" binlog file:pos math (with limitations). <em>Orchestrator</em> will even figure out if multiple steps are necessary and will combine any of the above.</p>
+<p>So you don't have to remember all the possible ways and options. The visual cheatsheet now boils down to these two:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2015/08/orchestrator-cheatsheet-visualized-relocate.png"><img class="alignnone size-full wp-image-7357" src="{{ site.baseurl }}/assets/orchestrator-cheatsheet-visualized-relocate.png" alt="orchestrator-cheatsheet-visualized-relocate" width="720" height="405" /></a></p>
+<p><a href="http://code.openark.org/blog/wp-content/uploads/2015/08/orchestrator-cheatsheet-visualized-relocate-slaves.png"><img class="alignnone size-full wp-image-7350" src="{{ site.baseurl }}/assets/orchestrator-cheatsheet-visualized-relocate-slaves.png" alt="orchestrator-cheatsheet-visualized-relocate-slaves" width="720" height="405" /></a></p></blockquote>
+<p>Let's take a slightly deeper look<!--more--></p>
+<h3>relocate</h3>
+<p>Moves a single slave <strong>X</strong> from any point to replicate another some server <strong>Z</strong></p>
+<ul>
+<li>As usual, <em>orchestrator</em> first confirms that <strong>X</strong> <em>can</em> replicate from <strong>Z</strong> (<strong>Z</strong> has <strong>log-slave-updates</strong> or is a binlog server; binlog format compatible, etc.)</li>
+<li>With GTID/Pseudo-GTID, move from any point to any point</li>
+<li>With binlog servers, move around the binlog server environment (at this point you are not using binlog servers, so ignore)</li>
+<li>With normal replication, requires an "atomic" operation: either move the slave one level up, or make it replicate from a sibling.</li>
+<li>You can <em>relocate</em> the same master, effectively repointing the slave back to its existing position. This serves to re-resolve master hostname; to reset relay logs; to verify slave is aligned with master.</li>
+<li>Or combination of the above</li>
+</ul>
+<h3>relocate-slaves</h3>
+<p>Moves multiple slaves of server <strong>X</strong> to replicate from some other server <strong>W</strong></p>
+<ul>
+<li>By default moves all slaves of <strong>X</strong>, where possible</li>
+<li>Each slave verified to be able to replicate from <strong>W</strong>. Those that can't are left behind.</li>
+<li>Can filter using regular expression via <strong>--pattern=some?[reg]ex</strong> on slave hostnames</li>
+<li>Can relocate under same master, effectively repointing all slaves (see above explanation)</li>
+<li>Can relocate below one of the very slaves of X. If Y is in itself a slave of X and you're executing:<br />
+<strong>orchestrator -c relocate-slaves -i X -d Y</strong><br />
+then <strong>Y</strong> is excluded from the list of relocated slaves. This effectively means "make <strong>Y</strong> local master of its current siblings". Very cool stuff.</li>
+<li>When binlog servers involved, simple math-less repointing takes place</li>
+<li>When GTID involved, let MySQL/MariaDB (both supported) do the math on a per-server basis</li>
+<li>When Pseudo-GTID involved, <em>greatly</em> optimize by dividing into <a href="https://en.wikipedia.org/wiki/Equivalence_class">equivalence classes</a> and only doing the math on a representative of each class.</li>
+<li>Or combination of the above</li>
+</ul>
+<h3>What about the other commands?</h3>
+<p>The above covers such commands as <strong>move-up</strong>, <strong>move-below</strong>, <strong>repoint</strong>, <strong>repoint-slaves</strong>, <strong>match-below</strong>, <strong>multi-match-slaves</strong>, <strong>regroup-slaves</strong> and more. It does not cover <strong>enslave-master</strong> and <strong>make-co-master</strong> which are a bit different.</p>
+<p>My guess is you can pass <strong>98%</strong> of your operations with <strong>relocate </strong>and <strong>relocate-slaves</strong>. Otherwise just run <em>orchestrator</em> with no arguments nor options to get a full-blown breakdown of available commands.</p>
+<h3>GUI drag-n-drop</h3>
+<p><strong>relocate-slaves</strong> is achieved by dragging the slaves of an instance on top of a new master, as follows:</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2015/08/orchestrator-relocate-slaves-before.png"><img class="alignnone size-full wp-image-7372" src="{{ site.baseurl }}/assets/orchestrator-relocate-slaves-before.png" alt="orchestrator-relocate-slaves-before" width="994" height="369" /></a><a href="http://code.openark.org/blog/wp-content/uploads/2015/08/orchestrator-relocate-slaves-hover.png"><img class="alignnone size-full wp-image-7373" src="{{ site.baseurl }}/assets/orchestrator-relocate-slaves-hover.png" alt="orchestrator-relocate-slaves-hover" width="996" height="339" /></a><a href="http://code.openark.org/blog/wp-content/uploads/2015/08/orchestrator-relocate-slaves-drag1.png"><img class="alignnone size-large wp-image-7377" src="{{ site.baseurl }}/assets/orchestrator-relocate-slaves-drag1.png" alt="orchestrator-relocate-slaves-drag" width="980" height="363" /></a><br />
+<a href="http://code.openark.org/blog/wp-content/uploads/2015/08/orchestrator-relocate-slaves-after.png"><img class="alignnone size-full wp-image-7375" src="{{ site.baseurl }}/assets/orchestrator-relocate-slaves-after.png" alt="orchestrator-relocate-slaves-after" width="993" height="345" /></a></p></blockquote>
+<p>Find latest <em>orchestrator</em> release at <a href="https://github.com/outbrain/orchestrator/releases">https://github.com/outbrain/orchestrator/releases</a></p>
+<p>&nbsp;</p>

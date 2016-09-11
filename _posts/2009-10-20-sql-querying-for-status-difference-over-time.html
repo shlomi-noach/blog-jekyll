@@ -1,0 +1,58 @@
+---
+title: 'SQL: querying for status difference over time'
+date: 2009-10-20 11:31:43.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- INFORMATION_SCHEMA
+- Monitoring
+- SQL
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>The InnoDB plugin has a nice <strong>INFORMATION_SCHEMA</strong> concept: resetting tables. For example, the <strong>INNODB_CMP</strong> table lists information about compression operation. A similar table, <strong>INNODB_CMP_RESET</strong>, provides the same information, but resets the values. The latter can be used to measure, for example, number of compression operations over time.</p>
+<p>I wish to present a SQL trick which does the same, without need for resetting tables. Suppose you have some status table, and you wish to measure the change in status per second, per minute etc. The trick is to query for the value twice in the same query, with some pause in between, and make the difference calculation.</p>
+<p>For sake of simplicity, I'll demonstrate using 5.1's <strong>INFORMATION_SCHEMA.GLOBAL_STATUS</strong>. Please refer to <a href="http://code.openark.org/blog/mysql/information_schema-global_status-watch-out">INFORMATION_SCHEMA.GLOBAL_STATUS: watch out</a> for some discussion on this.</p>
+<p><!--more-->In our example, we wish to measure the number of questions per second. Getting the number of questions is done with:</p>
+<blockquote>
+<pre><strong>SELECT</strong> * <strong>FROM</strong> INFORMATION_SCHEMA.GLOBAL_STATUS <strong>WHERE</strong> VARIABLE_NAME = 'questions';
++---------------+----------------+
+| VARIABLE_NAME | VARIABLE_VALUE |
++---------------+----------------+
+| QUESTIONS     | 3619           |
++---------------+----------------+
+1 row in set (0.00 sec)</pre>
+</blockquote>
+<p>Applying the trick, thus solving the problem:</p>
+<blockquote>
+<pre><strong>SELECT</strong> <strong>SUM</strong>(value) <strong>AS</strong> questions_per_sec <strong>FROM</strong> (
+  <strong>SELECT</strong> -VARIABLE_VALUE <strong>AS</strong> value
+    <strong>FROM</strong> INFORMATION_SCHEMA.GLOBAL_STATUS
+    <strong>WHERE</strong> VARIABLE_NAME = 'questions'
+  <strong>UNION</strong> <strong>ALL</strong>
+  <strong>SELECT</strong> SLEEP(1)
+    <strong>FROM</strong> DUAL
+  <strong>UNION</strong> <strong>ALL</strong>
+  <strong>SELECT</strong> VARIABLE_VALUE
+    <strong>FROM</strong> INFORMATION_SCHEMA.GLOBAL_STATUS
+    <strong>WHERE</strong> VARIABLE_NAME = 'questions'
+) s1;
++-------------------+
+| questions_per_sec |
++-------------------+
+|               126 |
++-------------------+
+1 row in set (1.01 sec)</pre>
+</blockquote>
+<p>Make a one minute measurement with <strong>SLEEP(60)</strong>, then divide <strong>SUM</strong> by 60.</p>
+<h4>Note on transactional tables</h4>
+<p>The above trick will not work when reading values from transactional tables, and with isolation level &gt;= <strong>REPEATABLE-READ</strong>, since, by definition, you must get the same value back while in the same transaction. So this works on MyISAM, MEMORY, functions and otherwise non transactional data sources.</p>

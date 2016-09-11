@@ -1,0 +1,56 @@
+---
+title: Impressions from MySQL conf 2011, part IV
+date: 2011-04-19 14:08:40.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- mysqlconf
+- Planet
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: greenlion@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This post concludes my impressions from some of the talks I’ve been to.</p>
+<h4>Thursday</h4>
+<ul>
+<li><a href="http://en.oreilly.com/mysql2011/public/schedule/detail/17189">OQGRAPH: Dealing with Graphs and Hierarchies in Plain SQL</a> / <em>Antony Curtis (Blizzard Entertainment)</em></li>
+</ul>
+<p>I opened this day's sessions with a smile.</p>
+<p>Antony Curtis and Arjen Lentz have authored the OQGraph storage engine a while back. I had every intention to try it out, but never got round to it. Which is why I was happy to find this session in the conference. OQGraph is a specialized engine, and comes to solve hierarchal or otherwise graph-related queries, such as: <em>"who are the descendants of a given node"</em>, <em>"find a route from a to b"</em>, etc. MySQL does not support the <strong>RECURSIVE</strong> syntax as Oracle does, and does not provide out-of-the-box solution for that.</p>
+<p>The syntax is just excellent: you just write something like <strong>SELECT * FROM my_graph WHERE from_node = 'empusa fasciata' AND to_node = 'homo sapiens'</strong> to find a route. Otherwise just use <strong>WHERE from_node = 'Heathrow Central'</strong> to find all outgoing links. So this is just plain old SQL, no new syntax involved.</p>
+<p>I rounded corners. It is also possible (and required) to specify an algorithm. Do you want Djekstra? BFS? You specify it in the query. The result of a route query is a rowset, where each row is a step in the route, along with its sequence within the route. So you can do your <strong>ORDER BY</strong>, <strong>LIMIT</strong> etc. I find that syntax-wise, <em>OQGraph</em> is very intuitive!<!--more--></p>
+<p>Implementation-wise, there are two versions: <strong>2</strong> (stable) and <strong>3</strong> (testing), which are very different. In version <strong>2</strong> you must create and populate an OQGraph table. You must populate it with <em>from-to;weight</em> values. The entire table is stored in memory a-la MEMORY engine. In version <strong>3</strong> the OQGraph is not directly populated. Instead, you use the <strong>CONNECTION</strong> table property to identify a real table where the data resides, along with the names of the relevant columns. So your data can reside within your normal InnoDB table, and your queries will follow your normal isolation-level rules.</p>
+<p>Graph search implementation is done via the <em>boost()</em> library. This means that information must be loaded in memory. Tests show that up to a million or a few million edges are as much as <em>OQGraph</em> can take. So right now it may not fit your requirements is you need larger datasets.</p>
+<p>Antony seemed like he was enjoying every minute of writing OQGraph, was very aware of current limitations, and offered great ideas on improvement. The version <strong>3</strong> design is a huge improvement over version <strong>2</strong>, and I can't wait to see how it evolves!</p>
+<ul>
+<li><a href="http://en.oreilly.com/mysql2011/public/schedule/detail/17524">Error Detection and Correction with MySQL Replication</a> / <em>Daniel Peek (Facebook)</em></li>
+</ul>
+<p>An interesting view into Facebook's attempt to locate &amp; define data drifts within MySQL replication. Apparently, Facebook guys realized there were some inconsistencies between masters and slaves. They embarked on a mission to find out what exactly was inconsistent, and why.</p>
+<p>Daniel Peek described their method of detecting changes. In similar manner to Maatkit's <em>mk-table-checksum</em>, they use hash codes over chunks of rows. To be more specific: in order to detect the differences (if any) between master &amp; slaves on a given table, they iterate said table in chunks, such that first line of any chunk overlaps with last line of previous chunk. This is easily done when there's unique key, less so when there isn't. They copy rows to a utility table a chunk at a time (e.g. <strong>1,000</strong> rows at a time), and take checksum. Their script then compared checksum on master &amp; slaves. If it equals, they conclude (at very high probability) that tested chunk is identical. Otherwise they take action to detect the exact row that is changed.</p>
+<p>When the two chunks do not have the same number of rows, then there's at the very least a missing or extra row in either master or slave. Otherwise, there's a change in column's data. Apparently, nearly all data drifts are changes in column data, not missing or extra rows.</p>
+<p>To make a long story short, they realized most of their data drift related to TIMESTAMPs. After realizing some timezone settings were incorrect, they were still left with <strong>0.00056%</strong> (if my memory serves me right) worth of data drift. How often do they do this test? <em>Once</em>, is the reply. What is the meaning of <strong>0.00056%</strong>? <em>We don't know</em>, is the answer.</p>
+<p>And, although we are left with unanswered questions: <em>Why does that happen? How can we detect such changes in reasonable time? What should we do once we realize there is a drift? Whom shall we trust?</em> We have gone to length to recognize a way to detect such drifts.</p>
+<ul>
+<li><a href="http://en.oreilly.com/mysql2011/public/schedule/detail/17146">Summary Tables, Aggregate Tables and Materialized Views Using Flexviews</a> / <em>Justin Swanhart (Percona)</em></li>
+</ul>
+<p>The conference had to end with a bang. In the last three years (hopefully with some sleep), Justin Swanhart has been working on what seems to me like an utterly (positively) crazy project: Flexviews: a materialized views solution for MySQL.</p>
+<p>MySQL's native views are immaterialized. There is no data in them. When you access the view, you directly query the tables beneath. Justin's code allows you to create a materialized view (implemented as an actual MySQL table), which can utilize almost any type of SELECT you would want to use. It can only SELECT tables (including other materialized views).</p>
+<p>How does this work? You don't directly create your materialized view. You get a set of stored routines with which you create the view. Each provides with a simple step in the creation of the view (e.g. JOIN to this table, return this column, etc.). You don't have to worry too much about this, since Justin provides with a PHP script which translates a SQL query to the required invocation sequence of said routines.</p>
+<p>OK, view is created. What then? <em>Flexviews</em> reads binary logs (must be in ROW binlog format), and decides whether logged action manipulates tables used by any materialized table. If so, it logs that action into a special log table.</p>
+<p>What have we got so far? SQL parser which generates sequence of stored routines; sequence of stored routines which creates a table, while storing structure; Binlog reader, capable of recognizing relevant events, associating them with relevant materialized views; and, most importantly, some brains which can figure out <em>just how</em> said event affects data. Think about it: say our query did some aggregation, with COUNT(*) or SUM(column). To be able to update the aggregated result based on the fact a few rows have been added/deleted/updated sounds to me like very hard work.</p>
+<p>Flexviews do not get updated immediately, but rather on demand. It's all in the logs, it's just a matter of when to apply the logs. We had a very nice &amp; simple demonstration of this.</p>
+<p>I don't mean to be too superlative, but this was a very impressive session, and myself, as well as other people, all had an occasional <em>"wow"</em> slip during and concluding this talk.</p>
+<h4>Throughout the week</h4>
+<ul>
+<li>Planet MySQL</li>
+</ul>
+<p>During conference, <a href="http://planet.mysql.com/">Planet MySQL</a> was swamped with various announcements. Little were technical    announcements, like "X.X has been released", and most were purely    marketing announcements. This is to be expected; everyone wants to make a    living. I think it is quite all right that for <strong>4</strong> days a year, the    planet is mostly marketing stuff. I personally mostly ignore the planet    during these days.</p>

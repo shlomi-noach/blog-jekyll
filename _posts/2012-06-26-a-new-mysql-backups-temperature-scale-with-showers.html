@@ -1,0 +1,44 @@
+---
+title: A new MySQL backups temperature scale, with showers
+date: 2012-06-26 08:08:15.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Backup
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>We're used to Cold, Warm and Hot backups. This scale of three temperatures does not quite reflect the impact of backups on your MySQL database.</p>
+<p>In this post I offer a new backup temperature scale, and (somewhat seriously) compare it with showers. Call it the <em>backup shower scale</em>.</p>
+<blockquote><p>A database backup is like a shower: the colder it is, the less time you want to spend doing it.</p></blockquote>
+<h4>Cold</h4>
+<p>A cold backup requires taking your database down (i.e. stop the service).</p>
+<p>Example: file system copy</p>
+<p>This can work well for replicating slaves, which may not be required for normal operation. You take the slave down, turn off the service, make your backup, turn everything on again, and let the backup catch up. Just make sure its master has all the necessary binary logs.</p>
+<p>A friend was staying at my place and was lecturing me on the benefits of cold showers; how it was good for your health. A couple hours later, preparing for bed, I hear him exclaiming from the bathroom: <em>"Whaaaaa! There's no hot water!"<!--more--></em></p>
+<h4>Warm</h4>
+<p>A backup which requires locking down your database as read-only.</p>
+<p>Examples: MyDumper, mysqlhotcopy (MyISAM only), mysqldump (non-transactional)</p>
+<p>Again, this may do well on slaves. As for working out a warm backup on the master: I don't know. Is a mildly-warm shower really any better than a cold one?</p>
+<h4>Not quite hot</h4>
+<p>A backup which is supposedly non-interruptive to normal operation. You are allowed to keep writes to the database. But, things are not quite as they seem.</p>
+<p>Example: mysqldump --single-transaction</p>
+<p><em>mysqldump</em> can make a backup in an open transaction. With InnoDB this means a consistent snapshot of the data. But open transactions lead to locks. These accumulate. MVCC makes for changes unable to fall back into the baseline, waiting for the backup's transaction to complete. Eventually, there are so many locks that your database is as good as dead. <em>mysqldump</em> doesn't work well for very large databases under heavy load.</p>
+<p>[<em>UPDATE</em>: As per Domas' clarification, MyDumper falls under this category, as well]</p>
+<p>In terms of shower, you have reasonably hot water for some time, but they eventually run cold.</p>
+<h4>Hot</h4>
+<p>A hot backup is such that does not impose any constraints on the database itself. But it may impose load on other components, such as the disks, memory, CPU. This leads to an implicit impact on MySQL's performance.</p>
+<p>An LVM snapshot works this way. With LVM snapshots, writes to the database cause for blocks copy-on-write. The disk is busier. MySQL has to compete for disk use. An LVM backup works just well, but has a noticeable impact on the database's ability to keep up as before.</p>
+<p>You may have enough hot water for your shower, but there's not enough pressure. The minute the dishwasher starts working, your shower turns to a sad dripping.</p>
+<h4>Searing hot</h4>
+<p>A searing hot backup is one that does not interfere with database operation, explicitly or implicitly, to a reasonable extent.</p>
+<p>Xtrabackup with throttling is such a backup. The impact can be made low such that it is unnoticeable. You are willing to have the backup take longer time to complete.</p>

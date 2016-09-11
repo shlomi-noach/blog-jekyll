@@ -1,0 +1,59 @@
+---
+title: mk-schema-change? Check out ideas from oak-online-alter-table
+date: 2010-03-10 20:28:29.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- openark kit
+- Schema
+- scripts
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: vamsi.ponnekanti@facebook.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>In response to Mark Callaghan's post <a href="http://www.facebook.com/note.php?note_id=356997370932">mk-schema-change</a>.</p>
+<p>I apologize for not commenting on the post itself, I do not hold a Facebook account. Anyway this is a long write, so it may as well deserve a post of its own.</p>
+<p>Some of the work Mark is describing already exists under <a href="http://code.openark.org/forge/openark-kit">openark kit</a>'s <a href="http://code.openark.org/forge/openark-kit/oak-online-alter-table">oak-online-alter-table</a>. Allow me to explain what I have gained there, and how the issue can be further pursued. There is relevance to Mark's suggestion.</p>
+<p><em>oak-online-alter-table</em> uses a combination of locks, chunks and triggers to achieve an almost non-blocking <strong>ALTER TABLE</strong> effect. I had a very short opportunity to speak with Mark on last year's conference, in between bites. Mark stated that anything involving triggers was irrelevant in his case.</p>
+<p>The triggers are a pain, but I believe a few other insights from <em>oak-online-alter-table</em> can be of interest.<!--more--></p>
+<h4>The first attempt</h4>
+<p>My first attempt with the script assumed:</p>
+<ul>
+<li>Table has an <strong>AUTO_INCREMENT PRIMARY KEY</strong> column</li>
+<li>New rows always gain ascending <strong>PRIMARY KEY</strong> values</li>
+<li><strong>PRIMARY KEY</strong> never changes for an existing row</li>
+<li><strong>PRIMARY KEY</strong> values are never reused</li>
+<li>Rows may be deleted at will</li>
+<li>No triggers exist on the table</li>
+<li>No <strong>FOREIGN KEY</strong>s exist on the table.</li>
+</ul>
+<p>So the idea was: when one wants to do an <strong>ALTER TABLE</strong>:</p>
+<ol>
+<li>Create a <em>ghost</em> table with the new structure.</li>
+<li>Read the minimum and maximum PK values.</li>
+<li>Create <strong>AFTER INSERT</strong>, <strong>AFTER UPDATE</strong>, <strong>AFTER DELETE</strong> triggers on the original table. These triggers will propagate the changes onto the <em>ghost</em> table.</li>
+<li>Working out slowly, and in small chunks, copy rows within recorded min-max values range into the <em>ghost</em> table. The interesting part is where the script makes sure there's no contradiction between these actions and those of the triggers, (whichever came first!). This is largely solved using <strong>INSERT IGNORE</strong> and <strong>REPLACE INTO</strong> in the proper context.</li>
+<li>Working out slowly and in chunks again, we <em>remove</em> rows from the <em>ghost</em> table, which are no longer existent in the original table.</li>
+<li>Once all chunking is complete, <strong>RENAME</strong> original table to *_old, and <em>ghost</em> table in place of the original table.</li>
+</ol>
+<p>Steps <strong>4</strong> &amp; <strong>5</strong> are similar in concept to transactional recovery through <em>redo logs</em> and <em>undo logs</em>.</p>
+<h4>The next attempt</h4>
+<p>Next phase removed the <strong>AUTO_INCREMENT</strong> requirement, as well as the "no reuse of PK". In fact, the only remaining constraints were:</p>
+<ul>
+<li>There is some <strong>UNIQUE KEY</strong> on the table which is unaffected by the <strong>ALTER</strong> operation</li>
+<li>No triggers exist on the table</li>
+<li>No <strong>FOREIGN KEY</strong>s exist on the table.</li>
+</ul>
+<p>The steps are in general very similar to those listed previously, only now a more elaborate chunking method is used with possible non-integer, possible multi-column chunking algorithm. Also, the triggers take care of changes in <strong>UNIQUE KEY</strong> values themselves.</p>
+<h4>mk-schema-change?</h4>
+<p>Have a look at the <a href="http://code.google.com/p/openarkkit/w/list">wiki pages</a> for OnlineAlterTable*. There is some discussion on concurrency issues; on transactional behavior, which explains why <em>oak-online-alter-table</em> performs correctly. Some of these are very relvant, I believe, to Mark's suggestion. In particular, making the chunks copy; retaining transactional integrity, etc.</p>
+<p>To remove any doubt, <em>oak-online-alter-table</em> is<em> </em> <strong>not production ready</strong> or anywhere near. Use at your own risk. I've seen it work, and I've seen it crash. I got little feedback and thus little chance to fix things. I also didn't touch the code for quite a few months now, so I'm a little rusty myself.</p>

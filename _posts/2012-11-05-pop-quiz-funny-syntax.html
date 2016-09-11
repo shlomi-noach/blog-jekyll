@@ -1,0 +1,60 @@
+---
+title: 'Pop quiz: funny syntax'
+date: 2012-11-05 20:22:15.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- SQL
+- Syntax
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>The following questions are of little importance, yet I find them entertaining. I stumbled upon these while developing QueryScript.</p>
+<p>Can you guess the results of the following statements?</p>
+<h4>Pop quiz 1</h4>
+<blockquote>
+<pre>SET @x := 7;
+SELECT ++@x;</pre>
+</blockquote>
+<p>What is the computation result? What will be the value of <strong>@x</strong>?</p>
+<h4>Pop quiz 2</h4>
+<blockquote>
+<pre>SET @ := 4;
+SELECT @ + @'' + @``</pre>
+</blockquote>
+<p>What is the computation result?</p>
+<h4>Pop quiz 3</h4>
+<blockquote>
+<pre>SET @a := 2;
+SELECT @a = @'a' = @`a`</pre>
+</blockquote>
+<p>Do we get <strong>TRUE</strong> or <strong>FALSE</strong>? When?<!--more--></p>
+<h4>Hints</h4>
+<p>Consider the following queries as hints to the above questions:</p>
+<blockquote>
+<pre>SELECT +++++-@x;
+SELECT @ = @'', @ = @``
+SELECT (@a = @'a') = @`a`</pre>
+</blockquote>
+<h4>Answers</h4>
+<ul>
+<li><strong>Pop quiz 1</strong></li>
+</ul>
+<p style="padding-left: 30px;"><strong>++@x</strong> is interpreted as <strong>+(+(@x))</strong>, which is in turn evaluated as <strong>0+(0+(@x))</strong>. No relation to <strong>C</strong>'s <strong>++</strong> operator. <strong>@x</strong> is unchanged.</p>
+<ul>
+<li><strong>Pop quiz 2</strong></li>
+</ul>
+<p style="padding-left: 30px;"><strong>@x</strong> is the same as <strong>@'x'</strong> and as <strong>@`x`</strong>. What's funny is that one is allowed to create the empty-named user defined variable <strong>@''</strong>. Makes for a weird looking syntax, but nothing special about it. Computation result is <strong>12</strong>.</p>
+<ul>
+<li><strong>Pop quiz 3</strong></li>
+</ul>
+<p style="padding-left: 30px;">We've already established that <strong>@a</strong>, <strong>@'a'</strong> and <strong>@`a`</strong> are the same, I just used this notation for adding pepper to the quiz. The real question is whether <strong>2 = 2 = 2</strong> holds true.  It does not. There is no 3-way comparison. All comparisons are in pairs, which is why the expression evaluates as <strong>(2 = 2) = 2</strong>, leading to <strong>1 = 2</strong>, <strong>"1"</strong> being the <strong>TRUE</strong> value of <strong>(2 = 2)</strong>. The only value of <strong>@a</strong> for which the expression holds true is <strong>1</strong>.</p>

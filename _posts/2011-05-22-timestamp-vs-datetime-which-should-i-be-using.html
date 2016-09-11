@@ -1,0 +1,67 @@
+---
+title: TIMESTAMP vs. DATETIME, which should I be using?
+date: 2011-05-22 06:11:47.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Data Types
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>They both look the same, have roughly the same use. Nevertheless, they differ in many respects. I'll note the difference, and note a few pitfalls and peculiarities.</p>
+<h4>Range</h4>
+<p><strong>TIMESTAMP</strong> starts with the <a href="http://en.wikipedia.org/wiki/Unix_time">epoch</a>, <strong>'1970-01-01 00:00:01'</strong> UTC and ends with <strong>'2038-01-19 03:14:07'</strong> UTC. This is all very nice today, and may actually hold up till our retirement, but the younger readers may yet have to deal with the <strong>Bug2K+38</strong>™, certain to arrive.</p>
+<p><strong>DATETIME</strong> starts with <strong>'1000-01-01 00:00:00'</strong> and lasts up to <strong>'9999-12-31 23:59:59'</strong>. More on that later.</p>
+<p>In respect of range, your current event logs may well use a <strong>TIMESTAMP</strong> value, while your grandfather's and granddaughter's birth dates may require <strong>DATETIME</strong>.</p>
+<p>In general I would suggest that anything that relates to <em>now</em>, can be a <strong>TIMESTAMP</strong>. A new entry is added? It is added <em>now</em>. It can be represented by a <strong>TIMESTAMP</strong>. Anything has an expiry time of a few minutes, perhaps a few days or a month? You'll be safe using it up till late <strong>2037</strong>. Anything else had better use a <strong>DATETIME</strong>. In particular, dates relating to issues such as birth, insurance, the market etc. fall into this category.</p>
+<p><em>History</em>, however, does not even hold up with <strong>DATETIME</strong>. Rome fell long before <strong>MIN(DATETIME)</strong>. You will have to manage your own. Not even <strong>YEAR</strong> will help you out.</p>
+<h4>Storage</h4>
+<p><strong>TIMESTAMP</strong> makes for <strong>4</strong> bytes. <strong>DATETIME</strong> makes for <strong>8</strong> bytes. Now that we have this behind us, let's see why.<!--more--></p>
+<h4>Internal representation</h4>
+<p>A <strong>TIMESTAMP</strong> is merely the number of elapsed seconds since the <em>epoch</em>. It is a number. Not only is this a number, it is an incrementing number, and without gaps. Ever ascending. It actually equals the <strong>UNIX_TIMESTAMP()</strong> function.</p>
+<p>A <strong>DATETIME</strong> is more of an oddity. From the manual:</p>
+<blockquote>
+<ul>
+<li><code>DATETIME</code>: Eight bytes:
+<div>
+<ul>
+<li>A four-byte integer packed as               <code>YYYY</code>×10000 +               <code>MM</code>×100 +               <code>DD</code></li>
+<li>A four-byte integer packed as               <code>HH</code>×10000 +               <code>MM</code>×100 +               <code>SS</code></li>
+</ul>
+</div>
+</li>
+</ul>
+</blockquote>
+<p><em>Huh?</em></p>
+<p>There's nothing sequential about a <strong>DATETIME</strong>. The value which follows <strong>20110307095159</strong> is <strong>20110307095200</strong>. It's like the string representation without any delimiters. See the following (ignore the fraction, it's not really there):</p>
+<blockquote>
+<pre>root@mysql-5.1.51&gt; SELECT NOW()+0;
++-----------------------+
+| NOW()+0               |
++-----------------------+
+| 20110307095238.000000 |
++-----------------------+
+</pre>
+</blockquote>
+<p>The implication of this internal representation is that conversions must be made back and forth. When you want to add <strong>5</strong> seconds to a <strong>DATETIME</strong>, MySQL cannot simply add <strong>5</strong> to some number, but must make for a more complicated calculation.</p>
+<h4>Peculiarities</h4>
+<p>Now here's a question: why does <strong>DATETIME</strong> start with <strong>'1000-01-01 00:00:00'</strong>? Can you provide with a convincing argument? The only argument I can find is hardly convincing.</p>
+<p>Did you ever need to type in a password with your phone? Say, for your Credit Card company, or your Bank? Did you get recorded instructions saying "<em>You must type six digits. You must not repeat the same digits three successive times</em>"? That's somewhat nice, and probably a good advice. Did you ever get told "<em>The first digit must not be <strong>0</strong></em>"? That's just <em>stupid</em>. This means we're giving up on <strong>100,000</strong> valid passwords, thereby reducing our search space by <strong>10%</strong>!</p>
+<p>I suspect in both cases the reasoning is the same: if you start with a <strong>0</strong>, and we represent it as a number, it won't make up for the same number of digits we intended it to.</p>
+<p>In the case of your Credit Card company, there is no excuse. What's the problem with padding with zeros till you make those six digits?</p>
+<p>In the case of MySQL's <strong>DATETIME</strong>, I can see a weak reasoning. Read <a href="http://dev.mysql.com/doc/refman/5.1/en/datetime.html">this page on the docs</a> to find out that a <strong>DATETIME</strong> can be represented in many forms, and can be automatically deduced from a string in many formats. Both strings <strong>'110307095100'</strong> and <strong>'20110307095100'</strong> make for the same <strong>DATETIME</strong> value. It is based on the number of characters in your text, that the parsing decides how to act.</p>
+<p>The fact the first year is <strong>1000</strong> makes the number of digits predictable.</p>
+<h4>My thoughts?</h4>
+<p>I don't see why I should care about automatically converting texts of different formats to a <strong>DATETIME</strong>. As a programmer, I'm perfectly content with strict typing. I don't mind passing around only texts of the form <strong>'YYYY-MM-DD HH:MM:SS'</strong> (or, better yet, passing date objects and letting my connector do the translation). Moreover, I prefer it that way! It makes me feel safer, that I haven't passed a wrong text by mistake, to be silently accepted.</p>
+<p>For this reason I don't like the idea of losing the ability to use <strong>DATETIME</strong> on <strong>1,000</strong> lost years. As far as I can tell, this is a MySQL specific issue; there is no <strong>ANSI SQL</strong> for <strong>DATETIME</strong>.</p>
+<p>[<strong>UPDATE</strong>:  Sheeri <a href="http://palominodb.com/blog/2011/05/23/datetime-vs-timestamp">notes</a> the biggest difference: <strong>DATETIME</strong> does not support time zones. A good discussion is also available on <a href="http://bit.ly/oursql046">OurSQL</a>]</p>
+<p>&nbsp;</p>

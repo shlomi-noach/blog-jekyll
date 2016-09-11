@@ -1,0 +1,86 @@
+---
+title: Beware of implicit casting
+date: 2010-02-02 21:55:22.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Indexing
+- SQL
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Ever so often a query provides a "bad" execution plan. Adding a missing index can many times solve the problem. However, not everything can be solved with an index. I wish to highlight the point of having an <em>implicit cast</em>, which negates the use of an index on MySQL.</p>
+<p>I see this happening a lot on customers' databases, and this begs for a short introduction.</p>
+<h4>MySQL doesn't support index functions</h4>
+<p>Let's assume the following table:<!--more--></p>
+<blockquote>
+<pre>CREATE TABLE `person` (
+ `id` bigint(20) NOT NULL AUTO_INCREMENT,
+ `first_name` varchar(32) CHARACTER SET utf8 DEFAULT NULL,
+ `last_name` varchar(32) CHARACTER SET utf8 DEFAULT NULL,
+ `driver_license_registration` bigint(20) DEFAULT NULL,
+ PRIMARY KEY (`id`),
+ KEY `last_name` (`last_name`),
+ KEY `driver_license_registration` (`driver_license_registration`)
+)
+</pre>
+</blockquote>
+<p>And suppose we're looking for persons whose last name begin with "Smith". The following query will <strong>NOT</strong> utilize an index:</p>
+<blockquote>
+<pre>SELECT * FROM person WHERE <strong>LEFT(last_name, 5) = 'Smith'</strong>;
+</pre>
+</blockquote>
+<p>Why not? Because we use a function (<strong>LEFT</strong>) over the <strong>last_name</strong> column, and this makes MySQL unable to deduce the outcome of the expression. Will it be ordered in the same way as the original column? (in this case, the answer is <em>yes</em>, <strong>LEFT</strong> is a monotonic function) Is it possible to produce the reverse function? (In this case, <em>no</em>). MySQL cannot and does not handle these questions and therefore avoids using the index on <strong>last_name</strong> altogether:</p>
+<blockquote>
+<pre>EXPLAIN SELECT * FROM person WHERE LEFT(last_name, 5) = 'Smith';
++----+-------------+--------+------+---------------+------+---------+------+------+-------------+
+| id | select_type | table  | type | possible_keys | key  | key_len | ref  | rows | Extra       |
++----+-------------+--------+------+---------------+------+---------+------+------+-------------+
+|  1 | SIMPLE      | person | <strong>ALL</strong>  | NULL          | NULL | NULL    | NULL | 1000 | Using where |
++----+-------------+--------+------+---------------+------+---------+------+------+-------------+
+</pre>
+</blockquote>
+<p>To solve the problem above, a simple change to the query will do the trick:</p>
+<blockquote>
+<pre>EXPLAIN SELECT * FROM person WHERE last_name <strong>LIKE 'Smith%'</strong>;
++----+-------------+--------+-------+---------------+-----------+---------+------+------+-------------+
+| id | select_type | table  | type  | possible_keys | key       | key_len | ref  | rows | Extra       |
++----+-------------+--------+-------+---------------+-----------+---------+------+------+-------------+
+|  1 | SIMPLE      | person | <strong>range</strong> | last_name     | last_name | 99      | NULL |    5 | Using where |
++----+-------------+--------+-------+---------------+-----------+---------+------+------+-------------+
+</pre>
+</blockquote>
+<h4>Not all functions are explicit</h4>
+<p>This leads us to the subject of this post. What if we were to look for persons whose driver license registration number begins with <strong>'123'</strong>? Trying to learn from the above example, we write:</p>
+<blockquote>
+<pre>SELECT * FROM person WHERE driver_license_registration LIKE '123%';</pre>
+</blockquote>
+<p>But the above query does <strong>NOT</strong> utilize an index! See:</p>
+<blockquote>
+<pre>EXPLAIN SELECT * FROM person WHERE driver_license_registration LIKE '123%';
++----+-------------+--------+------+-----------------------------+------+---------+------+------+-------------+
+| id | select_type | table  | type | possible_keys               | key  | key_len | ref  | rows | Extra       |
++----+-------------+--------+------+-----------------------------+------+---------+------+------+-------------+
+|  1 | SIMPLE      | person | ALL  | driver_license_registration | NULL | NULL    | NULL | 1000 | Using where |
++----+-------------+--------+------+-----------------------------+------+---------+------+------+-------------+
+</pre>
+</blockquote>
+<p>Why not?</p>
+<p>Because the <strong>driver_license_registration</strong> column is an integer. The query asks for a string comparison (<strong>LIKE '123%'</strong>). This kind of comparison cannot be performed on integers. The column value will have to transform to text in order to work out the query. Effectively, it's as if we wrote:</p>
+<blockquote>
+<pre>SELECT * FROM person WHERE <strong>CAST(driver_license_registration AS CHAR)</strong> LIKE '123%';
+</pre>
+</blockquote>
+<p>There's no immediate solution to this last query. Perhaps the column should be textual after all, perhaps maintain a "ghost" column. If the number of digits in a number if fixed an known, then we can convert the above to a range query.</p>
+<h4>Casting is an implicit function</h4>
+<p>And, alas, it's a well hidden function. There's nothing to suggest a problem here. This is SQL, not Java. It's not a strongly typed language. I see the above example quite a lot. Another common casting mistake is comparing Timestamp values to strings.</p>
+<p>So, until MySQL supports index functions, watch out for these nuances.</p>

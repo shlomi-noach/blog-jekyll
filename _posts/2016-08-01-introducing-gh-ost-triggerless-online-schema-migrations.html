@@ -1,0 +1,30 @@
+---
+title: 'Introducing gh-ost: triggerless online schema migrations'
+date: 2016-08-01 19:19:00.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Development
+- GitHub
+- Open Source
+- operations
+- Performance
+- tools
+meta:
+  _wpas_done_all: '1'
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I'm thoroughly happy to introduce <a href="https://github.com/github/gh-ost"><strong>gh-ost</strong></a>: triggerless, controllable, auditable, testable, trusted online schema change tool <a href="http://githubengineering.com/gh-ost-github-s-online-migration-tool-for-mysql/">released today by GitHub</a>.</p>
+<p><em>gh-ost</em> now powers our production schema migrations. We hit some serious limitations using <a href="https://www.percona.com/doc/percona-toolkit/2.2/pt-online-schema-change.html">pt-online-schema-change</a> on our large volume, high traffic tables, to the effect of driving our database to a near grinding halt or even to the extent of causing outages. With <em>gh-ost</em>, we are now able to migrate our busiest tables at any time, peak hours and heavy workloads included, without causing impact to our service.</p>
+<p>gh-ost supports testing in production. It goes a long way to build trust, both in integrity and in control. Are your databases just too busy and you cannot run existing online-schema-change tools? Have you suffered outages due to migrations? Are you tired of babysitting migrations that run up to 3:00am? Tired of being the only one tailing logs? Please, take a look at <em>gh-ost</em>. I believe it changes online migration paradigm.</p>
+<p>For a more thorough overview, please read the <a href="http://githubengineering.com/gh-ost-github-s-online-migration-tool-for-mysql/">announcement</a> on the GitHub Engineering Blog, and proceed to the <a href="https://github.com/github/gh-ost/blob/master/README.md">documentation</a>.</p>
+<p><em>gh-ost</em> is open sourced under the MIT license.</p>

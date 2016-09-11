@@ -1,0 +1,65 @@
+---
+title: On compiling TokuDB from source
+date: 2013-05-02 07:14:55.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- TokuDB
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+  _sg_subscribe-to-comments: suresh.chouta@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Sharing my experience of compiling TokuDB + MariaDB <strong>5.5</strong>. Why? Because I must have <a href="http://code.openark.org/blog/mysql/sphinx-sphinx_snippets-mysql-5-5">this patch</a> to Sphinx <strong>2.0.4</strong>.</p>
+<p><strong>Note</strong>: I was using what seems to be the "old" method of compiling; quoting Leif Walsh:</p>
+<blockquote><p>... We are looking at deprecating that method of building (MariaDB source plus binary fractal tree handlerton).  It only really needed to be that complex when we were closed source.</p></blockquote>
+<p>I also tried the "new" method of compiling, which I couldn't work out.</p>
+<p>Here's how it goes: TokuDB is newly <a href="http://www.tokutek.com/2013/04/announcing-tokudb-v7-open-source-and-more/">released as open source</a>. As such, it got a lot of attention, many downloads and I hope it will succeed.</p>
+<p>However as stable as the product may be, it's new to open source, which means anyone compiling it from source is an early adopter (at least for the compilation process).</p>
+<h4>Installation process</h4>
+<p>This is an unorthodox, and actually weird process. See <a href="http://www.tokutek.com/wp-content/uploads/2013/04/mariadb-5.5.30-tokudb-7.0.1-users-guide.pdf">section 6 on the Tokutek docs</a>. In order to compile the project you must download:</p>
+<ul>
+<li>The source code tar.gz</li>
+<li><em>And</em> the binary (?!) tar.gz</li>
+<li>And the binary checksum</li>
+<li>And the Tokutek patches</li>
+<li>And the patches checksum<!--more--></li>
+</ul>
+<p>You extract the source tarball. But instead of doing the standard <strong>"./configure &amp;&amp; make &amp;&amp; sudo make install"</strong> you need to copy a shell script called <strong>tokudb.build.bash</strong> <em>one directory level up</em>, and run it from there.</p>
+<p><strong>tokudb.build.bash</strong> lists <strong>gcc47</strong> and <strong>g++47</strong> on rows <strong>3, 4</strong>. Modify <strong>"gcc47"</strong> to <strong>"gcc"</strong>, modify <strong>"g++47"</strong> to  <strong>"g++"</strong>. I'm assuming you don't have a binary called <strong>gcc47</strong>. Why would you?</p>
+<h4>Dependencies</h4>
+<p>You will need <strong>CMake &gt;= 2.8</strong></p>
+<p>This means Ubuntu LTS <strong>10.04</strong> users are unable to compile out of the box; will need to manually install later version of CMake.</p>
+<p>Also needed is <strong>zlib1g-dev</strong>, <strong>rpmbuild</strong>.</p>
+<h4>While compiling</h4>
+<p>I ran out of disk space. <em>What?</em> I was using a <strong>10G</strong> partition I use for my compilations. Looking at <strong>"df -h"</strong> I get that:</p>
+<ul>
+<li>The source tarball is extracted (I did it)</li>
+<li>The binary tarball is also extracted (someone has to explain this for me)</li>
+<li>And inside the source directory we have:</li>
+</ul>
+<blockquote>
+<pre>bash$ df -h
+...
+1484    build.RelWithDebInfo.rpms
+5540    build.RelWithDebInfo</pre>
+</blockquote>
+<p>At about <strong>7GB</strong> (and counting) of build... <em>stuff?</em>.</p>
+<p><strong>UPDATE</strong>: just ran out on disk space <em>again</em>. Is this an incremental thing? Like every time my compilation fails and I recompile some files are not cleaned up? If so, put them on <strong>/tmp</strong>! OK, moving everything to a <strong>300GB</strong> partition and starting all over.</p>
+<h4>More while compiling</h4>
+<p><strong></strong>I got errors on missing libraries. Like I was missing <strong>libssl</strong>, <strong>rpmbuild</strong>. This is what the <strong>"configure"</strong> script is for -- to test for dependencies. It's really a bummer to have to recompile 4-5 times (and it's a long compilation), only to find out there's another missing package.</p>
+<h4>After compiling</h4>
+<p>What is the result of the compilation? Not a "make install" prepared binary. The result is a MySQL-binary package. Se need to extract and put on <strong>/usr/local/somewhere</strong> etc.</p>
+<h4>Conclusions</h4>
+<p>The compilation process is unexpected and non-standard. The output is unexpected.</p>
+<p>The correct way of doing this is a <strong>"./configure &amp;&amp; make &amp;&amp; sudo make install"</strong>. I don't understand the need for a binary package while compiling from source. Isn't this the chicken and the egg?</p>
+<p>A source distribution is no different from a binary distribution. You must have a testing environment to verify the source distribution actually works. This test environment is typically a bare-new-RedHat or a bare-new-Ubuntu etc. The machines at Tokutek are already installed with needed packages. Not so on my compilation machine. I suggest that <strong>apt-get</strong>s and <strong>yum install</strong>s for dependencies are added to the source distribution testing. This is the only reliable way for you guys at Tokutek to know that clients will actually be able to install via source.</p>

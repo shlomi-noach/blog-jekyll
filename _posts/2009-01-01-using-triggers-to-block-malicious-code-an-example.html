@@ -1,0 +1,88 @@
+---
+title: 'Using triggers to block malicious code: an example'
+date: 2009-01-01 23:05:54.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Security
+- SQL
+- Triggers
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Web applications face constant exploitation attempts. Those with a user base must keep their users' private data, well... private.</p>
+<p>While the MySQL security model allows restricting users access to databases, tables and even columns, it has no built in feature for restricting the rows access within the given table.</p>
+<p>One cannot allow a user to only update rows 0 through 99, but restrict that user from updating rows 100 to 199. Such restrictions are usually managed in the application level, by adding a necessary "... AND filtering_column = some_value..."</p>
+<p>Many web application have the notion of an 'admin' account, or several such accounts, which provide greater control over the application. The 'admin' account is one account to which many attacks are targeted. One such attack is an attempt to modify the admin's password, such that the attacker can later log in with and access restricted data.<!--more--></p>
+<p>Assume the following table:</p>
+<blockquote>
+<pre><strong>CREATE TABLE </strong>my_users (
+  ID <strong>INT NOT NULL AUTO_INCREMENT PRIMARY KEY</strong>,
+  username <strong>VARCHAR</strong>(32) <strong>CHARSET </strong>ascii <strong>NOT NULL</strong>,
+  password <strong>VARCHAR</strong>(32) <strong>CHARSET </strong>ascii <strong>NOT NULL COLLATE</strong> ascii_bin,
+  <strong>UNIQUE KEY</strong>(username)
+);</pre>
+</blockquote>
+<p>Let us also assume we are somewhat careful, so that the passwords are not plaintext, but rather encoded with MD5.</p>
+<blockquote>
+<pre><strong>INSERT INTO</strong> my_users (username, password) <strong>VALUES</strong>
+  ('admin', MD5('qwerty')) ; <span style="color: #008000;">-- Safe password as can be found!</span>
+<strong>INSERT INTO</strong> my_users (username, password) <strong>VALUES</strong>
+  ('alice', MD5('123456')) ; <span style="color: #008000;">-- Safer yet!</span>
+
+<strong>SELECT </strong>* <strong>FROM </strong>my_users;
++----+----------+----------------------------------+
+| ID | username | password                         |
++----+----------+----------------------------------+
+|  1 | admin    | d8578edf8458ce06fbc5bb76a58c5ca4 |
+|  2 | alice    | e10adc3949ba59abbe56e057f20f883e |
++----+----------+----------------------------------+
+2 rows in set (0.00 sec)</pre>
+</blockquote>
+<p>An attacker will try to set the password for the admin account using security holes in the web application. The web application may execute the following query:</p>
+<blockquote>
+<pre><strong>UPDATE </strong>my_users <strong>SET </strong>password=MD5('att@cker!') <strong>WHERE </strong>username='admin';</pre>
+</blockquote>
+<p>The issued query is valid, and should generally be allowed. However, we may decide to block changes to the specific 'admin' row, in the following manner:</p>
+<blockquote>
+<pre><code>DELIMITER $$
+DROP TRIGGER IF EXISTS my_users_bu $$
+CREATE TRIGGER my_users_bu BEFORE UPDATE ON my_users
+FOR EACH ROW
+BEGIN
+  IF (NEW.username='admin') THEN
+    SELECT 0 INTO @admin_error FROM `Cannot modify admin data!`;
+  END IF;
+END $$
+DELIMITER ;</code></pre>
+</blockquote>
+<p>Let's try running again the query:</p>
+<blockquote>
+<pre><strong>UPDATE </strong>my_users <strong>SET </strong>password=MD5('att@cker!') <strong>WHERE </strong>username='admin';
+
+<span style="color: #993300;">ERROR 1146 (42S02): Table 'world.Cannot modify admin data!' doesn't exist</span></pre>
+</blockquote>
+<p>The query fails, since the <strong>BEFORE UPDATE</strong> trigger fails.<br />
+We can tweak the trigger to only allow specific users to modify the row:</p>
+<blockquote>
+<pre><code>DELIMITER $$
+DROP TRIGGER IF EXISTS my_users_bu $$
+CREATE TRIGGER my_users_bu BEFORE UPDATE ON my_users
+FOR EACH ROW
+BEGIN
+  IF (NEW.username='admin' AND USER() != 'root@localhost') THEN
+    SELECT 0 INTO @admin_error FROM `Cannot modify admin data!`;
+  END IF;
+END $$
+DELIMITER ;</code></pre>
+</blockquote>
+<p>This way it is possible for the root user to modify the password at will. We can further tweak the trigger to INSERT INTO some log table. The information we may wish to register is USER(), the CURRENT_TIMESTAMP(), old password and new password, and perhaps the CONNECTION_ID(). More data means more means to locate the security breach, and monitoring the log table allows for immediate response for such an attempt.</p>

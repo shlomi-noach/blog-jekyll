@@ -1,0 +1,76 @@
+---
+title: MySQL security tasks easily solved with common_schema
+date: 2013-01-17 10:09:56.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- Security
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Here are three security tasks I handled, which I'm happy to say were easily solved with <em>common_schema</em>'s views and routines (with no prior planning). Two are so easy, that I actually now integrated them into <a href="http://code.google.com/p/common-schema">common_schema 1.3</a>:</p>
+<ul>
+<li>Duplicate a user (create new user with same privileges as another's)</li>
+<li>Find users with identical set of grants (same roles)</li>
+<li>Finding redundant users (users who only have privileges on non-existing objects); I was approached on this by <a href="http://sheeri.com/">Sheeri K. Cabral</a> from Mozilla.</li>
+</ul>
+<h4>Duplicate user</h4>
+<p>How would you duplicate a grantee? That's easy! Just get the SHOW GRANTS output, then do text search and replace: replace the existing account (e.g. <strong>'existing'@'localhost'</strong>) with the new account (e.g. <strong>'newcomer'@'localhost'</strong>).</p>
+<p>Ahem. And how would you get the output of <strong>SHOW GRANTS</strong>? That's right: you can't do this from within the server. You have to go outside the server, incoke mysql client, <em>sed</em> your way into it, then connect to MySQL again to invoke the GRANT query... Or you can do this by hand, of course, or you can use the new <a href="http://dev.mysql.com/doc/workbench/en/mysqluserclone.html">mysqluserclone</a> tool from MySQL utilities. Bottom line: you have to go outside the server. You can't directly do this with your favorite GUI tool unless it has this function integrated.</p>
+<p>But to have a truly automated, scriptable, server-side user-duplication you don't need to go far, since the <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/sql_show_grants.html">sql_show_grants</a> view simulates a <strong>SHOW GRANTS</strong> output, but using plain old SQL. It produces the <strong>GRANT</strong> statement as SQL output. Which means you can <strong>REPLACE()</strong> the grantee. It's actually a one liner, but is such a common operation that I created the <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/duplicate_grantee.html">duplicate_grantee()</a> function for convenience. Just:<!--more--></p>
+<blockquote>
+<pre>call duplicate_grantee(<strong>'existing@localhost', </strong><strong>'newcomer@localhost'</strong>);</pre>
+</blockquote>
+<p>(and yes, using a more relaxed form of grantee, allowing dropping of all these gory quotes).</p>
+<h4>Finding similar grantees</h4>
+<p>If the grants of an account are available via SQL, I'm also able to compare it with the grants of another account. I just need to ignore the account's name in itself. Since <em>sql_show_grants</em> normalizes the grants in expected order, this works well. Again, this is a simple query, but since it is of importance, I created a view for it: just <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/similar_grants.html"><strong>SELECT * FROM similar_grants</strong></a> to find out about accounts sharing same set of privileges..</p>
+<h4>Drop redundant users</h4>
+<p>Sheeri approached me with the following problem (she authorized me to publicize): as she came to work for Mozilla, she inherited the databases to manage. When she reviewed them, she realized there were numerous accounts which were redundant. Redundant how? Well, obviously not being used, but moreover not having privileges on existing objects.</p>
+<p>She found out there were many accounts that only had privileges on non-existing schema, something like:</p>
+<blockquote>
+<pre>GRANT ALL PRIVILEGES ON <strong>penguin.*</strong> TO 'gromit'@'localhost'</pre>
+</blockquote>
+<p>Where the <strong>penguin</strong> schema does not exist anymore - it was some developer's test database. The developer long since not working there, the database long since DROPped.</p>
+<p>How do you quickly find and drop such accounts? Should we do crazy parsing on <a href="http://www.percona.com/doc/percona-toolkit/2.1/pt-show-grants.html">pt-show-grants</a> output? Any other method?</p>
+<p>Well, <em>common_schema</em> to the rescue: the <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/sql_grants.html">sql_grants</a> view breaks the <strong>GRANT</strong> statement into domains (in fact, this is not a true explanation; it actually <em>builds</em> the <strong>GRANT</strong> statements per domain; but it's more convenient to view it as <em>breaking</em>). You actually get the different <strong>GRANT</strong> statement per account per domain: the <strong>GRANT</strong> the account has on <strong>*.*</strong>, the <strong>GRANT</strong> it has on <strong>world.*</strong>, the <strong>GRANT</strong> it has on <strong>sakila.*</strong>, the <strong>GRANT</strong> it has on ....</p>
+<p>Now this one is not entirely simple. Let me introduce the solution, then explain it. The way to find &amp; drop all such users is:</p>
+<blockquote>
+<pre>call <strong>eval</strong>(<span style="color: #000080;">"SELECT <strong>sql_revoke</strong> FROM <strong>sql_grants</strong> LEFT JOIN INFORMATION_SCHEMA.SCHEMATA ON(object_name = SCHEMA_NAME) WHERE priv_level_name='schema' AND DEFAULT_CHARACTER_SET_NAME IS NULL"</span>);
+call <strong>eval</strong>(<span style="color: #000080;">"SELECT <strong>sql_drop_user</strong> FROM <strong>sql_grants</strong> GROUP BY GRANTEE HAVING COUNT(*)=1 AND SUM(current_privileges='USAGE')=1"</span>);</pre>
+</blockquote>
+<p>Explanation:</p>
+<ol>
+<li>The <strong>LEFT JOIN</strong> query finds all <strong>GRANT</strong>s on non existing schemas.</li>
+<li>But we do more than that: we request the <strong>sql_revoke</strong> column which negates such <strong>GRANT</strong>s. <strong>sql_grants</strong> provides such info: the <strong>REVOKE</strong> statement for said <strong>GRANT</strong>s.</li>
+<li>We can actually evaluate the <strong>REVOKE</strong> statement via <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/eval.html"><strong>eval()</strong></a>. There! These privileges are now gone.</li>
+<li>Now that we have revoked privileges on non-existing domains, we should be left with accounts whose only privilege is <strong>USAGE</strong>. Any such account is redundant by definition, and should be dropped. The second query looks up such accounts.</li>
+<li>And, it asks for the <strong>sql_drop_user</strong> statement column for those accounts</li>
+<li>Finally, it evaluates the <strong>DROP USER</strong> statement via <em>eval()</em>.</li>
+</ol>
+<p>Here is the statements output without executing the <strong>eval()</strong>:</p>
+<blockquote>
+<pre>root@mysql-5.1.51&gt; SELECT <strong>sql_revoke</strong> FROM <strong>sql_grants</strong> LEFT JOIN INFORMATION_SCHEMA.SCHEMATA ON(object_name = SCHEMA_NAME) WHERE  priv_level_name='schema'  AND DEFAULT_CHARACTER_SET_NAME IS NULL;
++-----------------------------------------------------------------+
+| sql_revoke                                                      |
++-----------------------------------------------------------------+
+| REVOKE INSERT, SELECT ON `not_here`.* FROM 'gromit'@'localhost' |
++-----------------------------------------------------------------+
+
+root@mysql-5.1.51&gt; SELECT <strong>sql_drop_user</strong> FROM <strong>sql_grants</strong> GROUP BY GRANTEE HAVING COUNT(*)=1 AND SUM(current_privileges='USAGE')=1;
++--------------------------------+
+| sql_drop_user                  |
++--------------------------------+
+| DROP USER 'gromit'@'localhost' |
++--------------------------------+</pre>
+</blockquote>

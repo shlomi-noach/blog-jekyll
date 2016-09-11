@@ -1,0 +1,70 @@
+---
+title: Impressions from MySQL conf 2011, part II
+date: 2011-04-17 14:02:35.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- mysqlconf
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>This post continues my impressions from some of the talks I've been to.</p>
+<h4>Wednesday</h4>
+<ul>
+<li><a href="http://en.oreilly.com/mysql2011/public/schedule/detail/19732">Replication for Availability &amp; Durability with MySQL and Amazon RDS</a> / <em>Grant McAlister (Amazon.com)</em></li>
+</ul>
+<p>Grant McAlister described the Amazon RDS offer, which provides with a pre-installed MySQL servers, and supports auto management of replication and high availability. He desribed asynchronous vs. synchronous replication, logical (i.e log shipping &amp; replaying) vs. physical replication.</p>
+<p>Amazon implement physical replication by shipping data pages to a secondary, standby server, located at a different availability zone. A transaction does not complete before pages are shipped to, and acknowledged by standby machine. The standby machine writes data pages in parallel. This is similar in concept to DRBD. RDS uses InnoDB, which promises data integrity in case of power/network failure.</p>
+<p>The fail over process, in case active master has crashed, involves blocking access to the active master, starting MySQL on standby master (promoted to be active), while changing elastic IP for master to point to promoted master. McAlister said this process takes a few minutes. Live demo resulted at about <strong>4</strong> minutes.<!--more--></p>
+<p>Actually, the recovery time is affected by the InnoDB transaction log. In replying my question, McAlister explained that the InnoDB trasaction log is not under the user's control. It is managed by Amazon. You can't just set it to <strong>512MB</strong>.</p>
+<p>Otherwise RDS also offers normal, asynchronous replication, so as to allow for read scale out.</p>
+<p>I later on spotted Grant McAlister in the expo hall, and had the chance to ask a few more questions. Here is a very brief summary of a few Q&amp;A items:</p>
+<blockquote><p><em>Q: Today, EBS performance is unexpected, since other users may be using the disk. Will you allow RDS customers to have dedicated EBS volumes?</em></p>
+<p>A: We're working towards making this work.</p>
+<p><em>Q: In many cases I've seen, EBS is very slow storage. People do software RAID over several EBS volumes to boost performance, but then loose the ability to do consistent snapshots. Any solution for that?</em></p>
+<p>A: We get so much of that! We're working to change this as well, in time.</p>
+<p><em>Q: Does an RDS user get access to the DB machine?</em></p>
+<p>A: No. Though you do get the API for monitoring it.</p>
+<p><em>Q: How much control do I get over the MySQL configuration file?</em></p>
+<p>A: You have control over most of the settings; a few are under  Amazon's control (e.g. control over innodb transaction log file size)</p>
+<p><em>Q: How far have you went into changing MySQL code?</em></p>
+<p>A: A little. Not far enough that compatibility breaks. People need  compatibility. We also need to be quickly able to provide with new  versions.</p>
+<p><em>Q: If I need to upgrade MySQL version, does RDS provide with the mechanism to first upgrade slave, then do fail-over?</em></p>
+<p>A: No. We just upgrade a server (i.e. master) in place.</p>
+<p><em>Q: Any integration of collateral tools?</em></p>
+<p>A: No. You have access to the database; you are free to run your own tools.</p></blockquote>
+<p>I hope my memory serves me correctly in recalling the above conversation.</p>
+<ul>
+<li><a href="http://en.oreilly.com/mysql2011/public/schedule/detail/17129">The Aspersa System Administrator's Toolkit</a> / <em>Baron Schwartz (Percona Inc.)</em></li>
+</ul>
+<p>Baron presented with some of Aspersa's tools: <em>ioprofile</em>, <em>diskstats</em>, <em>summary</em>, <em>mysql-summary</em>, <em>collect</em>, <em>stalk</em> &amp; <em>sift</em>.</p>
+<p>The presentation was accompanied with demos, wither using live data or prepared, real world data. Not surprisingly, Baron came up with real customer cases, where the "standard" tools gave little help in way of analyzing the problem (e.g. <em>iostat</em> not separating read and write counters). Apparently this is a <em>bash/sec/awk</em> based toolkit, with <em>bash</em> unit tests. Cool!</p>
+<p>Some of the tools are self explanatory; others require deeper  understanding of either OS internals or of the patterns one should be  looking for. Lot's to study.</p>
+<p>Baron writes tools based on extensive experience of consulting &amp; performance optimization work; not only of his own, but of Percona's entire team. When he says "this tool saves a lot of analysis time" or "with this tool we were able to analyze a problem we were unable to, or found it very hard to, solve with existing tools", you'd better check it out. In fact, I noticed the audience laptop usage during this talk was very low. There was a lot of attention in the crowd.</p>
+<ul>
+<li><a href="http://en.oreilly.com/mysql2011/public/schedule/detail/17137">Automatic Failover: Design and Reality</a> / <em>Ian Gulliver (Google), Eric Rollins (Google)</em></li>
+</ul>
+<p>This session described the replication topology and failover design on one (undisclosed) of Google's products, using MySQL. Using XXX shards of MySQL, that is, each with XX servers in replication topology (we are asked to do the math ourselves).</p>
+<p>Ian &amp; Eric described the logic behind their sharding, scale out &amp; failover process, and the sad reality. Apparently shards are implemented on many levels: multiple MySQL instances on single machine, multiples schemata in each MySQL instances, sharded data within schema. For scale-out, they prefer adding new machines, then distributing MySQL instances between them. There is nothing too complicated about this, once we are past syncing masters &amp; slaves.</p>
+<p>Speaking of which, their preferred way of taking snapshots is MySQL shutdown, then full file system copy. They do not want to bother with licenses. With XX servers, it should be fairly easy to take one down for backup/copy.</p>
+<p>Otherwise they may be splitting schemata between servers, or, at the worst, managing the shards. An interesting note was that Google is known to use crappy hardware, which makes for a lot of hardware failures. Apparently, their solution needs to work a lot.</p>
+<p>A very nice notion they presented is the empty shard. They have an empty shard, with complete replication topology, on which version upgrades or otherwise tests are done. Very nice! (Forgive me if this is plain obvious to you).</p>
+<p>The logic part detailed the expected <em>"which slave to promote"</em>, <em>"how to modify the hierarchy"</em> etc. procedures.</p>
+<p>Besides being very interesting in itself, the session also posed the interesting notion, that most everyone (and in particular the BIG companies), use plain old MySQL replication for both scale out &amp; high availability. I think this is an important notion.</p>
+<ul>
+<li><a href="http://en.oreilly.com/mysql2011/public/schedule/detail/17170">No Silver Bullet - The Slightly Less Painful Way to Sharding</a> / <em>Gwen Shapira (Pythian)</em></li>
+</ul>
+<p>I've heard a lot about Gwen Shapira before, and this is the first time I heard her speak. I enjoyed her session. Gwen presented a vendor-neutral session on sharding. There were a lot of "how not to shard" notes. These were based either on her very early experience, before the word "sharding" came to be known, as well as recent experiences. The stories and examples were instructive and amusing (lot's of "war stories"). She presented with general guidelines on proper sharding, but, as the title suggests, presented no silver bullet. Actually, she presented with counter cases where a non-desirable sharding solution for one company, may yet be viable for another.</p>
+<ul>
+<li><a href="http://en.oreilly.com/mysql2011/public/schedule/detail/17155">openark-kit: MySQL utilities for everyday use</a> / <em>myself</em></li>
+</ul>
+<p>I went to see my own talk that day :). I was honored to have good audience and I'm thankful for their attention. I gained good participation, and a couple feature requests/bug reports.</p>

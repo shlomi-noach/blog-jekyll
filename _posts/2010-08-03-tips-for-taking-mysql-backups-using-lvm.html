@@ -1,0 +1,60 @@
+---
+title: Tips for taking MySQL backups using LVM
+date: 2010-08-03 08:45:29.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Backup
+- Linux
+- scripts
+meta:
+  _edit_last: '2'
+  _wp_old_slug: ''
+  _oembed_55835302a9154b1a33fa9bef669291f7: '<iframe src="http://www.slideshare.net/slideshow/embed_code/28163348"
+    width="427" height="356" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"
+    style="border:1px solid #CCC; border-width:1px 1px 0; margin-bottom:5px; max-width:
+    100%;" allowfullscreen> </iframe> <div style="margin-bottom:5px"> <strong> <a
+    href="https://www.slideshare.net/shlominoach/commonschema-22" title="common_schema
+    2.2 DBA&#x27;s framework for MySQL" target="_blank">common_schema 2.2 DBA&#x27;s
+    framework for MySQL</a> </strong> from <strong><a href="http://www.slideshare.net/shlominoach"
+    target="_blank">Shlomi Noach</a></strong> </div>'
+  _sg_subscribe-to-comments: lenz@grimmer.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>LVM uses copy-on-write to implement snapshots. Whenever you're writing data to some page, LVM copies the original page (the way it looked like when the snapshot was taken) to the snapshot volume. The snapshot volume must be large enough to accommodate all pages written to for the duration of the snapshot's lifetime. In other words, you must be able to copy the data somewhere outside (tape, NFS, rsync, etc.) in less time than it would take for the snapshot to fill up.</p>
+<p>While LVM allows for hot backups of MySQL, it still poses an impact on the disks. An LVM snapshot backup may not go unnoticed by the MySQL users.</p>
+<p>Some general guidelines for making life easier with LVM backups follow.</p>
+<h4>Lighter, longer snapshots</h4>
+<p>If you're confident that you have enough space on your snapshot volume, you may take the opportunity to make for a <em>longer</em> backup time. Why? Because you would then be able to reduce the stress from the file system. Use <strong>ionice</strong> when copying your data from the snapshot volume:</p>
+<blockquote>
+<pre>ionice -c 2 cp -R /mnt/mysql_snapshot /mnt/backup/daily/20100719/
+</pre>
+</blockquote>
+<p><em>[Update: this is only on the cfq I/O scheduler; thanks, Vojtech]</em></p>
+<h4>Are you running out of space?</h4>
+<p>Monitor snapshot's allocated size: if there's just one snapshot, do it like this:<!--more--></p>
+<blockquote>
+<pre>lvdisplay | grep Allocated                                                                                                                  Mon Jul 19 09:51:29 2010
+
+ Allocated to snapshot  3.63%
+</pre>
+</blockquote>
+<p>Don't let it reach 100%.</p>
+<h4>Avoid running out of space</h4>
+<p>To make sure you don't run out of snapshot allocated size, stop all administrative scripts.</p>
+<ul>
+<li>Are you running your weekly purging of old data? You will be writing a lot of pages, and all will have to fit in the snapshot.</li>
+<li>Building your reports? You may be creating large temporary tables; make sure these are not on the snapshot volume.</li>
+<li>Rebuilding your Sphinx fulltext index? Make sure it is not on the snapshot volume, or postpone till after backup.</li>
+</ul>
+<p>You will gain not only snapshot space, but also faster backups.</p>
+<h4>Someone did the job before you</h4>
+<p>Use <a href="http://www.lenzg.net/mylvmbackup/">mylvmbackup</a>: the MySQL LVM backup script by Lenz Grimmer. Or do it manually: follow this old-yet-relevant <a href="http://www.mysqlperformanceblog.com/2006/08/21/using-lvm-for-mysql-backup-and-replication-setup/">post</a> by Peter Zaitsev.</p>

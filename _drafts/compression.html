@@ -1,0 +1,44 @@
+---
+layout: post
+title: Compression
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags: []
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<pre>mysql&gt; insert into items_thin (sourceId,url,timePublished,timeParsed,title,body,raw,serialNumber,itemTypeSerialNumber) select sourceId,url,timePublished,timeParsed,title,body,raw,serialNumber,itemTypeSerialNumber from newsminer.items;
+Query OK, 16700732 rows affected (1 hour 52 min 26.74 sec)
+Records: 16700732  Duplicates: 0  Warnings: 0
+
+mysql&gt; insert into items_thin_barracuda (sourceId,url,timePublished,timeParsed,title,body,raw,serialNumber,itemTypeSerialNumber) select sourceId,url,timePublished,timeParsed,title,body,raw,serialNumber,itemTypeSerialNumber from newsminer.items;
+Query OK, 16700732 rows affected (3 hours 37 min 21.70 sec)
+Records: 16700732  Duplicates: 0  Warnings: 0
+
+mysql&gt; insert into items_thin_compressed (sourceId,url,timePublished,timeParsed,title,serialNumber,itemTypeSerialNumber,compressed_body) select sourceId,url,timePublished,timeParsed,title,serialNumber,itemTypeSerialNumber,compress(concat(body,raw)) from newsminer.items;
+Query OK, 16700732 rows affected, 9 warnings (1 hour 49 min 18.28 sec)
+Records: 16700732  Duplicates: 0  Warnings: 8
+
+mysql&gt; insert into items_thin_compressed_barracuda (sourceId,url,timePublished,timeParsed,title,serialNumber,itemTypeSerialNumber,compressed_body) select sourceId,url,timePublished,timeParsed,title,serialNumber,itemTypeSerialNumber,compress(concat(body,raw)) from newsminer.items;
+Query OK, 16700732 rows affected, 9 warnings (3 hours 28 min 51.90 sec)
+Records: 16700732  Duplicates: 0  Warnings: 8</pre>
+<pre></pre>
+<pre>-rw-rw---- 1 mysql mysql 9.3G 2009-07-22 13:03 items_thin.ibd
+-rw-rw---- 1 mysql mysql 2.6G 2009-07-22 16:40 items_thin_barracuda.ibd
+-rw-rw---- 1 mysql mysql 8.8G 2009-07-22 18:30 items_thin_compressed.ibd
+-rw-rw---- 1 mysql mysql 2.6G 2009-07-22 21:58 items_thin_compressed_barracuda.ibd</pre>
+<pre></pre>
+<pre></pre>
+<pre></pre>
+<pre></pre>
+<pre></pre>

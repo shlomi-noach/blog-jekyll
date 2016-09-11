@@ -1,0 +1,41 @@
+---
+layout: post
+title: 'MySQL 5.6 replication: the cool & the weird'
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags:
+- New Features
+- Replication
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Congrats to Oracle's MySQL team for publishing <a href="http://dev.mysql.com/downloads/mysql/5.6.html">MySQL 5.6</a>!</p>
+<p>Thanks to <a href="http://mysqlsandbox.net/">MySQL Sandbox</a> it takes a couple minutes to start testing the new features, replication and all. Just <strong>make_replication_sandbox --master_master /path/to/mysql.5.6.10.tar.gz</strong> and you're done.</p>
+<h4>The cool</h4>
+<p>GTID!</p>
+<h4>The weird</h4>
+<p>You can follow up on your current GTID by looking up the <strong>gtid_executed</strong> global variable, like this:</p>
+<blockquote>
+<pre>SHOW GLOBAL VARIABLES LIKE '%gtid%';
++--------------------------+-------------------------------------------------------------------------------------+
+| Variable_name            | Value                                                                               |
++--------------------------+-------------------------------------------------------------------------------------+
+| enforce_gtid_consistency | ON                                                                                  |
+| <strong>gtid_executed</strong>            | 89892948-7024-11e2-98ca-0024e8cd3122:1-12,
+93767c9c-7024-11e2-98ca-0024e8cd3122:1-4 |
+| gtid_mode                | ON                                                                                  |
+| gtid_owned               |                                                                                     |
+| gtid_purged              |                                                                                     |
++--------------------------+-------------------------------------------------------------------------------------+</pre>
+</blockquote>
+<p>Wait: why is <em>gtid_executed</em> a global variable instead of a <em>status</em> variable? I would expect to see it on <strong>SHOW GLOBAL STATUS</strong> instead. This is an awfully wrong place to put it. Monitoring tools might get confused about this. While global variables can certainly change throughout execution, they do not represent the <em>state</em> of the server, but rather its <em>setup</em> or <em>limitations</em>.</p>

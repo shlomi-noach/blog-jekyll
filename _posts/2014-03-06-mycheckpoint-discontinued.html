@@ -1,0 +1,29 @@
+---
+title: mycheckpoint, discontinued
+date: 2014-03-06 12:27:28.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Monitoring
+- mycheckpoint
+meta:
+  _wpas_done_all: '1'
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Time to admit to myself: <a href="http://code.openark.org/forge/mycheckpoint">mycheckpoint</a> has to be discontinued.</p>
+<p>I started <em>mycheckpoint</em> back in <strong>2009</strong>, as a free &amp; open source lightweight monitoring tool for MySQL. Over some years it evolved and became an actual (lightweight) monitoring solution, used by many. It has a unique and original design, which, alas, is also its bane.</p>
+<p><em>mycheckpoint</em> uses the relational model &amp; SQL to store and query monitored metrics. This leads to quite a sophisticated service, which can make practically anything visible to the user. The raw data is just numbers. but with some SQL-Fu one can <a href="http://code.openark.org/blog/mysql/generating-google-line-charts-with-sql-part-ii">generate charts out of it</a>,  (<a href="http://mycheckpoint.googlecode.com/svn/trunk/doc/html/sample/http/mcp_sql00/sv_report_html_brief">interactive</a> ones as well), human readable <a href="http://mycheckpoint.googlecode.com/svn/trunk/doc/html/sample/http/mcp_sql00/sv_report_html_brief">reports</a> and full blown email messages. It is still the only common solution I'm aware of that <a href="http://code.openark.org/forge/mycheckpoint/documentation/detecting-parameters-change">keeps track of variable changes</a> and provides with clear "what changed, when, from value &amp; to_value". I caught many deployment bugs by just observing this. It's a single file that provides with full blown HTTP service, alerting, mail notifications, multi-database monitoring, custom monitoring queries, query execution time monitoring, OS metrics, ...</p>
+<p>While developing <em>mycheckpoint</em> I learned a lot on MySQL status &amp; configuration, complex SQL queries, Python, linux, packaging and more. I got a lot of feedback from users, as I still do (thank you!). Didn't always manage to fix all bugs or answer all questions.</p>
+<p>The design of <em>mycheckpoint</em> does not meet today's reality. Heck, today there are more counters &amp; variables than possible table columns. The schema-per-monitored-instance design makes for simplicity, but does not fare well with dozens or hundreds of servers to monitor. There is no cross-instance aggregation or visualization of data. The per-<strong>10</strong> minute aggregation is too rough. <em>There isn't a test suite</em>.</p>
+<p>Some of the above issues can be fixed, and if you like, the source code is still <a href="http://code.google.com/p/mycheckpoint/source/checkout">freely available</a>. I'll even migrate the entire SVN to GitHub at some stage. But I believe the current state might only be good for small scale deployments;  not something you would consider to scale up with.</p>
+<p>For me, there's nothing more motivating in code development than knowing the code will go public. The efforts in making the code look as best it can, as easily deployable as possibly can, with good documentation, makes for a lot of effort - but very satisfying. Open Source FTW!!!1</p>
+<p>&nbsp;</p>

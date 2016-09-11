@@ -1,0 +1,84 @@
+---
+title: MySQL not being able to utilize a compound index?
+date: 2009-05-07 19:35:15.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Indexing
+meta:
+  _edit_last: '2'
+  _sg_subscribe-to-comments: rjames@yahoo-inc.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I came today upon a very strange issue. It seems like MySQL is unable to utilize a compound index when evaluating a plan for a query with a range condition. I'm looking for an explanation. I'll appreciate any insight on this.</p>
+<p><!--more-->Take a look at the following table:</p>
+<blockquote>
+<pre>CREATE TABLE `t` (
+  `a` int(11) NOT NULL default '0',
+  `b` int(11) NOT NULL default '0',
+  `c` int(11) default NULL,
+  PRIMARY KEY  (`a`,`b`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1</pre>
+</blockquote>
+<p>Filled with this data:</p>
+<blockquote>
+<pre>mysql&gt; SELECT * FROM t;
++---+---+------+
+| a | b | c    |
++---+---+------+
+| 1 | 1 | NULL |
+| 1 | 2 | NULL |
+| 1 | 3 | NULL |
+| 1 | 4 | NULL |
+| 1 | 5 | NULL |
+| 2 | 1 | NULL |
+| 2 | 2 | NULL |
+| 2 | 3 | NULL |
+| 2 | 4 | NULL |
+| 2 | 5 | NULL |
++---+---+------+
+10 rows in set (0.00 sec)</pre>
+</blockquote>
+<p>Now, it is known that I can query by tuples:</p>
+<blockquote>
+<pre>mysql&gt; SELECT * FROM t WHERE (a,b) &lt; (2,2);
++---+---+------+
+| a | b | c    |
++---+---+------+
+| 1 | 1 | NULL |
+| 1 | 2 | NULL |
+| 1 | 3 | NULL |
+| 1 | 4 | NULL |
+| 1 | 5 | NULL |
+| 2 | 1 | NULL |
++---+---+------+
+6 rows in set (0.00 sec)</pre>
+</blockquote>
+<p>MySQL understands tuple comparison (e.g. <strong>(a,b) &lt; (2.2)</strong>) and returns correct results. Now here's my issue: I would assume the PRIMARY KEY is used - since it's on <strong>(a,b)</strong> - so that's a simple (well, compound) range condition. Alas:</p>
+<blockquote>
+<pre>mysql&gt; EXPLAIN SELECT * FROM t WHERE (a,b) &lt; (2,2)G
+*************************** 1. row ***************************
+           id: 1
+  select_type: SIMPLE
+        table: t
+         type: ALL
+possible_keys: NULL
+          key: NULL
+      key_len: NULL
+          ref: NULL
+         rows: 10
+        Extra: Using where
+1 row in set (0.00 sec)</pre>
+</blockquote>
+<p>We get a full table scan! Now, MySQL has no problem when I do an <em>equality</em> search (e.g. <strong>(a,b) = (2,2)</strong>). In that case, the PRIMARY KEY <em>is</em> utilized.</p>
+<p>Why, then, would it not use it in the range query? Why would it not consider it as a possible key (I could live with FORCE KEY if that would solve the problem). This problem undermines some efforts of mine for nice optimization tricks.</p>
+<p>[<strong>UPDATE</strong>: the above is a simplified version of a very large table I was using (~50M rows, ~30GB), and on which same results were achieved]</p>
+<p>Any ideas or suggestions?</p>

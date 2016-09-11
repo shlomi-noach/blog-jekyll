@@ -1,0 +1,81 @@
+---
+title: Converting compressed InnoDB tables to TokuDB 7.0.1
+date: 2013-06-05 09:10:12.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- InnoDB
+- TokuDB
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+  _sg_subscribe-to-comments: jack1024@zoho.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Or: how to make it work in TokuDB version <strong>7.0.1</strong>. This is a follow up on a <a href="https://groups.google.com/forum/?fromgroups=#!topic/tokudb-user/hLlHwlp2AL0">discussion on the tokudb-user group</a>.</p>
+<h4>Background</h4>
+<p>I wanted to test TokuDB's compression. I took a staging machine of mine, with production data, and migrated it from <strong>Percona Server 5.5</strong> To <strong>MariaDB 5.5+TokuDB 7.0.1</strong>. Migration went well, no problems.</p>
+<p>To my surprise, when I converted tables from InnoDB to TokuDB, I saw an <em>increase</em> in table file size on disk. As explained by Tim Callaghan, this was due to TokuDB interpreting my compressed table's <strong>"KEY_BLOCK_SIZE=4"</strong> as an instruction for TokuDB's page size. TokuDB should be using <strong>4MB</strong> block size, but thinks it's being instructed to use <strong>4KB</strong>. Problem is, you <a href="http://bugs.mysql.com/bug.php?id=67727">can't get rid of table options</a>. When one converts a table to InnoDB in <strong>ROW_FORMAT=COMPACT</strong>, or even to MyISAM, the <strong>KEY_BLOCK_SIZE</strong> option keeps lurking in the dark.</p>
+<p>So until this is hopefully resolved in TokuDB's next version, here's a way to go around the problem.<!--more--></p>
+<h4>The case at hand</h4>
+<p>Consider the following table:</p>
+<blockquote>
+<pre> CREATE TABLE `t` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `c1` int(10) unsigned NOT NULL DEFAULT '0',
+  `c2` int(10) unsigned NOT NULL DEFAULT '0',
+  `c3` int(10) unsigned NOT NULL DEFAULT '0',
+  `c4` timestamp NOT NULL DEFAULT '0000-00-00 00:00:00',
+  `c5` timestamp NOT NULL DEFAULT '0000-00-00 00:00:00',
+  `c6` smallint(10) unsigned NOT NULL DEFAULT '0',
+  `c7` smallint(10) unsigned NOT NULL DEFAULT '0',
+  `c8` smallint(10) unsigned NOT NULL DEFAULT '0',
+  `c9` smallint(10) unsigned NOT NULL DEFAULT '0',
+  `c10` smallint(10) unsigned NOT NULL DEFAULT '0',
+  `c11` smallint(10) NOT NULL DEFAULT '0',
+  `c12` smallint(10) NOT NULL DEFAULT '0',
+  `c13` smallint(10) NOT NULL DEFAULT '0',
+  `c14` smallint(10) NOT NULL DEFAULT '0',
+  `ct` text NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `c1c4` (`c1`,`c4`),
+  KEY `c4` (`c4`)
+) ENGINE=InnoDB AUTO_INCREMENT=4688271 DEFAULT CHARSET=utf8 ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=4</pre>
+</blockquote>
+<p>Note that it is in <strong>COMPRESSED</strong> format, with <strong>KEY_BLOCK_SIZE=4</strong>. It mostly has <strong>INT</strong> columns, so I don't expect it to compress by much.</p>
+<p>On disk, the <strong>.ibd</strong> file amounts to <strong>160MB</strong>. Table has<strong> </strong><strong>3,587,488</strong> rows. Same table in InnoDB COMPACT row format amounts to <strong>412MB</strong> on disk.</p>
+<p>Converting the table to TokuDB with aggressive compression resulted with:</p>
+<blockquote>
+<pre>mysql&gt; alter table t engine=tokudb row_format=tokudb_lzma;
+Query OK, 3587488 rows affected (29 min 48.79 sec)
+Records: 3587488  Duplicates: 0  Warnings:</pre>
+</blockquote>
+<p>And over <strong>873MB</strong> of combined files on disk! Also note it took nearly <strong>30</strong> minutes to <strong>ALTER</strong>. Clearly this is not the expected outcome.</p>
+<h4>Attempt to make it work</h4>
+<p>I tried both the following approaches:</p>
+<ul>
+<li><strong>alter table t engine=tokudb row_format=tokudb_lzma key_block_size=4096</strong>: thought it would fool TokuDB to think it should create a 4M key block size.</li>
+<li><strong>alter table t engine=tokudb row_format=tokudb_lzma key_block_size=0</strong>: try and reset the key block size.</li>
+</ul>
+<p>Both the above attempts resulted with same bloat in resulting table.</p>
+<p>The reason? When ALTERing a table with a nother <strong>KEY_BLOCK_SIZE</strong>, the keys on the table remain with their old <strong>KEY_BLOCK_SIZE</strong>. They are unaffected by the <strong>ALTER</strong>. As suggested by <em>Nail Kashapov</em>, indexes must be rebuilt as well.</p>
+<h4>Making it work</h4>
+<p>The next <strong>ALTER</strong> modifies the <strong>KEY_BLOCK_SIZE</strong> <em>and</em> rebuilds all the indexes on the table:</p>
+<blockquote>
+<pre>mysql&gt; alter table t drop primary key, add primary key(id), drop key c1c4, add unique key `c1c4` (c1, c4), drop key c4, add key `c4` (c4), engine=tokudb row_format=tokudb_lzma key_block_size=0;
+Query OK, 3587488 rows affected (2 min 7.97 sec)
+Records: 3587488  Duplicates: 0  Warnings: 0</pre>
+</blockquote>
+<p>Yep! Runtime seems much more agreeable. Total size on disk? Little over <strong>26M</strong>. Did I say I wasn't expecting good reduction in terms of compression?</p>
+<p>Have done the same for multiple tables; compression is consistently strong (e.g. <strong>16MB</strong> InnoDB compressed -&gt; <strong>3.5MB</strong> TokuDB aggressive, <strong>548MB</strong> InnoDB non-compressed -&gt; <strong>36MB</strong> TokuDB aggressive), on varying table schemata. Very impressive reduction in disk space!</p>
+<h4>Conclusion</h4>
+<p>Next version of TokuDB is expected to ignore the <strong>KEY_BLOCK_SIZE</strong> table option; until then converting compressed tables to TokuDB is a pain in terms of the syntax -- but worthwhile in terms of disk space.</p>
+<p>&nbsp;</p>

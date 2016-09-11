@@ -1,0 +1,87 @@
+---
+title: 'common_schema 1.2: security, partition management, processes, QueryScript
+  goodies'
+date: 2012-11-13 14:25:38.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- common_schema
+- Open Source
+- partitioning
+- QueryScript
+- Security
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><a href="http://code.google.com/p/common-schema">common_schema</a> <strong>1.2</strong> is released! This version comes shortly after <strong>1.1</strong>, yet contains quite a few interesting goodies:</p>
+<ul>
+<li>Account blocking</li>
+<li>Security audit</li>
+<li>RANGE partition management</li>
+<li>Slave status</li>
+<li>Better blocking and idle transaction management</li>
+<li><em>QueryScript </em>goodies:
+<ul>
+<li>echo, report</li>
+<li>while-otherwise statement; foreach-otherwise statement</li>
+<li>Better variable scope handling</li>
+<li>Complete support for variable expansion</li>
+<li>Transaction support within QueryScript</li>
+</ul>
+</li>
+<li>More summary info and SQL statements in processlist-related views</li>
+</ul>
+<p>A closer look at these follows:</p>
+<h4>Account blocking</h4>
+<p>A new view called <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/sql_accounts.html"><strong>sql_accounts</strong></a>, inspired by <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-block-account.html">oak-block-account</a> (also see <a href="http://code.openark.org/blog/mysql/blocking-user-accounts">here</a> and <a href="http://code.openark.org/blog/mysql/pop-quiz-what-is-the-most-basic-privilege-an-account-can-be-assigned-with">here</a>) provides with the means of blocking use accounts (and releasing them, of course) without revoking their privileges. It offers the SQL statements to block an account (by modifying its password in a symmetric way) and to release an account (by modifying its password back to normal). It really works like a charm. Together with <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/killall.html">killall()</a> and <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/sql_grants.html">sql_accounts</a> this gives the administrator great control over accounts.</p>
+<h4>Security audit</h4>
+<p>Imported from <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-security-audit.html">openark kit</a>, and implemented via <em>QueryScript</em>, the <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/security_audit.html"><strong>security_audit()</strong></a> procedure will audit your accounts, passwords and general settings to find problems, pitfalls and security hazards. I will write more on this later.</p>
+<h4>RANGE partition management</h4>
+<p>The <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/sql_range_partitions.html"><strong>sql_range_partitions</strong></a> view manages your <strong>RANGE</strong> and <strong>RANGE COLUMNS</strong> partitioned tables by providing with the SQL statements to drop oldest partitions and to create the next (in sequence) partitions. See my <a href="http://code.openark.org/blog/mysql/your-magical-range-partitioning-maintenance-query">earlier post</a>.<!--more--></p>
+<h4>Slave status</h4>
+<p>This is a hack providing a minified version of <strong>SHOW SLAVE STATUS</strong>, but as a <em>view</em> (<a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/slave_status.html"><strong>slave_status</strong></a>). It only provides with <strong>5</strong> columns:</p>
+<blockquote>
+<pre>mysql&gt; SELECT * FROM slave_status \G
+*************************** 1. row ***************************
+ Slave_Connected_time: 82077
+     Slave_IO_Running: 1
+    Slave_SQL_Running: 1
+        Slave_Running: 1
+Seconds_Behind_Master: 5</pre>
+</blockquote>
+<p>For me, the <strong>Seconds_Behind_Master</strong> is one critical value I am interested in getting using a query. So here it is.</p>
+<blockquote>
+<pre>mysql&gt; SELECT <strong>(Seconds_Behind_Master &lt; 10) IS TRUE</strong> AS slave_is_up_to_date FROM <strong>slave_status</strong>;
++---------------------+
+| slave_is_up_to_date |
++---------------------+
+|                   1 |
++---------------------+</pre>
+</blockquote>
+<h4>QueryScript goodies</h4>
+<ul>
+<li><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_while.html"><strong>while-otherwise</strong></a> statement: <strong>while (some_condition) { ... } otherwise { /* this gets executed if the while never performs a single iteration */ }</strong></li>
+<li><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_foreach.html"><strong>foreach-otherwise</strong></a> statement, likewise</li>
+<li><a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_echo.html"><strong>echo</strong></a>, <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/query_script_report.html"><strong>report</strong></a> statements: echo your statements before applying them, or just echo your comments along the code. Generate a (beautified) report at the end of script execution (which is how security_audit() works).</li>
+<li>Better variable scopes: now allowing variables of same name to be declared when their scopes do not overlap. This makes for the expected behavior a programmer would expect.</li>
+<li>Complete variable expansion handling: expanded variables are now recognized anywhere within the script, including inside a while or <strong>foreach</strong> expression.</li>
+<li>Transactions are now handled by QueryScript and immediately delegated to MySQL. This completes the transaction management in QueryScript. Just <strong>start transaction</strong>, <strong>commit</strong> or <strong>rollback</strong> at will.</li>
+</ul>
+<h4>InnoDB idle transactions, blocking transactions</h4>
+<p>The <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/innodb_transactions.html"><strong>innodb_transactions</strong></a> view now lists idle transactions, as well as their idle time. It also provides with the SQL statements to kill the query or connection for each transaction. This allows for a quick track or track-and-kill of idle transactions.</p>
+<p>The <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/innodb_locked_transactions.html"><strong>innodb_locked_transactions</strong></a> view now offers the wait time and SQL statements for killing the query or connection of a blocking  transaction. This allows for a quick track or track-and-kill long time blocking transactions.</p>
+<p>I will write more in depth on both in a future post.</p>
+<h4>Processlist-related views</h4>
+<p>The new <a href="http://common-schema.googlecode.com/svn/trunk/common_schema/doc/html/processlist_states.html"><strong>processlist_states</strong></a> view aggregates processlist by thread state. This view, and all other processlist views now provide with median or <strong>95%</strong> median runtime for processes, in addition to the less informative AVG provided earlier.</p>
+<h4>Get it!</h4>
+<p><em>common_schema</em> is free and licensed under the New BSD License. It is nothing but a SQL file, so you simply import it into your MySQL server. <em>common_schema</em> installs on any MySQL &gt;= <strong>5.1</strong> server, including Percona Server and MariaDB, tested on <strong>5.1</strong>, <strong>5.5</strong> and <strong>5.6 RC</strong>.</p>
+<p><a href="http://code.google.com/p/common-schema">Go to common_schema download page</a>.</p>

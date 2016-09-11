@@ -1,0 +1,37 @@
+---
+title: Do we need sql_mode?
+date: 2009-01-08 08:14:38.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Configuration
+- Installation
+- sql_mode
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>sql_mode must be one of the most elusive issues in setting up a MySQL database. It is also responsible for difficulties in migration, upgrading and securing of databases.</p>
+<p>MySQL usually has little issues with migrating database from one machine to another, one version to another, one OS to another, one architecture to another. If we're not sure, we can always migrate using mysqldump's logical dump, right?</p>
+<p>Not entirely right. The elusive sql_mode (empty by default) may affect out backup+restore, may affect our application behavior, may affect our data integrity.<!--more--></p>
+<ul>
+<li>Did we remember to set NO_AUTO_CREATE_USER? Oh dear, we have some users without passwords.</li>
+<li>Did we remember to set NO_AUTO_VALUE_ON_ZERO? Oh dear, we've dumped our database for backup, restored, but AUTO_INCREMENT values <a title="Mind the SQL_MODE when running ALTER TABLE" href="http://www.pythian.com/blogs/1422/draft-mind-the-sql_mode-when-running-alter-table">have changed</a>!</li>
+<li>Did we set STRICT_ALL_TABLES? How do we know if the 255 value in our TINYINT really stands for 255 or if it was a truncated 299?</li>
+<li>Do we allow selecting non aggregated columns in GROUP BY? Did we set ONLY_FULL_GROUP_BY? Will our application crash now?</li>
+<li>Our old database has zero for empty date values (columns are NOT NULL). But what settings do we have for NO_ZERO_IN_DATE on our new installation? Will import fail?</li>
+<li>And how did the NULL get in? Was it because we divided by zero, and forgot to set ERROR_FOR_DIVISION_BY_ZERO? How can we tell?</li>
+</ul>
+<p>The fact is: two mysql instances, same version, same OS and architecture, with different sql modes - can be incompatible!</p>
+<p>As said, the sql_mode is empty by default. This is very non-strict. But more than that: it can be changed even while the database is running; even on a per connection basis.</p>
+<p>Setting sql_mode should be one of the first things to do after installation. The usual manuals talk about setting the innodb_buffer_pool_size and the query_cache_size, when sql_mode will dictate the nature of your database and application on an entirely grander scale.</p>
+<p>I think it would be best if MySQL chooses a desired set of sql modes (like 'TRADITIONAL'), then make it the default. I further believe it would be best if MySQL would not allow changes to sql_mode. Not globally and certainly not per session. Choosing the stricter mode is better, I believe: errors such as overflow values should be reported to the application, not just swiped under the carpet.</p>
+<p>Backward compatibility? Indeed a problem (inherent to the very existence of sql_mode). Perhaps allow one setting per installation. Perhaps just <a title="My advice to MySQL" href="http://jpipes.com/index.php?/archives/276-My-advice-to-MySQL.html">go for it</a>.</p>

@@ -1,0 +1,96 @@
+---
+title: Making UUID() and RAND() replication safe
+date: 2014-10-20 08:40:04.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Hack
+- Replication
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>MySQL's <a href="http://dev.mysql.com/doc/refman/5.5/en/miscellaneous-functions.html#function_uuid"><strong>UUID()</strong></a> and <a href="http://dev.mysql.com/doc/refman/5.5/en/mathematical-functions.html#function_rand"><strong>RAND()</strong></a> functions both provide with (pseudo) indeterministic result. <strong>UUID()</strong>'s result is moreover bound to the host on which it executes. For this reason, both are unsafe to replicate with <strong>STATEMENT</strong> binlog format. As an example, consider:</p>
+<blockquote>
+<pre><strong>master&gt;</strong> create table test.uuid_test (id int, u varchar(64));
+
+<strong>master&gt;</strong> insert into test.uuid_test values (1, UUID());
+Query OK, 1 row affected, 1 warning (0.03 sec)
+
+<strong>master&gt;</strong> select * from test.uuid_test;
++------+--------------------------------------+
+| id   | u                                    |
++------+--------------------------------------+
+|    1 | 7e3596d8-56ac-11e4-b284-3c970ea31ea8 |
++------+--------------------------------------+</pre>
+</blockquote>
+<p>The warning we got on the insert directly relates to the following inconsistency on a slave:</p>
+<blockquote>
+<pre><strong>slave1&gt;</strong> select * from test.uuid_test;
++------+--------------------------------------+
+| id   | u                                    |
++------+--------------------------------------+
+|    1 | 7e379d63-56ac-11e4-8477-3c970ea31ea8 |
++------+--------------------------------------+</pre>
+</blockquote>
+<p>The data on the slave is clearly inconsistent with the master's. The slave, replicating via <strong>STATEMENT</strong> binlog format, re-executes the <strong>INSERT</strong> command and gets a different UUID value.</p>
+<h4>External</h4>
+<p>One solution to the above is to generate the UUID value from your application. By the time MySQL gets the <strong>INSERT</strong> statement, the UUID value is a constant string, as far as MySQL is concerned.</p>
+<h4>Internal</h4>
+<p>However there's a way to do it from within MySQL, by decoupling the <strong>UUID()</strong> function from the <strong>INSERT</strong> statement. It takes a session variable. Consider:<!--more--></p>
+<blockquote>
+<pre><strong>master&gt;</strong> set @safe_uuid := UUID();
+Query OK, 0 rows affected (0.00 sec)
+
+<strong>master&gt;</strong> insert into test.uuid_test values (2, @safe_uuid);
+Query OK, 1 row affected (0.02 sec)
+
+<strong>master&gt;</strong> select * from test.uuid_test;
++------+--------------------------------------+
+| id   | u                                    |
++------+--------------------------------------+
+|    1 | 7e3596d8-56ac-11e4-b284-3c970ea31ea8 |
+|    2 | <strong>29c51fb9-56ad-11e4-b284-3c970ea31ea8</strong> |
++------+--------------------------------------+</pre>
+</blockquote>
+<p>And on a slave:</p>
+<blockquote>
+<pre><strong>slave1&gt;</strong> select * from test.uuid_test;
++------+--------------------------------------+
+| id   | u                                    |
++------+--------------------------------------+
+|    1 | 7e379d63-56ac-11e4-8477-3c970ea31ea8 |
+|    2 | <strong>29c51fb9-56ad-11e4-b284-3c970ea31ea8</strong> |
++------+--------------------------------------+</pre>
+</blockquote>
+<p>The reason why this succeeds is that MySQL stores session variable values that are being used by DML queries in the binary log. It just so happened that <strong>@safe_uuid</strong> was assigned the <strong>UUID()</strong> value, but it could just as well have been assigned a constant or other computation. MySQL stored the resulting value into the binary log, where it is forces upon the slave to use. Check out this binary log snippet:</p>
+<blockquote>
+<pre># at 14251
+#141018 12:57:35 server id 1  end_log_pos 14319         Query   thread_id=2     exec_time=0     error_code=0
+SET TIMESTAMP=1413626255/*!*/;
+SET @@session.sql_auto_is_null=0/*!*/;
+BEGIN
+/*!*/;
+# at 14319
+#141018 12:57:35 server id 1  end_log_pos 14397         User_var
+<strong>SET @`safe_uuid`:=_utf8 0x32396335316662392D353661642D313165342D623238342D336339373065613331656138 COLLATE `utf8_general_ci`/*!*/;</strong>
+# at 14397
+#141018 12:57:35 server id 1  end_log_pos 14509         Query   thread_id=2     exec_time=0     error_code=0
+SET TIMESTAMP=1413626255/*!*/;
+<strong>insert into test.uuid_test values (2, @safe_uuid)</strong>
+/*!*/;
+# at 14509
+#141018 12:57:35 server id 1  end_log_pos 14536         Xid = 145
+COMMIT/*!*/;</pre>
+</blockquote>
+<p>The same can be applied for <strong>RAND()</strong>. Funny thing about <strong>RAND()</strong> is that it is already taken care of by the binary log via <strong>SET @@RAND_SEED1, SET @@RAND_SEED2</strong> statements (i.e. it <em>works</em>), though the documentation clearly states it is unsafe.</p>
+<p>With Row Based Replication (RBR) the problem never arises in the first place since the binlog contains the <em>values</em> of the new/updated rows.</p>

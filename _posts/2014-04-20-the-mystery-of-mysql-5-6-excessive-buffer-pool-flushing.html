@@ -1,0 +1,58 @@
+---
+title: The mystery of MySQL 5.6 excessive buffer pool flushing
+date: 2014-04-20 07:16:13.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- InnoDB
+- Performance
+- Replication
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>I'm experimenting with upgrading to MySQL <strong>5.6</strong> and am experiencing an unexplained increase in disk I/O utilization. After discussing this with several people I'm publishing in the hope that someone has an enlightenment on this.</p>
+<p>We have a few dozens servers in a normal replication topology. On this particular replication topology we've already evaluated that <strong>STATEMENT</strong> based replication is faster than <strong>ROW</strong> based replication, and so we use <strong>SBR</strong>. We have two different workloads on our slaves, applied by two different HAProxy groups, on three different data centres. Hardware-wise, servers of two groups use either Virident SSD cards or normal SAS spindle disks.</p>
+<p>Our servers are I/O bound. A common query used by both workloads looks up data that does not necessarily have a hotspot, and is very large in volume. DML is low, and we only have a few hundred statements per second executed on master (and propagated through replication).</p>
+<p>We have upgraded <strong>6</strong> servers from all datacenters to <strong>5.6</strong>, both on SSD and spindle disks, and are experiencing the following phenomena:<!--more--></p>
+<ul>
+<li>A substantial increase in disk I/O utilization. See a <strong>10</strong> day breakdown (upgrade is visible on <strong>04/14</strong>) this goes on like this many days later:<br />
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/04/5.5-to-5.6-disk-utilization-10-days.png"><img class="alignnone wp-image-6845 size-full" src="{{ site.baseurl }}/assets/5.5-to-5.6-disk-utilization-10-days.png" alt="5.5-to-5.6-disk-utilization-10-days" width="700" height="400" /></a></p></blockquote>
+</li>
+</ul>
+<ul>
+<li>A substantial increase in InnoDB buffer pool pages flush: Mr. Blue is our newly upgraded server; it joins Mr. Green upgraded a couple weeks ago. Mr. Red is still <strong>5.5</strong>. This is the only MySQL graph that I could directly relate to the increase in I/O:<br />
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/04/5.5-to-5.6-rise-in-innodb-buffer-pool-pages-flushed.png"><img class="alignnone size-full wp-image-6848" src="{{ site.baseurl }}/assets/5.5-to-5.6-rise-in-innodb-buffer-pool-pages-flushed.png" alt="5.5-to-5.6-rise-in-innodb-buffer-pool-pages-flushed" width="700" height="350" /></a></p></blockquote>
+</li>
+<li>No change in workload (it takes some 60 minutes for caches to warm up, so measuring after that time). Same equal share of serving as dictated by HAProxy. Same amount of queries. Same amount of everything.</li>
+<li>Faster replication speed, on single thread - that's the good part! We see <strong>30%</strong> and more improvement in replication speed. Tested by stopping <strong>SLAVE SQL_THREAD</strong> for a number of pre-defined minutes, then measuring time it took for slave to catch up, up to 10 seconds lag. The results vary depending on the time of day and serving workload on slaves, but it is <em>consistently far faster</em> with <strong>5.6</strong>.</li>
+</ul>
+<p>The faster replication speed motivates us to continue with the experiment, and is of a significant factor in our decision. However we are concerned about the I/O utilization and excessive flushing.</p>
+<p>The above graphs depict the <strong>5.6</strong> status without any configuration changes as compared to <strong>5.5</strong>. I took some days to reconfigure the following variables, with no change to the rate of flushed pages (though some changes visible in double-wite buffer writes):</p>
+<ul>
+<li>innodb_log_file_size=128M/2G</li>
+<li>innodb_adaptive_flushing:=0/1</li>
+<li>innodb_adaptive_flushing_lwm:=0/70</li>
+<li>innodb_max_dirty_pages_pct := 75/90</li>
+<li>innodb_flush_neighbors:=0/1</li>
+<li>innodb_max_dirty_pages_pct_lwm:=75/90</li>
+<li>innodb_old_blocks_time:=0/1000</li>
+<li>innodb_io_capacity:=50/100/200</li>
+<li>innodb_io_capacity_max:=50/100/1000</li>
+<li>relay_log_info_repository:='table'/'file'</li>
+<li>master_info_repository:='table'/'file'</li>
+<li>default_tmp_storage_engine:='myisam'/'innodb'</li>
+<li>eq_range_index_dive_limit:=0/10</li>
+</ul>
+<p>And more... Have done patient one-by-one or combinations of the above where it made sense. As you see I began with the usual suspects and moved on to more esoteric stuff. I concentrated on new variables introduced in <strong>5.6</strong>, or ones where the defaults have changed, or ones we have explicitly changed the defaults from.</p>
+<p>The above is consistent on all upgraded servers. On SSD the disk utilization is lower, but still concerning.</p>
+<p>Our use case is very different from the one <a href="http://yoshinorimatsunobu.blogspot.co.il/2013/12/single-thread-performance-regression-in.html">presented by Yoshinori Matsunobu</a>. and apparently not too many have experienced upgrading to <strong>5.6</strong>. I'm hoping someone might shed some light.</p>

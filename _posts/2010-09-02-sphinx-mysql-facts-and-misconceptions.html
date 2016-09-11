@@ -1,0 +1,63 @@
+---
+title: 'Sphinx & MySQL: facts and misconceptions'
+date: 2010-09-02 10:56:15.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Open Source
+- Sphinx
+meta:
+  _edit_last: '2'
+  _wp_old_slug: ''
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><a href="http://www.sphinxsearch.com/">Sphinx search</a> is a full text search engine, commonly used with MySQL.</p>
+<p>There are some misconceptions about Sphinx and its usage. Following is a list of some of Sphinx' properties, hoping to answer some common questions.</p>
+<ul>
+<li>Sphinx is not part of MySQL/Oracle.</li>
+<li>It is a standalone server; an external application to MySQL.</li>
+<li>Actually, it is not MySQL specific. It can work with other RDBMS: PostgreSQL, MS SQL Server.</li>
+<li>And, although described as "free open-source SQL full-text search engine", it is not SQL-specific: Sphinx can read documents from XML.</li>
+<li>It is often described as "full text search for InnoDB". This description  is misleading. Sphinx indexes text; be it from any storage engine or  external source. It solves, in a way, the issue of "FULLTEXT is only  supported by MyISAM". Essentially, it provided full-text indexing for InnoDB tables, but in a <em>very</em> different way than the way MyISAM's <strong>FULLTEXT</strong> index works.</li>
+</ul>
+<p>Sphinx works by reading documents, usually from databases. Considering the case of MySQL, Sphinx issues a SQL query which retrieves relevant data (mostly the text you want to index, but other properties allowed).<!--more--></p>
+<ul>
+<li>Being an external module, it does not update its indexes on the fly. So  if <strong>10</strong> new rows are <strong>INSERT</strong>ed, it has no knowledge of this. It must be  called externally to re-read the data (or just read the new data), and re-index.
+<ul>
+<li>This is perhaps the greatest difference, functionality-wise, between Sphinx and MyISAM's <strong>FULLTEXT</strong>. The latter is always updated, for every row <strong>INSERT</strong>ed, <strong>DELETE</strong>d or <strong>UPDATE</strong>d. The latter also suffers by this property, as this makes for serious overhead with large volumes.</li>
+<li>There's more than one way to make that less of an issue. I'll write some more in future posts.</li>
+</ul>
+</li>
+<li>Sphinx does not keep the text to itself; just the index. Sphinx cannot be asked "Give me the blog post content for those posts containing 'open source'".
+<ul>
+<li>Sphinx will only tell you the ID (i.e. Primary Key) for the row that matches your search.</li>
+<li>It is up to you to then get the content from the table.</li>
+<li>With SphinxSE (Sphinx Storage Engine for MySQL) this becomes easier, all-in-one query.</li>
+</ul>
+</li>
+<li>It can keep other numeric data. Such data can be used to filter results.</li>
+<li>It provides with <strong>GROUP BY</strong>-like, as well as <strong>ORDER BY</strong>-like mechanism.</li>
+<li>It allows for ordering results by relevance.</li>
+<li>It allows for exact match search, boolean search, and more.</li>
+<li>It has an API &amp; implementation for popular programming languages: PHP, Python, Perl, Ruby, Java.</li>
+</ul>
+<p>The above describes Sphinx as a general fulltext search engine for databases. It does, however, have special treatment for MySQL:</p>
+<ul>
+<li>First and foremost, it knows how to query MySQL for data (duh!)</li>
+<li>If you don't mind compiling from source, you can rebuild MySQL with <a href="http://www.sphinxsearch.com/docs/current.html#sphinxse">SphinxSE</a>: a storage engine implementation. This storage engine does not actually hold any data, but rather provides an SQL-like interface to the search daemon.
+<ul>
+<li>Thus, you can query for search results using <strong>SELECT</strong> statements, <strong>JOIN</strong>ing to document tables, retrieving results, all in one step.</li>
+<li>If you do mind compiling MySQL, be aware that MariaDB <a href="http://askmonty.org/wiki/MariaDB_versus_MySQL">comes with SphinxSE</a> built in in newer versions.</li>
+</ul>
+</li>
+<li>It implements the MySQL protocol. You can connect to the sphinx server using a MySQL client, and actually issue SQL statements to retrieve data. Not all SQL is supported. The valid subset is called <a href="http://www.sphinxsearch.com/docs/current.html#sphinxql">SphinxQL</a>.</li>
+<li>Snippets (excerpts) are <a href="http://www.sphinxsearch.com/docs/current.html#sphinxse-snippets">supported</a> via MySQL UDF.</li>
+</ul>

@@ -1,0 +1,84 @@
+---
+layout: post
+title: Master-Master replication and the infinite loop
+date: 
+type: post
+published: false
+status: draft
+categories:
+- MySQL
+tags:
+- Replication
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Master-Master replication is perhaps the simplest HA solution in MySQL. It's simple as it comes out-of-the-box, based on normal replication. It's asynchronous, so it's not a 100% hot live backup solution, but it allows for easy solution for maintenance, refactoring and backups.</p>
+<p>Active-active M-M replication is slightly complex, since one must make sure to prevent inconsistencies between the two servers. Primary keys are handled with the <strong>auto_increment_increment</strong> and <strong>auto_increment_offset</strong> setup. Other unique keys must be carefully examined. Some kind of sharding can take place so as to avoid having the same data being written by the two different servers.</p>
+<p>All of the above issues are well known and documented. The infinite loop problem (explained later on), though, is more elusive. It is described in <a href="http://www.amazon.com/High-Performance-MySQL-Optimization-Replication/dp/0596101716">High Performance MySQL, 2nd Edition</a>, where ring topologies of more than two servers are discussed.</p>
+<p>The infinite loop should not occur in a two server's setup, but...</p>
+<p>Assume the following topology:</p>
+<blockquote>
+<pre>[A] -&gt; [B]</pre>
+</blockquote>
+<p>We have a simple replication, with [A] being the master, [B] being the slave. Application is writing to node [A], and may read from both nodes. We wish to set up a master-master replication, but not between [A] and [B], but rather use a new server, [C]. So we add [C] as follows:</p>
+<blockquote>
+<pre>[A] -&gt; [B] -&gt; [C]</pre>
+</blockquote>
+<p>[B] is using <strong>log_slave_updates</strong>, since it needs to replicate [A]'s queries to [C]. the next step is to set up master-master between [B] and [C]. We take a big breath, and lay our plans:</p>
+<ol>
+<li>since we want as small downtime as possible, we keep writing to [A] till the last minute.</li>
+<li>We make sure [C] is relatively up to date.</li>
+<li>We stop the application on [A].</li>
+<li>We lock [A] against writes (FLUSH TABLES WITH READ LOCK, @@read_only)</li>
+<li>We verify that [B] has caught up with the last changes to [A]</li>
+<li>We verify that [C] has caught up with [B]. We gather that all nodes are updated to the same point in time.</li>
+</ol>
+<p>So far - so good.</p>
+<p>But one day [Mb] gives trouble. Though [Ma] can still replicate it, it does not replicate [Ma]. We need to take it down. The status is this:</p>
+<blockquote>
+<pre>[Sa] &lt;- [Ma] &lt;- [Mb] -&gt; [Sb]</pre>
+</blockquote>
+<p>OK, no panic: we have [Sb] as a stand by. So we upgrade [Sb] to replicate [Ma] (instead of replicating [Mb]), to have the following:</p>
+<blockquote>
+<pre>[Sa] &lt;- [Ma] &lt;- [Mb]
+         |
+         +----&gt; [Sb]</pre>
+</blockquote>
+<p>We then want to establish M-M replication between [Ma] and [Sb]. To minimize application downtime, we plan as follows:</p>
+<ol>
+<li>Belaros application writes to [Mb] for as long as possible.</li>
+<li>Make sure [Sb] is up to date with [Ma].</li>
+<li>Stop the application on Belaros.</li>
+<li>Lock [Mb] for writing (FLUSH TABLES, @@read_only).</li>
+<li>On [Ma], CHANGE MASTER TO [Sb]</li>
+<li>START SLAVE on [Ma]</li>
+<li>Start the Belaros application on [Sb]</li>
+<li>Eat dinner</li>
+</ol>
+<p>We never get to #8. Can you see the problem?</p>
+<p>Before step #1, we had:</p>
+<blockquote>
+<pre>[Sa] &lt;- [Ma] &lt;- [Mb]
+         |
+         +----&gt; [Sb]</pre>
+</blockquote>
+<p>(As already depicted). We have patiently waited (step #2) for [Sb] to receive all updates. In step #5 We've changed the setup to:</p>
+<blockquote>
+<pre>[Sa] &lt;- [Ma]    [Mb]
+         ^
+         |
+         +----&gt; [Sb]</pre>
+</blockquote>
+<p>It all sounds very safe, but it isn't. During the time which passed from before step #1 and until step #3, application was still writing to [Mb]. Binary logs were replicated by [Ma], and, since we're using <strong>log_slave_updates</strong>, were written to [Ma]'s binary logs as well, to replicated by [Sb].</p>
+<p>Still sounds good: that's what we were expecting. But hold on: [Sb] is also using <strong>log_slave_updates</strong>, so it keeps those updates, originally by [Mb] in its own binary logs. No one consumes them yet.</p>
+<p>Until... step #5, in which we ask [Ma] to replicate [Sb]. This sets up a Master-Master replication. In steps #6, #7 [Ma] starts receiving updates from [Sb]. Among those updates are a few queries originally sent from [Mb]. These are replicated back to [Ma]. Now, [Ma] has already seen these logs, but it doesn't remember them. It <strong>re-executes</strong> them, and writes them down to its binary log. [Sb] reads them, <strong>re-executes</strong> them, and writes them down to its binary logs. By the time we were supposed to have dinner, some queries were already running thousands, millions of times.</p>
+<p>In MySQL's replication, a message is only consumed by the server which issued it. Each binary log query is wrapped in an envelope, stating the timestamp and originating server-id. We took [Mb] out, but [Mb]'s messages were in the loop. These messages will loop forever.</p>
+<p>Once this happens, how can we stop them? Simple: we shutdown [Sb]'s MySQL, remove <strong>log_slave_updates</strong>, start MySQL, and all the messages are instantaneously consumed. We can shutdown again if we like, to restore <strong>log_slave_updates</strong>. No worries afterward - evil messages are already gone.</p>
+<p>Just assume one of those queries was "Add 1$ to my account"...</p>
+<p>MySQL really should reconsider the way messages are consumed.</p>

@@ -1,0 +1,79 @@
+---
+title: Forking Golang repositories on GitHub and managing the import path
+date: 2015-11-23 14:22:34.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- Development
+tags:
+- GitHub
+- golang
+meta:
+  _wpas_done_all: '1'
+  _edit_last: '2'
+  _syntaxhighlighter_encoded: '1'
+  _sg_subscribe-to-comments: joakim.soderberg@gmail.com
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>Problem: there's an awesome Golang project on GitHub which you want to fork. You want to develop &amp; collaborate on that fork, but the golang import path, in your source code, still references the original path, breaking everything.</p>
+<p>A couple solutions offered below. First, though, let's get some names.</p>
+<h3>A sample case, the problem at hand</h3>
+<p>There's an awesome tool on <strong><em>http://github.com/awsome-org/tool</em></strong>. You successfully fork it onto <strong><em>http://github.com/awesome-you/tool</em></strong>.</p>
+<p>You want to collaborate on <strong><em>http://github.com/awesome-you/tool</em></strong>; you wish to pull, commit &amp; push. Maybe you want to send pull requests to the origin.</p>
+<p>The following is commonly found throughout <strong>.go</strong> files in the repository:</p>
+<blockquote>
+<pre>import (
+    "github.com/awesome-org/tool/config"
+    "github.com/awesome-org/tool/driver"
+    "github.com/awesome-org/tool/net"
+    "github.com/awesome-org/tool/util"
+)</pre>
+</blockquote>
+<p>If you:</p>
+<blockquote>
+<pre>go get http://github.com/awesome-you/tool</pre>
+</blockquote>
+<p><em>golang</em> creates your <strong>$GOPATH/src/github.com/awesome-you/tool/</strong>, which is awesome. However, as you resolve dependencies via</p>
+<blockquote>
+<pre>cd $GOPATH/src/github.com/awesome-you/tool/ ; go get ./...</pre>
+</blockquote>
+<p><em>golang</em> digs into the source code, finds references to <strong>github.com/awesome-org/tool/config</strong>, <strong>github.com/awesome-org/tool/driver</strong> etc, and fetches <em>those</em> from <strong>http://github.com/awsome-org/tool</strong> and onto <strong>$GOPATH/src/github.com/awesome-org/tool/</strong>, which is not awesome. You actually have two copies of the code, one from your fork, one from the origin, and your own fork will be largely ignored as it mostly points back to the origin.</p>
+<h3>A bad solution</h3>
+<p>The dirty, bad solution would be for you to go over the source code and replace <strong>"github.com/awesome-org/tool"</strong> entries with <strong>"github.com/awesome-you/tool"</strong>. It is bad for two reasons:</p>
+<ul>
+<li>You will not be able to further pull changes from upstream</li>
+<li>You will not be able to pull-request and push your own changes upstream</li>
+</ul>
+<p><!--more-->When I say "You will not be able" I mean "in a reasonable, developer-friendly manner". The code will be incompatible with upstream and you have effectively detached your code. You will need to keep editing and re-editing those entries anytime you wish to pull/push upstream.</p>
+<h3>Solution #1: add remote</h3>
+<p>Described in <a href="http://blog.campoy.cat/2014/03/github-and-go-forking-pull-requests-and.html">GitHub and Go: forking, pull requests, and go-getting</a>, follow these procedures:</p>
+<blockquote>
+<pre>go get http://github.com/awesome-org/tool
+git remote add <strong>awesome-you-fork</strong> http://github.com/awesome-you/tool</pre>
+</blockquote>
+<p>You're adding your repository as <a href="http://git-scm.com/book/en/v2/Git-Basics-Working-with-Remotes">remote</a>. You will from now on need to explicitly:</p>
+<blockquote>
+<pre>git pull --rebase <strong>awesome-you-fork</strong>
+git push <strong>awesome-you-fork</strong></pre>
+</blockquote>
+<p>If you forget to add the <strong>"awesome-you-fork"</strong> argument, you are pulling and pushing from upstream.</p>
+<h3>Solution #2: cheat "go get", DIY</h3>
+<p>The problem began with the <strong>go get</strong> command, which copied the URI path onto <strong>$GOPATH/src</strong>. However <strong>go get</strong> implicitly issues a git clone, and we can do the same ourselves. We will dirty our hands just once, and then benefit from an ambiguous-less environment.</p>
+<p>We will now create our git repository in the name of <strong>awesome-org</strong> but with the contents of <strong>awesome-you</strong>:</p>
+<blockquote>
+<pre>cd $GOPATH
+mkdir -p {src,bin,pkg}
+mkdir -p <strong>src/github.com/awesome-org/</strong>
+cd src/github.com/awesome-org/
+git clone git@github.com:<strong>awesome-you/tool.git</strong> # OR: git clone https://github.com/<strong>awesome-you/tool.git</strong>
+cd tool/
+go get ./...</pre>
+</blockquote>
+<p>The <strong>mkdir -p {src,bin,pkg}</strong> is there just in case you do not have anything setup in your <strong>$GOPATH</strong>. We then create the repository path under the name of <strong>awesome-org</strong>, but once inside clone from <strong>awesome-you</strong>.</p>
+<p>The source code's import path fits your directory layout now, but as you push/pull you are only speaking to your own <strong>awesome-you</strong> repository.</p>

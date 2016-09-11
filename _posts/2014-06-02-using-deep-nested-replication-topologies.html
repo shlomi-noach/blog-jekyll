@@ -1,0 +1,42 @@
+---
+title: Using deep nested replication topologies
+date: 2014-06-02 10:04:09.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Replication
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>If you're running more than a few slaves in a replication topology, you might choose to use deeply nested replication: slaves replicating from other slaves at 2, 3 or even 4 levels. There are pros and cons to such topologies, discussed below.</p>
+<p>A simple, small deep nested topology is depicted below (it is also a real production topology of ours):</p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/05/topology-sample-02.png"><img class="alignnone size-full wp-image-6878" src="{{ site.baseurl }}/assets/topology-sample-02.png" alt="topology-sample-02" width="736" height="309" /></a></p></blockquote>
+<p>Two slaves, <strong>srv-4</strong> and <strong>srv-8</strong> act as local masters to yet other slaves. Why would we want to have this complexity?</p>
+<h4>Pros</h4>
+<ul>
+<li>Reduce load on master: too many slaves replicating from single master means the master becomes loaded with serving the binary logs. Typically, when all slaves are up to date, this isn't a big deal, since they all get served roughly the same entries, and caching works great. If not all are in sync, the master needs to look up different log entries and pays with more disk I/O.</li>
+<li>Reduce network load. We serve from three different data centres. Our master is in one DC, and our slaves are spread through all three. Inter-DC network is naturally slower; it is also more expensive, hence more easily saturated. Reducing cross-DC network is done across all our systems, including MySQL. <strong>srv-4</strong>, for example, could depict a slave that is a local master in its own DC, serving <strong>srv-5</strong>, <strong>srv-6</strong>, <strong>srv-7</strong> all in the same DC, hence only using cross-DC network for one slave instead of four. A bit over-simplistic example but true.</li>
+<li>Failover. <a href="http://code.google.com/p/mysql-master-ha/">MHA</a> does a good job at synchronizing slaves of same master by figuring out the missing binary log entries for each slave. It should do well within a single region, but I do not know that it would do the same cross region (I'm assuming the binlog entries copy should work, but I haven't tried it cross region). In case of a disaster such as an entire DC going down (we actually had such a case a couple weeks ago; power went out for the entire DC), we have a designated master into which we can fail over in each other DC, and which contains enough slaves (from each remaining DCs) to keep serving. That it, we're willing to skip the fancy syncing and just point to a newly promoted master, with the benefit that the entire replication topology under it is intact.</li>
+<li>Testing &amp; upgrades. For example, I might want to upgrade to <strong>5.6</strong>. Upgrading a slave from <strong>5.5</strong> to <strong>5.6</strong> is a good start; we look at replication and see that nothing gets broken. But how will our production master behave with <strong>5.6</strong>? Put some more slaves under your newly upgraded <strong>5.6</strong> server and get a clearer picture. At some stage you might just promote this entire subtree as the new topology.</li>
+</ul>
+<p>Here's another topology; DC info is not depicted in this image, but you can guess what designated masters we have:<!--more--></p>
+<blockquote><p><a href="http://code.openark.org/blog/wp-content/uploads/2014/05/topology-sample-03.png"><img class="alignnone size-full wp-image-6881" src="{{ site.baseurl }}/assets/topology-sample-03.png" alt="topology-sample-03" width="718" height="609" /></a></p></blockquote>
+<h4>Cons</h4>
+<p>You must be willing to pay the price for the cons. These are:</p>
+<ul>
+<li>Accumulated replication lag: a local master that is lagging for some internal problem will cause all of its slaves to implicitly lag, even if those slaves machines aren't busy at all.</li>
+<li>Corruption: if a local master gets corrupted, so do all of its slaves. This is not a problem if you're using GTID. At the time of this writing very few companies I know of are using GTID, even though it's been out for over a year. Like many others, we are still using good (?) old binary log file:position coordinates based replication.</li>
+<li><del>Complex to maintain</del>. Problem solved. The images above are real depictions of our topology (with some details obfuscated or changed). It's a <a href="http://d3js.org/">D3</a> graph that auto presents our topologies. To move slaves around we <em>Drag &amp; Drop them</em>. This will shortly be announced as our latest open source release.</li>
+</ul>
+<p>&nbsp;</p>
+<p>&nbsp;</p>

@@ -1,0 +1,74 @@
+---
+title: 'Introducing audit_login: simple MySQL login logfile based auditing'
+date: 2013-09-17 09:24:09.000000000 +02:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- Development
+- Open Source
+- plugin
+- Security
+meta:
+  _edit_last: '2'
+  _wpas_done_all: '1'
+  _oembed_55835302a9154b1a33fa9bef669291f7: '<iframe src="http://www.slideshare.net/slideshow/embed_code/28163348"
+    width="427" height="356" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"
+    style="border:1px solid #CCC; border-width:1px 1px 0; margin-bottom:5px; max-width:
+    100%;" allowfullscreen> </iframe> <div style="margin-bottom:5px"> <strong> <a
+    href="https://www.slideshare.net/shlominoach/commonschema-22" title="common_schema
+    2.2 DBA&#x27;s framework for MySQL" target="_blank">common_schema 2.2 DBA&#x27;s
+    framework for MySQL</a> </strong> from <strong><a href="http://www.slideshare.net/shlominoach"
+    target="_blank">Shlomi Noach</a></strong> </div>'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><a href="https://github.com/outbrain/audit_login">audit_login</a> is a simple MySQL login auditing plugin, logging any login or login attempt to log file in JSON format.</p>
+<p>It seems that audit plugins are <a href="http://serge.frezefond.com/2013/09/news-mariadb-audit-plugin-beta-is-out/">all the rage</a> lately... We've developed out simple plugin a month ago as part of our database securing efforts; by auditing any login or login attempt we could either intercept or later investigate suspicious logins.</p>
+<p>However we quickly realized there is much more to be gathered by this info.</p>
+<p>In very short, you install this plugin onto your MySQL server, and your server starts writing into a text file called <strong>audit_login.log</strong> entries such as follows:</p>
+<blockquote>
+<pre>{"ts":"2013-09-11 09:11:47","type":"successful_login","myhost":"gromit03","thread":"74153868","user":"web_user","priv_user":"web_user","host":"web-87.localdomain","ip":"10.0.0.87"}
+{"ts":"2013-09-11 09:11:55","type":"failed_login","myhost":"gromit03","thread":"74153869","user":"backup_user","priv_user":"","host":"web-32","ip":"10.0.0.32"}
+{"ts":"2013-09-11 09:11:57","type":"failed_login","myhost":"gromit03","thread":"74153870","user":"backup_user","priv_user":"","host":"web-32","ip":"10.0.0.32"}
+{"ts":"2013-09-11 09:12:48","type":"successful_login","myhost":"gromit03","thread":"74153871","user":"root","priv_user":"root","host":"localhost","ip":"10.0.0.111"}
+{"ts":"2013-09-11 09:13:26","type":"successful_login","myhost":"gromit03","thread":"74153872","user":"web_user","priv_user":"web_user","host":"web-11.localdomain","ip":"10.0.0.11"}
+{"ts":"2013-09-11 09:13:44","type":"successful_login","myhost":"gromit03","thread":"74153873","user":"web_user","priv_user":"web_user","host":"web-40.localdomain","ip":"10.0.0.40"}
+{"ts":"2013-09-11 09:13:51","type":"successful_login","myhost":"gromit03","thread":"74153874","user":"web_user","priv_user":"web_user","host":"web-03.localdomain","ip":"10.0.0.03"}
+{"ts":"2013-09-11 09:14:09","type":"successful_login","myhost":"gromit03","thread":"74153875","user":"web_user","priv_user":"web_user","host":"web-40.localdomain","ip":"10.0.0.40"}
+{"ts":"2013-09-11 10:55:25","type":"successful_login","myhost":"gromit03","thread":"74153876","user":"web_user","priv_user":"web_user","host":"web-87.localdomain","ip":"10.0.0.87"}
+{"ts":"2013-09-11 10:55:59","type":"successful_login","myhost":"gromit03","thread":"74153877","user":"web_user","priv_user":"web_user","host":"web-12.localdomain","ip":"10.0.0.12"}
+{"ts":"2013-09-11 10:55:59","type":"failed_login","myhost":"gromit03","thread":"74153878","user":"(null)","priv_user":"(null)","host":"(null)","ip":"10.0.0.1"}</pre>
+</blockquote>
+<p>In the above your MySQL server is on <strong>gromit03</strong>, and is accepting connections from other hosts; some successful, some not. What kind of information can you gather from the above?</p>
+<ul>
+<li>You can tell how many connections are being created on your server</li>
+<li>Where they came from</li>
+<li>Where <strong>'root'</strong> connections come from</li>
+<li>Port scans (see last row) can be identified by no credentials. These don't have to be port scans <em>per se</em>; any <strong>telnet localhost 3006</strong> followed by <strong>Ctrl+D</strong> will show the same. Typically these would be either load balancer or monitoring tools checks to see that the <strong>3306</strong> port is active.</li>
+<li>You can tell which accounts connect, and how many times</li>
+<li>And you can infer which accounts are stale and can be dropped -- if an account does not connect within a week's time, it's probably stale (pick your own timeframe)</li>
+</ul>
+<p>The above is quite interesting on one host; but we have dozens. We've installed this plugin on all our MySQL servers, and we use <a href="http://logstash.net/"><strong>logstash</strong></a> to aggregate them. We aggregate to two destinations:<!--more--></p>
+<ul>
+<li>All logs are being sent over to <strong><a href="http://kibana.org/">kibana</a></strong>, where they are easily searchable via <a href="http://lucene.apache.org/core/">lucene</a> queries</li>
+<li>They are also all aggregated into one CSV formatted logfile, rotating daily; this format makes it easier for me to <strong>grep</strong> and <strong>uniq -c</strong> and generally produce very valuable data by scripting.</li>
+</ul>
+<p>By aggregating the logs from multiple hosts, we are able to gather such insight as:</p>
+<ul>
+<li>How well our load balancers are distributing connections</li>
+<li>How our various applications servers connect on our multiple data centres to our MySQL hosts</li>
+<li>Catching misbehaving apps with hardcoded server IPs</li>
+<li>Catching naughty developers logging into our masters directly (we have more mechanisms now to prevent and audit such cases)</li>
+<li>Identifying differences in behaviour of monitoring tools across our data centres</li>
+<li>etc.</li>
+</ul>
+<h4>Free to use</h4>
+<p>The <strong>audit_login</strong> plugin has been made free to use, open source, licensed under GNU GPL v2. It is <a href="https://github.com/outbrain/audit_login">publicly available in our github repository</a>, where more documentation on build and installation can be found.</p>
+<p>As MySQL plugins go, you must compile your plugin with your particular MySQL version. For you convenience, pre-compiled binaries are <a href="https://github.com/outbrain/audit_login/tree/master/lib">available in the repository</a> (at this time for <strong>5.5.32</strong> and <strong>5.5.21</strong> linux 64 bit; likely to add more)</p>

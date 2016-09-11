@@ -1,0 +1,84 @@
+---
+title: 'oak-hook-general-log: your poor man''s Query Analyzer'
+date: 2010-12-15 19:46:06.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- Development
+- MySQL
+tags:
+- Analysis
+- logs
+- Open Source
+- openark kit
+- python
+- scripts
+meta:
+  _edit_last: '2'
+  _wp_old_slug: ''
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p>The latest release of <a href="http://code.openark.org/forge/openark-kit">openark kit</a> introduces <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/doc/html/oak-hook-general-log.html">oak-hook-general-log</a>, a handy tool which allows for some analysis of executing queries.</p>
+<p>Initially I just intended for the tool to be able to dump the general log to standard output, from any machine capable to connect to MySQL. Quick enough, I realized the power it brings.</p>
+<p>With this tool, one can dump to standard output all queries using temporary tables; or using a specific index; or doing a full index scan; or just follow up on connections; or... For example, the following execution will only log queries which make for filesort:</p>
+<blockquote>
+<pre>oak-hook-general-log --user=root --host=localhost --password=123456 --filter-explain-filesort</pre>
+</blockquote>
+<h4>The problem with using the standard logs</h4>
+<p>So you have the <em>general log</em>, which you don't often enable, since it tends to grow huge within moments. You then have the <em>slow log</em>. Slow log is great, and is among the top tools for MySQL diagnosis.</p>
+<p>The slow log allows for <strong>log-queries-not-using-indexes</strong>, which is yet another nice feature. Not only should you log any query running for over <strong>X</strong> seconds, but also log any query which does not use an index.</p>
+<p>Wait. This logs all single-row tables (no single row table will use an index), as well as very small tables (a common <strong>20</strong> rows lookup table will most often be scanned). These are OK scans. This makes for some noise in the slow log.</p>
+<p>And how about queries which do use an index, but do so poorly? They use an index, but retrieve some <strong>12,500,000</strong> rows, <em>using temporary</em> table &amp; <em>filesort</em>?</p>
+<h4>What oak-hook-general-log does for you</h4>
+<p>This tool streams out the general log, and filters out queries based on their <em>role</em> or on their <em>execution plan</em>.</p>
+<p>To work at all, it must enable the general log. Moreover, it directs the general log to log table. Mind that this makes for a performance impact, which is why the tool auto-terminates and restores original log settings (default is <strong>1</strong> minute, configurable). It's really not a tool you should keep running for days. But during the few moments it runs, it will:</p>
+<ul>
+<li>Routinely rotate the <strong>mysql.general_log</strong> table so that it doesn't fill up</li>
+<li>Examine entries found in the general log</li>
+<li>Cross reference entries to the PROCESSLIST so as to deduce database context (<a href="http://bugs.mysql.com/bug.php?id=52554">bug #52554</a>)</li>
+<li>If required and appropriate, evaluate a query's execution plan</li>
+<li>Decide whether to dump each entry based on filtering rules</li>
+</ul>
+<h4>Filtering rules</h4>
+<p>Filtering rules are passed as command line options. At current, only one filtering rule applies (if more than one specified only one is used, so no point in passing more than one). Some of the rules are:<!--more--></p>
+<ul>
+<li><strong>filter-connection</strong>: only log connect/quit entries</li>
+<li><strong>filter-explain-fullscan</strong>: only log full table scans</li>
+<li><strong>filter-explain-temporary</strong>: only log queries which create implicit temporary tables</li>
+<li><strong>filter-explain-rows-exceed</strong>: only log queries where more than <strong>X</strong> number of rows are being accessed on some table (estimated)</li>
+<li><strong>filter-explain-total-rows-exceed</strong>: only log queries where more than <strong>X</strong> number of rows are accessed on all tables combined (estimated, with possibly incorrect numbers on some queries)</li>
+<li><strong>filter-explain-key</strong>: only log queries using a specific index. This feature somewhat overlaps with Maatkit's <em>mk-index-usage</em> (read <a href="http://www.mysqlperformanceblog.com/2010/11/11/advanced-index-analysis-with-mk-index-usage/">announcement</a>).</li>
+<li><strong>filter-explain-contains</strong>: a general purpose <em>grep</em> on the execution plan. Log queries where the execution plan contains <em>some text</em>.</li>
+</ul>
+<p>There are other filters, and I will possibly add more in due time.</p>
+<p>Here are a couple cases I used <em>oak-hook-general-log</em> for:</p>
+<h4>Use case: temporary tables</h4>
+<p>I have a server with this alarming chart (courtesy <a href="http://code.openark.org/forge/mycheckpoint">mycheckpoint</a>) of temporary tables:</p>
+<blockquote>
+<pre /><img class="alignnone" title="Created tmp tables per second" src="{{ site.baseurl }}/assets/chart?cht=lc&amp;chs=370x180&amp;chts=303030,12&amp;chtt=Latest+24+hours:+Dec+9,+06:30++-++Dec+10,+06:30&amp;chf=c,s,ffffff&amp;chdl=created_tmp_tables_psec|created_tmp_disk_tables_psec&amp;chdlp=b&amp;chco=ff8c00,4682b4&amp;chd=s:yzzy02zzz100zzz0rv9zz0zyzyz0yy2xz1t11xzztz0xr1xt2tz07vwzz100100z31z111yz1vzzzzz1zs80r902s1111010y20z03z11487zz011z11011002w0q5rxxz0y00z0s02xy1yy0,gggfghggfgggghhgYekhhghhhhhghfjghhdihfhgdghgZhgcicihpcehhhhhhhifkigjihghjehgiigjgYqiYqgiaihiifkhekhfijgiihhggggggggggfhgghffZoYgggggggggdihfggghg&amp;chxt=x,y&amp;chxr=1,0,35.060000&amp;chxl=0:||08:00||+||12:00||+||16:00||+||20:00||+||00:00||+||04:00||+|&amp;chxs=0,505050,10,0,lt&amp;chg=4.17,25,1,2,2.08,0&amp;chxp=0,2.08,6.25,10.42,14.59,18.76,22.93,27.10,31.27,35.44,39.61,43.78,47.95,52.12,56.29,60.46,64.63,68.80,72.97,77.14,81.31,85.48,89.65,93.82,97.99&amp;tsstart=2010-12-09+06:30:00&amp;tsstep=600" alt="" width="370" height="180" />
+
+</blockquote>
+What could possibly create <strong>30</strong> temporary tables per second on average?
+
+The slow log produced nothing helpful, even with <strong>log-queries-not-using-indexes</strong> enabled. There were a lot of queries not using indexes there, but nothing at these numbers. With:
+<blockquote>
+<pre>oak-hook-general-log --filter-explain-temporary</pre>
+</blockquote>
+<p>enabled for <strong>1</strong> minute, nothing came out. Weird. Enabled for <strong>5</strong> minutes, I got one entry. Turned out a scheduled script, acting once per <strong>5</strong> minutes, was making a single complicated query involving many nested views, which accounted for some <em>hundreds</em> of temporary tables created. All of them very small, query time was very fast. There is no temporary tables problem with this server, case closed.</p>
+<h4>Use case: connections</h4>
+<p>A server had issues with some exceptions being thrown on the client side. There was a large number of new connections created per second although the client was using a connection pool. Suspecting the pool didn't work well, I issued:</p>
+<blockquote>
+<pre>oak-hook-general-log --filter-connect</pre>
+</blockquote>
+<p>The pool was working well, all right. No entries for that client were recorder in <strong>1</strong> minute of testing. However, it turned out some old script was flooding the MySQL server with requests, every second. The log showed root@somehost, and sure enough, the script was disabled. Exceptions were due to another reason; it was good to eliminate a suspect.</p>
+<p>Some of the tool's use case is relatively easy to solve with tail, grep &amp; awk; others are not. I am using it more and more often, and find it to make significant shortcuts in tracking down queries.</p>
+<h4>Get it</h4>
+<p>Download the tool as part of <em>openark kit</em>: access the <a href="http://code.google.com/p/openarkkit/">openark kit project page</a>.</p>
+<p>Or get the <a href="http://openarkkit.googlecode.com/svn/trunk/openarkkit/src/oak/oak-hook-general-log.py">source code</a> directly.</p>
+<p>Feedback is most welcome.</p>

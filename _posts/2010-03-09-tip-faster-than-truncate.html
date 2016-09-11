@@ -1,0 +1,38 @@
+---
+title: 'Tip: faster than TRUNCATE'
+date: 2010-03-09 13:37:01.000000000 +01:00
+type: post
+published: true
+status: publish
+categories:
+- MySQL
+tags:
+- InnoDB
+- SQL
+meta:
+  _edit_last: '2'
+author:
+  login: shlomi
+  email: shlomi@openark.org
+  display_name: shlomi
+  first_name: Shlomi
+  last_name: Noach
+---
+<p><a href="http://dev.mysql.com/doc/refman/5.0/en/truncate-table.html"><strong>TRUNCATE</strong></a> is usually a fast operation (much faster than <strong>DELETE FROM</strong>). But sometimes it just hangs; I've has several such uncheerful events with InnoDB (Plugin) tables which were extensively written to. The <strong>TRUNCATE</strong> hanged; nothing else would work; minutes pass.</p>
+<p><strong>TRUNCATE</strong> on tables with no <strong>FOREIGN KEY</strong>s <em>should</em> act fast: it translate to dropping the table and creating a new one (and it all depends on the MySQL version, see the manual).</p>
+<p>What's faster than <strong>TRUNCATE</strong>, then? If you don't have triggers nor <strong>FOREIGN KEY</strong>s, a <a href="http://dev.mysql.com/doc/refman/5.0/en/rename-table.html"><strong>RENAME TABLE</strong></a> can come to the rescue. Instead of:</p>
+<blockquote>
+<pre>TRUNCATE log_table</pre>
+</blockquote>
+<p>Do:</p>
+<blockquote>
+<pre>CREATE TABLE log_table_new LIKE log_table;
+<strong>RENAME TABLE</strong> log_table TO log_table_old, log_table_new TO log_table;
+DROP TABLE log_table_old;</pre>
+</blockquote>
+<p>I found this to work well for me. Do note that <strong>AUTO_INCREMENT</strong> values can be tricky here: the "new" table is created with an <strong>AUTO_INCREMENT</strong> value which is immediately taken in the "working" table. If you care about not using same <strong>AUTO_INCREMENT</strong> values, you can:<!--more--></p>
+<blockquote>
+<pre>ALTER TABLE log_table_new AUTO_INCREMENT=<em>some high enough value;</em></pre>
+</blockquote>
+<p>Just before renaming.</p>
+<p>I do not have a good explanation as for why the <strong>RENAME TABLE</strong> succeeds to respond faster than <strong>TRUNCATE</strong>.</p>
